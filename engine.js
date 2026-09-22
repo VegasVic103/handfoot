@@ -41,13 +41,16 @@ const isRedThree = (c) => c[0] === '3' && RED_SUITS.has(c[1]);
 const isBlackThree = (c) => c[0] === '3' && !RED_SUITS.has(c[1]);
 const isRed = (c) => RED_SUITS.has(c[1]);
 
+/* How the table scores each card:
+ *   joker 50 · 2 (wild) 20 · ace 20 · 10 J Q K 10 · 4 through 9 all 5
+ *   black three 5 · red three 100 (redThreeValue decides for or against). */
 function cardValue(c) {
   const r = rankOf(c);
   if (r === 'X') return 50;
   if (r === '2' || r === 'A') return 20;
-  if (r === '3') return 5;
-  if (r === '4' || r === '5' || r === '6' || r === '7') return 5;
-  return 10; // 8 9 T J Q K
+  if (r === '3') return isRed(c) ? 100 : 5;
+  if (r === 'T' || r === 'J' || r === 'Q' || r === 'K') return 10;
+  return 5; // 4 5 6 7 8 9
 }
 
 function buildDeck(deckCount) {
