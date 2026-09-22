@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hand &amp; Foot</title>
+<meta name="description" content="Online Hand and Foot for a small group — solo scoring, house rules refereed.">
+<meta name="theme-color" content="#16332b">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2316332b'/%3E%3Crect x='7' y='6' width='13' height='19' rx='2' fill='%23f2ece0'/%3E%3Cpath d='M22 9h4v17h-11' stroke='%23d6ae3e' stroke-width='2' fill='none'/%3E%3Cpath d='M13.5 11.5l3 4.5-3 4.5-3-4.5z' fill='%23b8342c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Archivo:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="conn" id="connBar" hidden>Reconnecting&hellip;</div>
+
+<div id="app">
+
+<section class="screen" id="lobby">
+  <div class="wrap">
+    <div class="brand">
+      <div class="sub">Hand &amp; Foot &middot; Solo</div>
+      <h1>Hand &amp; Foot</h1>
+      <p>Your table's rules, refereed. Decks scale with the players, eleven and eleven,
+         four draw piles, and you need a red book and a black book to go out.</p>
+    </div>
+
+    <div class="panels">
+      <div class="panel">
+        <h2>Start a table</h2>
+        <p>You'll get a four-letter code. Send it to everyone else.</p>
+        <label class="field" for="hostName">Your name
+          <input type="text" id="hostName" maxlength="14" placeholder="Vic" autocomplete="off">
+        </label>
+        <label class="field" for="seatCount">Seats
+          <select id="seatCount">
+            <option value="2">2 players &middot; 4 decks</option>
+            <option value="3" selected>3 players &middot; 5 decks</option>
+            <option value="4">4 players &middot; 6 decks</option>
+            <option value="5">5 players &middot; 7 decks</option>
+            <option value="6">6 players &middot; 8 decks</option>
+          </select>
+        </label>
+        <button class="btn" id="createBtn">Create table</button>
+      </div>
+
+      <div class="panel">
+        <h2>Join a table</h2>
+        <p>Enter the code from whoever started it.</p>
+        <label class="field" for="joinCode">Table code
+          <input type="text" id="joinCode" maxlength="4" placeholder="ABCD" autocomplete="off"
+                 autocapitalize="characters" spellcheck="false">
+        </label>
+        <label class="field" for="joinName">Your name
+          <input type="text" id="joinName" maxlength="14" placeholder="Dan" autocomplete="off">
+        </label>
+        <button class="btn" id="joinBtn">Sit down</button>
+      </div>
+
+      <div class="panel">
+        <h2>Practice table</h2>
+        <p>Three seats on this device, one at a time. Good for checking the rules
+           match your group's before you invite anyone.</p>
+        <button class="btn ghost" id="practiceBtn">Deal a practice hand</button>
+      </div>
+    </div>
+
+    <p class="err" id="lobbyErr" hidden></p>
+
+    <div class="rules-note">
+      <b>House rules in force.</b>
+      Decks: players + 2. Deal 11 to the hand, 11 to the foot. The stock is split into
+      <b>four draw piles</b> &mdash; drawing two means one card from each of two different piles.
+      Or take the discard pile with two naturals matching the top card, and you get that card
+      plus the six behind it. Initial meld 50 / 90 / 120 / 150 over four rounds. Books of seven:
+      <b>red book</b> all naturals, 500; <b>black book</b> with wilds, 300. Threes never meld
+      &mdash; a black three on top freezes the pile, a red three lays off at &minus;100. Go out
+      from your foot with a red book and a black book, discarding your last card. +100 for going out.
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="table" hidden>
+  <div class="bar">
+    <div class="wrap bar-in">
+      <div>
+        <div class="tag">Table</div>
+        <div class="code" id="tableCode">&mdash;</div>
+      </div>
+      <div>
+        <div class="tag">Round</div>
+        <div style="font-weight:700" id="roundLabel">1 of 4</div>
+      </div>
+      <div>
+        <div class="tag">Initial meld</div>
+        <div style="font-weight:700" id="minLabel">50</div>
+      </div>
+      <div class="spacer"></div>
+      <span class="pill" id="turnPill">&mdash;</span>
+      <button class="btn ghost sm" id="scoresBtn">Scores</button>
+      <button class="btn ghost sm" id="leaveBtn">Leave</button>
+    </div>
+  </div>
+
+  <div class="wrap board">
+    <div class="share" id="shareBox" hidden>
+      <span class="note">Send this code to the others:</span>
+      <code id="shareCode">&mdash;</code>
+      <button class="btn ghost sm" id="copyLink">Copy invite</button>
+      <span class="note" id="copyNote"></span>
+    </div>
+
+    <div class="seats" id="seats"></div>
+
+    <div class="center" id="centerRow"></div>
+
+    <div class="mine">
+      <div class="sect-head">
+        <h3>Your books</h3>
+        <span class="note" id="meldHint"></span>
+      </div>
+      <div class="melds" id="myMelds"></div>
+
+      <div class="sect-head">
+        <h3>Your hand</h3>
+        <span class="pill" id="handPill">0 cards</span>
+        <button class="btn ghost sm" id="sortBtn">Sort by rank</button>
+        <button class="btn ghost sm" id="clearSel" hidden>Clear selection</button>
+      </div>
+      <div class="hand" id="myHand"></div>
+      <div class="log" id="logBox"></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <div class="wrap actions-in" id="actionBar"></div>
+  </div>
+</section>
+
+<div class="sheet" id="scoreSheet" hidden>
+  <div class="sheet-in">
+    <div class="sect-head" style="margin-bottom:14px">
+      <h2 style="font-size:22px" id="scoreTitle">Scores</h2>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn ghost sm" id="closeScores">Close</button>
+    </div>
+    <div id="scoreBody"></div>
+  </div>
+</div>
+
+</div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
