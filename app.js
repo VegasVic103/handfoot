@@ -124,6 +124,9 @@ function wire() {
     send({ t: 'join', code: code, name: $('joinName').value });
   };
   $('practiceBtn').onclick = function () { send({ t: 'practice' }); };
+  $('vsBotBtn').onclick = function () {
+    send({ t: 'vsbot', name: $('botName').value, bots: $('botCount').value });
+  };
   $('scoresBtn').onclick = function () { $('scoreSheet').hidden = false; renderScores(); };
   $('closeScores').onclick = function () { $('scoreSheet').hidden = true; };
   $('leaveBtn').onclick = function () {
@@ -286,7 +289,8 @@ function renderSeats() {
     d.appendChild(top);
 
     var chips = document.createElement('div'); chips.className = 'chips';
-    if (s.seated && !s.connected && !view.solo) chips.appendChild(chip('Disconnected'));
+    if (s.bot) chips.appendChild(chip('Computer'));
+    else if (s.seated && !s.connected && !view.solo) chips.appendChild(chip('Disconnected'));
     if (s.redBooks) chips.appendChild(chip(s.redBooks + ' red book' + (s.redBooks > 1 ? 's' : ''), 'red'));
     if (s.blackBooks) chips.appendChild(chip(s.blackBooks + ' black book' + (s.blackBooks > 1 ? 's' : ''), 'black'));
     if (s.inFoot) chips.appendChild(chip('In foot', 'foot'));
@@ -476,7 +480,10 @@ function renderActions() {
   }
 
   if (!isMyTurn()) {
-    hint.textContent = notice || ('Waiting on ' + view.seats[view.turn].name + '.');
+    var turnSeat = view.seats[view.turn];
+    hint.textContent = notice || (turnSeat.bot
+      ? turnSeat.name + ' is thinking\u2026'
+      : 'Waiting on ' + turnSeat.name + '.');
     bar.appendChild(hint);
     return;
   }
