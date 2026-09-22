@@ -7,7 +7,7 @@ const E = require('./engine.js');
 let meldSeq = 0;
 const newMeldId = () => 'm' + (++meldSeq) + '-' + Math.random().toString(36).slice(2, 6);
 
-function fail(reason) { return { ok: false, reason }; }
+function fail(reason, code) { return { ok: false, reason, code }; }
 function done(extra) { return Object.assign({ ok: true }, extra || {}); }
 
 function createGame(seatNames, settings) {
@@ -228,7 +228,7 @@ function takePile(state, seat, handCards) {
     const need = minMeldFor(state);
     const total = state.turnState.melded + value;
     if (total < need) {
-      return fail(`Your initial meld must total ${need}. This one is worth ${total}.`);
+      return fail(`Going down needs at least ${need} points — this comes to ${total}. Add more matching cards from your hand to the selection.`, 'initial_meld_short');
     }
   }
 
@@ -393,7 +393,7 @@ function discard(state, seat, card) {
   if (!p.hasInitialMeld && state.turnState.melded > 0) {
     const need = minMeldFor(state);
     if (state.turnState.melded < need) {
-      return fail(`Your initial meld must total ${need}; you have laid ${state.turnState.melded}. Take the cards back or add more.`);
+      return fail(`Going down needs at least ${need} points, counted across every meld you lay this turn. You have laid ${state.turnState.melded} so far — lay more, or take the cards back.`, 'initial_meld_short');
     }
   }
   if (state.turnState.melded > 0 && !p.hasInitialMeld) p.hasInitialMeld = true;

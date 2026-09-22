@@ -140,7 +140,8 @@ t('initial meld below the round minimum is blocked at discard', () => {
   ok(G.meldNew(s, 0, '4', ['4S0', '4H0', '4D0']).ok, 'meld itself is legal');
   const r = G.discard(s, 0, '9C0');
   no(r, 'discard below minimum');
-  ok(/must total 50/.test(r.reason), 'reason names the minimum: ' + r.reason);
+  eq(r.code, 'initial_meld_short', 'refusal carries a stable code');
+  ok(/50/.test(r.reason) && /at least/.test(r.reason), 'and says at least 50: ' + r.reason);
 });
 t('initial meld at or above the minimum goes through', () => {
   // three aces = 60 >= 50
@@ -235,6 +236,81 @@ t('two piles left still requires the two to differ', () => {
   s.stocks[0] = []; s.stocks[1] = [];
   no(G.drawStock(s, 0, [2, 2]), 'same pile twice');
   ok(G.drawStock(s, 0, [2, 3]).ok);
+});
+
+console.log('\n-- initial meld across a whole turn --');
+t('two separate melds in one turn add up to the minimum', () => {
+  // three 8s (30) + three 9s (30) = 60, laid as two different melds
+  const s = rigged([['8S0','8H0','8D0','9S0','9H0','9D0','2C1']]);
+  G.drawStock(s, 0, [0, 1]);
+  ok(G.meldNew(s, 0, '8', ['8S0','8H0','8D0']).ok, 'first meld goes down');
+  ok(!s.players[0].hasInitialMeld, 'not credited yet at 30');
+  ok(G.meldNew(s, 0, '9', ['9S0','9H0','9D0']).ok, 'second meld goes down');
+  eq(s.turnState.melded, 60, 'the turn total accumulates across melds');
+  ok(G.discard(s, 0, '2C1').ok, 'the turn closes');
+  ok(s.players[0].hasInitialMeld, 'initial meld is credited');
+});
+t('three melds in one turn also add up', () => {
+  // 3 fours (15) + 3 fives (15) + 3 aces (60) = 90
+  const s = rigged([['4S0','4H0','4D0','5S0','5H0','5D0','AS0','AH0','AD0','6C1']]);
+  G.drawStock(s, 0, [0, 1]);
+  ok(G.meldNew(s, 0, '4', ['4S0','4H0','4D0']).ok);
+  ok(G.meldNew(s, 0, '5', ['5S0','5H0','5D0']).ok);
+  ok(G.meldNew(s, 0, 'A', ['AS0','AH0','AD0']).ok);
+  eq(s.turnState.melded, 90);
+  ok(G.discard(s, 0, '6C1').ok);
+});
+t('adding to a meld laid earlier the same turn counts too', () => {
+  // 3 kings (30) then a 4th king (10) then 3 aces (60) = 100
+  const s = rigged([['KS0','KH0','KD0','KC0','AS0','AH0','AD0','6C1']]);
+  G.drawStock(s, 0, [0, 1]);
+  ok(G.meldNew(s, 0, 'K', ['KS0','KH0','KD0']).ok);
+  const id = s.players[0].melds[0].id;
+  ok(G.meldAdd(s, 0, id, ['KC0']).ok, 'the extra king counts');
+  eq(s.turnState.melded, 40);
+  ok(G.meldNew(s, 0, 'A', ['AS0','AH0','AD0']).ok);
+  eq(s.turnState.melded, 100);
+  ok(G.discard(s, 0, '6C1').ok);
+});
+t('exactly the minimum is enough', () => {
+  // 3 tens (30) + 4 fives (20) = 50
+  const s = rigged([['TS0','TH0','TD0','5S0','5H0','5D0','5C0','6C1']]);
+  G.drawStock(s, 0, [0, 1]);
+  ok(G.meldNew(s, 0, 'T', ['TS0','TH0','TD0']).ok);
+  ok(G.meldNew(s, 0, '5', ['5S0','5H0','5D0','5C0']).ok);
+  eq(s.turnState.melded, 50);
+  ok(G.discard(s, 0, '6C1').ok, '50 exactly is accepted');
+});
+t('more than the minimum is fine', () => {
+  const s = rigged([['AS0','AH0','AD0','AC0','6C1']]);
+  G.drawStock(s, 0, [0, 1]);
+  ok(G.meldNew(s, 0, 'A', ['AS0','AH0','AD0','AC0']).ok);
+  eq(s.turnState.melded, 80);
+  ok(G.discard(s, 0, '6C1').ok, '80 is accepted');
+});
+t('short of the minimum is still refused', () => {
+  // 3 fours (15) + 3 kings (30) = 45
+  const s = rigged([['4S0','4H0','4D0','KS0','KH0','KD0','6C1']]);
+  G.drawStock(s, 0, [0, 1]);
+  G.meldNew(s, 0, '4', ['4S0','4H0','4D0']);
+  G.meldNew(s, 0, 'K', ['KS0','KH0','KD0']);
+  eq(s.turnState.melded, 45);
+  const r = G.discard(s, 0, '6C1');
+  no(r, '45 is short');
+  eq(r.code, 'initial_meld_short');
+  ok(/45/.test(r.reason), 'the message names the running total: ' + r.reason);
+});
+t('once made, later turns have no minimum', () => {
+  const s = rigged([['AS0','AH0','AD0','4S1','4H1','4D1','6C1','7C1']]);
+  G.drawStock(s, 0, [0, 1]);
+  G.meldNew(s, 0, 'A', ['AS0','AH0','AD0']);
+  ok(G.discard(s, 0, '6C1').ok);
+  ok(s.players[0].hasInitialMeld);
+  // back round to seat 0
+  s.turn = 0; s.turnPhase = 'draw'; s.turnState = { melded: 0, tookPile: false, drew: false, pickedUpFoot: false, snapshot: JSON.stringify({ hand: s.players[0].hand, foot: s.players[0].foot, inFoot: s.players[0].inFoot, melds: s.players[0].melds }) };
+  G.drawStock(s, 0, [2, 3]);
+  ok(G.meldNew(s, 0, '4', ['4S1','4H1','4D1']).ok, 'a 15-point meld is fine now');
+  ok(G.discard(s, 0, '7C1').ok);
 });
 
 console.log('\n-- discard pile --');
@@ -445,7 +521,7 @@ function bot(s, seat) {
     for (const c of cands) {
       const r = G.discard(s, seat, c);
       if (r.ok) { discarded = true; break; }
-      if (/initial meld must total/.test(r.reason)) { G.undoTurnMelds(s, seat); break; }
+      if (r.code === 'initial_meld_short') { G.undoTurnMelds(s, seat); break; }
     }
     if (discarded) return;
   }

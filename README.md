@@ -15,7 +15,7 @@ No accounts, no downloads, no app.
 | Draw piles | the stock is split into **4 piles** |
 | Drawing two | one card from each of **two different piles** |
 | Taking the discard pile | 2 naturals in hand matching the top card; you take that card **plus the 6 behind it** |
-| Initial meld | 50 / 90 / 120 / 150 across four rounds |
+| Going down | **At least** 50 / 90 / 120 / 150 across four rounds, totalled over every meld you lay in that turn |
 | Book | 7 cards. **Red book** = all naturals (500). **Black book** = contains wilds (300) |
 | Wilds in a book | up to 3 — naturals must outnumber wilds |
 | Threes | never meld. Black three on top freezes the pile. Red three lays off at −100 |

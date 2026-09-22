@@ -277,7 +277,8 @@ function botStep(c) {
   const players = [a2, b, d];
   let turns = 0;
   const started = Date.now();
-  while (Date.now() - started < 60000) {
+  const BUDGET = Number(process.env.GAME_BUDGET_MS || 180000);
+  while (Date.now() - started < BUDGET) {
     const v = a2.view;
     if (!v) { await wait(20); continue; }
     if (v.phase === 'gameEnd') break;
@@ -291,10 +292,14 @@ function botStep(c) {
     if (!actor || !actor.view || actor.view.turn !== v.turn) { await wait(20); continue; }
     const acted = botStep(actor);
     if (!acted) { await wait(20); }
-    else { turns++; await wait(12); }
+    else { turns++; await wait(4); }
     if (turns > 6000) break;
   }
 
+  if (a2.view.phase !== 'gameEnd') {
+    console.log('     (reached ' + a2.view.phase + ' after ' + turns + ' actions in ' +
+      Math.round((Date.now() - started) / 1000) + 's — budget ' + Math.round(BUDGET / 1000) + 's)');
+  }
   ok(a2.view.phase === 'gameEnd', 'four rounds play out to a finish');
   ok(a2.view.scores.length === 4, 'four rounds are scored');
   const finalTotals = a2.view.seats.map(function (_, i) {

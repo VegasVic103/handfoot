@@ -377,7 +377,7 @@ function renderMine() {
     var empty = document.createElement('p');
     empty.className = 'note';
     empty.textContent = view.phase === 'playing'
-      ? 'Nothing down yet. Your first meld this round must total ' + view.minMeld + '.'
+      ? 'Nothing down yet. Going down needs ' + view.minMeld + ' or more \u2014 you can spread that across as many melds as you like, as long as they all go down in the same turn.'
       : 'No books yet.';
     wrap.appendChild(empty);
   }
@@ -527,7 +527,7 @@ function renderActions() {
   // play phase
   var msgs = [];
   if (view.you && !view.you.hasInitialMeld) {
-    msgs.push('Initial meld needs ' + view.minMeld + '; you have laid ' +
+    msgs.push('Going down needs ' + view.minMeld + ' or more, added up across this whole turn. Laid so far: ' +
       (view.turnState ? view.turnState.melded : 0) + '.');
   }
   if (view.you && view.you.inFoot) {
@@ -645,6 +645,17 @@ function renderScores() {
     body.appendChild(p);
   }
 }
+
+/* ---------------- keeping the server awake ----------------
+ * Free hosting puts the server to sleep after ~15 quiet minutes. A hand can
+ * easily sit still that long while someone studies their cards, so every open
+ * page pokes the server every four minutes. This runs only while somebody has
+ * the game open, so the server still sleeps between game nights. */
+setInterval(function () {
+  if (ws && ws.readyState === 1) send({ t: 'ping' });
+  try { fetch('health', { cache: 'no-store' }).catch(function () {}); }
+  catch (e) { /* offline; the reconnect logic handles it */ }
+}, 4 * 60 * 1000);
 
 /* ---------------- start ---------------- */
 
