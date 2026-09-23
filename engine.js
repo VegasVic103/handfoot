@@ -118,7 +118,10 @@ function checkMeld(rank, cards, S) {
   const naturals = cards.filter((c) => !isWild(c)).length;
   const wilds = cards.filter((c) => isWild(c)).length;
   if (cards.length < 3) return { ok: false, reason: 'A meld needs at least 3 cards.' };
-  if (cards.length > S.bookSize) return { ok: false, reason: `A book holds at most ${S.bookSize} cards.` };
+  /* bookSize is when a pile *becomes* a book, not a ceiling on it. Once it is
+   * closed you may keep adding to the same pile, or start a fresh book of the
+   * same rank and earn a second bonus — both are legal, and which is worth more
+   * is the player's problem, not the referee's. */
   const minNat = S.minNaturalsInMeld || 2;
   if (naturals < minNat) return { ok: false, reason: `A meld needs at least ${minNat} natural cards.` };
   if (wilds > S.maxWildsInBook) return { ok: false, reason: `At most ${S.maxWildsInBook} wilds in a book.` };
