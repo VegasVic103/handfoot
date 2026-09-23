@@ -14,11 +14,14 @@ const { WebSocketServer } = require('ws');
 const E = require('./engine.js');
 const G = require('./game.js');
 const BOT = require('./bot.js');
+const ICONS = require('./icons.js');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC = __dirname;
 // Only these are served to browsers; everything else stays server-side.
-const SERVABLE = { '/index.html': 1, '/app.js': 1, '/style.css': 1 };
+const SERVABLE = {
+  '/index.html': 1, '/app.js': 1, '/style.css': 1, '/manifest.webmanifest': 1,
+};
 const SAVE_FILE = process.env.SAVE_FILE || path.join(__dirname, 'tables.json');
 const ROOM_TTL_MS = 12 * 60 * 60 * 1000;   // a table is forgotten after 12 quiet hours
 const MAX_ROOMS = 200;
@@ -508,7 +511,9 @@ const TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.png': 'image/png',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 function serveStatic(req, res) {
@@ -527,6 +532,18 @@ function serveStatic(req, res) {
       res.writeHead(200, { 'content-type': TYPES['.js'], 'cache-control': 'no-cache' });
       return res.end(src.replace(/^module\.exports = \{/m, 'window.E = {'));
     } catch (e) { res.writeHead(500); return res.end('engine unavailable'); }
+  }
+  // App icons. These are compiled into icons.js as base64 rather than kept as
+  // .png files, because this repository is edited through a text-only editor.
+  // They never change between deploys, so they are safe to cache hard.
+  const art = ICONS.icon(rel.slice(1));
+  if (art) {
+    res.writeHead(200, {
+      'content-type': TYPES['.png'],
+      'content-length': art.length,
+      'cache-control': 'public, max-age=604800',
+    });
+    return res.end(art);
   }
   if (!SERVABLE[rel]) { res.writeHead(404); return res.end('Not found'); }
   const file = path.join(PUBLIC, rel.slice(1));
