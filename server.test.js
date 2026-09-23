@@ -123,6 +123,9 @@ function botStep(c) {
   for (const m of mine) {
     if (m.cards.length >= S.bookSize) continue;
     const add = (byRank[m.rank] || []).slice(0, S.bookSize - m.cards.length);
+    // Once in the foot you must keep a card to discard, or the referee refuses
+    // the add — and this loop would just offer it again, forever.
+    if (v.you.inFoot && hand.length - add.length < 2 && !v.you.canGoOut.ok) continue;
     if (add.length) {
       send(c, { t: 'action', action: 'meldAdd', meldId: m.id, cards: add });
       return true;
@@ -141,8 +144,12 @@ function botStep(c) {
     return true;
   }
 
-  const droppable = hand.filter(function (x) { return !E.isRedThree(x); })
-    .sort(function (a, b) { return cardValue(a) - cardValue(b); });
+  // A red three is a legal discard at this table, and the first thing worth
+  // shedding -- 100 against you for as long as it is in your hand.
+  const droppable = hand.slice().sort(function (a, b) {
+    return (E.isRedThree(b) ? 1 : 0) - (E.isRedThree(a) ? 1 : 0) ||
+      cardValue(a) - cardValue(b);
+  });
   if (!droppable.length) return false;
   send(c, { t: 'action', action: 'discard', card: droppable[0] });
   return true;
