@@ -140,6 +140,9 @@ function wire() {
   };
   $('scoresBtn').onclick = function () { $('scoreSheet').hidden = false; renderScores(); };
   $('closeScores').onclick = function () { $('scoreSheet').hidden = true; };
+  $('rulesBtn').onclick = function () { $('rulesSheet').hidden = false; renderRules(); };
+  $('closeRules').onclick = function () { $('rulesSheet').hidden = true; };
+  $('closePeek').onclick = function () { $('peekSheet').hidden = true; };
   $('leaveBtn').onclick = function () {
     del('hf_code'); myCode = null; view = null; lastTurn = null;
     sel = []; pileSel = [];
@@ -235,9 +238,86 @@ function pileOffer() {
   return { rank: r, take: Math.min(view.settings.pileTakeExtra + 1, view.discardCount) };
 }
 
+/* Whether the pile is takeable from this hand at all — as opposed to
+ * pileOffer, which asks whether the cards to take it with are selected right
+ * now. The difference is the whole play: without this you have to already know
+ * the rule to notice the chance, and a phone has no hover to explain it. */
+function pileChance() {
+  if (!view.discardTop || !view.discardCount) return null;
+  var top = view.discardTop;
+  if (E.isWild(top) || E.isBlackThree(top) || E.isRedThree(top)) return null;
+  var r = E.rankOf(top);
+  var need = view.settings.pileNaturalsRequired;
+  var nat = myHand().filter(function (c) { return !E.isWild(c) && E.rankOf(c) === r; });
+  if (nat.length < need) return null;
+  return { rank: r, need: need, take: Math.min(view.settings.pileTakeExtra + 1, view.discardCount) };
+}
+
 function meldStatsOf(m) {
   return E.meldStats(m, { bookSize: view.settings.bookSize });
 }
+
+/* Books in rank order rather than the order they happened to be laid, so a
+ * table you glance at twice looks the same both times. Inside a book the
+ * naturals come first and the wilds sit at the end, where they are easy to
+ * count. Display only — the server's order is untouched and meld ids are what
+ * actually identify a book. */
+function rankIndex(r) {
+  var i = E.RANKS.indexOf(r);
+  return i === -1 ? 99 : i;
+}
+function orderMelds(melds) {
+  return melds.slice().sort(function (a, b) {
+    return rankIndex(a.rank) - rankIndex(b.rank) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  });
+}
+function orderCards(cards) {
+  return cards.slice().sort(function (a, b) {
+    return (E.isWild(a) ? 1 : 0) - (E.isWild(b) ? 1 : 0) ||
+      E.cardValue(b) - E.cardValue(a) ||
+      (a < b ? -1 : a > b ? 1 : 0);
+  });
+}
+
+/* ---------------- noticing what everyone else played ----------------
+ * A bot finishes its turn in under a second, so cards can appear on the table
+ * and be old news before you have looked up. Every card added to anyone's book
+ * is remembered for a few seconds and drawn glowing, so a glance at the top of
+ * the screen tells you what just happened. */
+var seenCards = null;          // every meld card already accounted for
+var freshPlays = {};           // card -> when it appeared
+var freshTimer = null;
+var FRESH_MS = 4000;
+
+function notePlays() {
+  var now = Date.now();
+  var current = {};
+  view.seats.forEach(function (s) {
+    s.melds.forEach(function (m) {
+      m.cards.forEach(function (c) { current[c] = true; });
+    });
+  });
+  // The first view of a table is not news — only changes after it are.
+  if (seenCards) {
+    Object.keys(current).forEach(function (c) {
+      if (!seenCards[c]) freshPlays[c] = now;
+    });
+  }
+  seenCards = current;
+
+  var live = false;
+  Object.keys(freshPlays).forEach(function (c) {
+    if (now - freshPlays[c] > FRESH_MS || !current[c]) delete freshPlays[c];
+    else live = true;
+  });
+
+  // Re-render once the glow has expired so it actually goes away.
+  if (live && !freshTimer) {
+    freshTimer = setTimeout(function () { freshTimer = null; render(); }, 700);
+  }
+}
+function isFreshPlay(c) { return Object.prototype.hasOwnProperty.call(freshPlays, c); }
 
 /* ---------------- rendering ---------------- */
 
@@ -315,12 +395,20 @@ function render() {
   share.hidden = !(view.phase === 'lobby' && !view.solo);
   if (!share.hidden) $('shareCode').textContent = view.code;
 
+  notePlays();
   renderSeats();
   renderCenter();
   renderMine();
   renderActions();
   renderLog();
   sizeBoard();
+  // Sheets left open follow the table rather than freezing at the moment they
+  // were opened — someone else turning the rule off should show there at once.
+  if (!$('rulesSheet').hidden) renderRules();
+  if (!$('peekSheet').hidden) {
+    if (view.discardPeek && view.discardPeek.length) showPeek();
+    else $('peekSheet').hidden = true;
+  }
   if (!$('scoreSheet').hidden) renderScores();
   if (view.phase === 'roundEnd' || view.phase === 'gameEnd') {
     $('scoreSheet').hidden = false; renderScores();
@@ -366,9 +454,12 @@ function renderSeats() {
     var nm = document.createElement('span'); nm.className = 'seat-name';
     nm.textContent = s.name + (i === meSeat() && !view.solo ? ' (you)' : '');
     var meta = document.createElement('span'); meta.className = 'seat-meta';
+    // Short enough that a seat's badges still fit beside it on a phone.
     meta.textContent = view.phase === 'lobby'
       ? (s.seated ? 'seated' : 'empty')
-      : s.handCount + ' in hand · ' + (s.inFoot ? 'in foot' : s.footCount + ' in foot');
+      : s.handCount + ' hand · ' + (s.inFoot ? 'in foot' : s.footCount + ' foot');
+    meta.title = s.handCount + ' cards in hand, ' +
+      (s.inFoot ? 'already in their foot' : s.footCount + ' waiting in their foot');
     top.appendChild(nm); top.appendChild(meta);
     d.appendChild(top);
 
@@ -378,22 +469,25 @@ function renderSeats() {
 
     if (s.melds.length) {
       var ms = document.createElement('div'); ms.className = 'melds';
-      s.melds.forEach(function (m) {
+      var seatFresh = false;
+      orderMelds(s.melds).forEach(function (m) {
         var st = meldStatsOf(m);
         var box = document.createElement('div');
         box.className = 'meld' + (st.isRedBook ? ' done-red' : st.complete ? ' done-black' : '');
         var head = document.createElement('div'); head.className = 'meld-top';
         head.textContent = E.rankName(m.rank) + 's · ' + m.cards.length;
         var mini = document.createElement('div'); mini.className = 'meld-mini';
-        m.cards.forEach(function (c) {
+        orderCards(m.cards).forEach(function (c) {
           var sp = document.createElement('span');
-          sp.className = 'mini' + wildClass(c);
+          sp.className = 'mini' + wildClass(c) + (isFreshPlay(c) ? ' just-played' : '');
+          if (isFreshPlay(c)) seatFresh = true;
           sp.title = E.label(c) + ' · ' + E.cardValue(c) + ' points';
           mini.appendChild(sp);
         });
         box.appendChild(head); box.appendChild(mini);
         ms.appendChild(box);
       });
+      if (seatFresh) d.classList.add('just-played-seat');
       d.appendChild(ms);
     }
     wrap.appendChild(d);
@@ -446,9 +540,15 @@ function renderCenter() {
   var top;
   if (view.discardTop) top = cardEl(view.discardTop, {});
   else { top = document.createElement('div'); top.className = 'card empty'; }
-  var frozen = view.discardTop && (E.isWild(view.discardTop) || E.isBlackThree(view.discardTop));
+  var frozen = view.discardTop &&
+    (E.isWild(view.discardTop) || E.isBlackThree(view.discardTop) || E.isRedThree(view.discardTop));
+  /* When the table plays the pile open, the top card is the way in to what a
+   * take would bring — tap it and see the seven. Nothing here decides anything;
+   * it only shows what the server already sent. */
+  var peek = view.discardPeek && view.discardPeek.length;
   row.appendChild(stackbox('Discard', top,
-    view.discardCount + ' card' + (view.discardCount === 1 ? '' : 's') + (frozen ? ' · frozen' : '')));
+    view.discardCount + ' card' + (view.discardCount === 1 ? '' : 's') + (frozen ? ' · frozen' : ''),
+    peek ? { click: showPeek } : null));
 }
 
 function renderMine() {
@@ -479,17 +579,29 @@ function renderMine() {
     wrap.appendChild(empty);
   }
 
-  melds.forEach(function (m) {
+  orderMelds(melds).forEach(function (m) {
     var st = meldStatsOf(m);
-    var open = canTarget && !st.complete;
+    /* A closed book still takes cards, so it stays a target — except a red one
+     * when a wild is selected, which the referee refuses rather than quietly
+     * turning 500 points into 300. */
+    var spoilsRed = st.isRedBook && sel.some(function (c) { return E.isWild(c); });
+    var open = canTarget && !spoilsRed;
     var box = document.createElement(open ? 'button' : 'div');
     box.className = 'meld' + (st.isRedBook ? ' done-red' : st.complete ? ' done-black' : '') +
       (open ? ' target' : '');
     var head = document.createElement('div'); head.className = 'meld-top';
-    head.textContent = E.rankName(m.rank) + 's · ' + m.cards.length + '/' + view.settings.bookSize +
-      (st.isRedBook ? ' · red book' : st.complete ? ' · black book' : '');
+    // Seven is when a pile becomes a book, not a ceiling, so a closed one counts
+    // up rather than showing a fraction it has already passed.
+    head.textContent = E.rankName(m.rank) + 's · ' +
+      (st.complete ? m.cards.length + (st.isRedBook ? ' · red book' : ' · black book')
+                   : m.cards.length + '/' + view.settings.bookSize);
+    if (spoilsRed) box.title = 'A wild would turn this red book black. Start another book of that rank.';
     var cards = document.createElement('div'); cards.className = 'meld-cards';
-    m.cards.forEach(function (c) { cards.appendChild(cardEl(c, { tiny: true })); });
+    orderCards(m.cards).forEach(function (c) {
+      var el = cardEl(c, { tiny: true });
+      if (isFreshPlay(c)) el.classList.add('just-played');
+      cards.appendChild(el);
+    });
     box.appendChild(head); box.appendChild(cards);
     if (open) {
       box.onclick = function () { act('meldAdd', { meldId: m.id, cards: sel.slice() }); };
@@ -639,8 +751,10 @@ function renderActions() {
     var spread = live.length >= S.distinctDrawPiles;
     var left = S.drawCount - pileSel.length;
 
-    /* Kept to a few words so the bar stays one line on a phone. The rule behind
-     * each one lives on the button it belongs to, as a tooltip. */
+    /* Kept short so the bar stays one line on a phone, with the rest of each
+     * rule on the button it belongs to as a tooltip — except the pile, which is
+     * a play you can miss entirely, so it is spelled out below. */
+    var chance = pileChance();
     if (notice) hint.innerHTML = esc(notice);
     else if (!spread) {
       hint.innerHTML = 'Only pile <b>' + (live[0] + 1) + '</b> left — both cards come from it.';
@@ -651,6 +765,16 @@ function renderActions() {
     } else {
       hint.innerHTML = 'Drawing from piles <b>' +
         pileSel.map(function (i) { return i + 1; }).join('</b> and <b>') + '</b>.';
+    }
+
+    /* You are holding what the pile costs. Say so, and say what to tap — a
+     * tooltip cannot reach anyone on a phone. */
+    if (!notice && chance) {
+      var offered = pileOffer();
+      hint.innerHTML += offered
+        ? ' Or press <b>Take pile</b> for ' + chance.take + ' cards.'
+        : ' Or select <b>' + chance.need + ' ' + E.rankName(chance.rank) + 's</b>' +
+          ' to take the pile — ' + chance.take + ' cards.';
     }
     bar.appendChild(hint);
 
@@ -689,7 +813,7 @@ function renderActions() {
   }
   if (view.you && view.you.inFoot) {
     msgs.push(view.you.canGoOut.ok
-      ? 'You can go out — discard your last card.'
+      ? 'You can go out — meld every card in your hand. No discard.'
       : 'To go out: ' + String(view.you.canGoOut.reason || '').toLowerCase());
   }
   hint.innerHTML = notice ? esc(notice) : esc(msgs.join(' '));
@@ -734,10 +858,127 @@ function renderLog() {
       case 'foot': return names[e.seat] + ' picked up their foot';
       case 'stockout': return 'The draw piles ran out';
       case 'end': return e.seat != null ? names[e.seat] + ' went out' : 'Round over';
+      case 'rule': return names[e.seat] + (e.value ? ' opened' : ' closed') + ' the discard pile';
       default: return '';
     }
   }).filter(Boolean);
   $('logBox').textContent = lines.join('  ·  ');
+}
+
+/* What a pile-take would bring in, top card first. Shown only because the
+ * server sent it; if the table plays the pile closed, view.discardPeek is null
+ * and the pile is not even clickable. */
+function showPeek() {
+  var cards = (view.discardPeek || []).slice().reverse();
+  if (!cards.length) return;
+  var body = $('peekBody'); body.innerHTML = '';
+
+  $('peekTitle').textContent = 'You would take ' + cards.length + ' card' + (cards.length === 1 ? '' : 's');
+
+  var lead = document.createElement('p');
+  lead.className = 'note';
+  lead.style.margin = '0 0 12px';
+  var top = view.discardTop;
+  var frozen = top && (E.isWild(top) || E.isBlackThree(top) || E.isRedThree(top));
+  lead.textContent = frozen
+    ? 'The pile is frozen — ' + E.label(top) + ' on top means nobody can take it. This is what is sitting under it.'
+    : 'The top card and the ' + (cards.length - 1) + ' behind it. Taking the pile needs ' +
+      view.settings.pileNaturalsRequired + ' naturals in hand matching ' + E.label(top) + '.';
+  body.appendChild(lead);
+
+  var row = document.createElement('div');
+  row.className = 'peek-cards';
+  cards.forEach(function (c, i) {
+    var wrap = document.createElement('div');
+    wrap.className = 'peek-card';
+    wrap.appendChild(cardEl(c, { title: E.label(c) + ' · ' + E.cardValue(c) + ' points' }));
+    var cap = document.createElement('div');
+    cap.className = 'tag';
+    cap.textContent = i === 0 ? 'top' : String(i);
+    wrap.appendChild(cap);
+    row.appendChild(wrap);
+  });
+  body.appendChild(row);
+
+  var worth = cards.reduce(function (s, c) { return s + E.cardValue(c); }, 0);
+  var sum = document.createElement('p');
+  sum.className = 'note';
+  sum.style.marginTop = '12px';
+  sum.textContent = 'Worth ' + worth + ' points in hand. The pile is ' + view.discardCount + ' cards deep.';
+  body.appendChild(sum);
+
+  $('peekSheet').hidden = false;
+}
+
+/* The house rules, with the ones this table can actually change as switches.
+ * Everything else is shown so nobody has to remember, and so a disagreement
+ * mid-game has somewhere to be settled. */
+function renderRules() {
+  var body = $('rulesBody'); body.innerHTML = '';
+  var S = view.settings;
+
+  var box = document.createElement('div');
+  box.className = 'rule-toggle';
+  var id = 'ruleReveal';
+  var input = document.createElement('input');
+  input.type = 'checkbox'; input.id = id; input.checked = !!S.revealPileTake;
+  input.onchange = function () {
+    act('setRule', { key: 'revealPileTake', value: input.checked });
+  };
+  var lab = document.createElement('label');
+  lab.setAttribute('for', id);
+  var t = document.createElement('div');
+  t.className = 'rule-title';
+  t.textContent = 'Show what you would take from the discard pile';
+  var d = document.createElement('div');
+  d.className = 'note';
+  d.textContent = 'On, the top card can be tapped to see all ' + (S.pileTakeExtra + 1) +
+    ' cards a take would bring in. Off, only the top card shows and taking the pile is a gamble, ' +
+    'the way a squared-up pile plays at a real table. This applies to everyone at the table.';
+  lab.appendChild(t); lab.appendChild(d);
+  box.appendChild(input); box.appendChild(lab);
+  body.appendChild(box);
+
+  var h = document.createElement('h3');
+  h.style.cssText = 'font-size:14px;margin:18px 0 8px';
+  h.textContent = 'Fixed for this table';
+  body.appendChild(h);
+
+  var rows = [
+    ['Decks', 'players + 2'],
+    ['Deal', S.handSize + ' to the hand, ' + S.footSize + ' to the foot'],
+    ['Draw piles', S.stockPiles + ', and a two-card draw takes one from each of ' +
+      S.distinctDrawPiles + ' different piles'],
+    ['Taking the pile', S.pileNaturalsRequired + ' naturals matching the top card; you get it plus the ' +
+      S.pileTakeExtra + ' behind it'],
+    ['Going down', S.minMelds.join(' / ') + ' across the four rounds, totalled over every meld that turn'],
+    ['Book', S.bookSize + ' cards closes a book · red ' + S.redBookBonus + ' · black ' + S.blackBookBonus +
+      '. A closed book keeps taking cards, and once it is closed you may start another of the same rank'],
+    ['Wilds', 'at most ' + S.maxWildsInBook + ' per book, and every meld needs ' +
+      S.minNaturalsInMeld + ' naturals'],
+    ['Threes', 'never meld. A black three on top freezes the pile'],
+    ['Red threes', S.redThreeAutoLayOff
+      ? 'lay off the moment they arrive, ' + S.redThreeValue + ' each'
+      : 'dead cards you discard like any other. ' + S.redThreeValue +
+        ' only if you are still holding one when the round ends'],
+    ['Going out', 'in your foot, ' + S.requireRedBook + ' red book + ' + S.requireBlackBook +
+      ' black book, then play every card left in your hand into melds — no discard. +' + S.goOutBonus],
+  ];
+  var tbl = document.createElement('table');
+  var tb = document.createElement('tbody');
+  rows.forEach(function (r) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + esc(r[0]) + '</td><td style="text-align:left">' + esc(r[1]) + '</td>';
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  body.appendChild(tbl);
+
+  var note = document.createElement('p');
+  note.className = 'note';
+  note.style.marginTop = '10px';
+  note.textContent = 'These live in engine.js. Ask and they change — the server, the interface and the tests all follow the same numbers.';
+  body.appendChild(note);
 }
 
 function renderScores() {
