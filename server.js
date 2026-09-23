@@ -106,7 +106,11 @@ function viewFor(room, seat) {
       footCount: p.foot.length,
       inFoot: p.inFoot,
       hasInitialMeld: p.hasInitialMeld,
-      redThrees: p.redThrees.length,
+      /* Your own red threes only. At a real table they sit face up, but this
+       * table would rather not announce a 100-point penalty to everybody, so
+       * each seat is told only about its own. They surface for everyone at
+       * the round-end scoring, where they actually count. */
+      redThrees: i === seat ? p.redThrees.length : 0,
       redBooks: red,
       blackBooks: black,
       melds: p.melds.map(function (m) {
@@ -122,6 +126,11 @@ function viewFor(room, seat) {
     inFoot: g.players[seat].inFoot,
     footCount: g.players[seat].foot.length,
     hasInitialMeld: g.players[seat].hasInitialMeld,
+    /* The actual cards, so you can see what the penalty is for. A red three
+     * never sits in your hand — it lays itself off the moment it is dealt or
+     * drawn and a replacement comes in — which is why it needs showing
+     * somewhere at all. */
+    redThrees: g.players[seat].redThrees.slice(),
     canGoOut: g.phase === 'playing' ? G.canGoOut(g, seat) : { ok: false, reason: '' },
     // Which cards arrived this turn. It rides inside `you`, never in the
     // shared turnState, so it reaches only the seat holding those cards.
