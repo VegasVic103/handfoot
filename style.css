@@ -13,6 +13,7 @@
   --ink:#171310;
   --brass:#d6ae3e;
   --brass-dim:#8a7128;
+  --deuce:#5b9dd9;
   --rouge:#b8342c;
   --rouge-lt:#d9615a;
   --good:#63b48c;
@@ -157,7 +158,18 @@ input[type=text]::placeholder{color:#5f776c}
 }
 .card.empty{background:none;border:1px dashed var(--line);box-shadow:none}
 .card.sel{transform:translateY(-10px);box-shadow:0 6px 14px rgba(0,0,0,.5),0 0 0 2px var(--brass)}
+/* Wilds carry a band in their own colour along the top edge — brass for a
+   joker at 50, blue for a deuce at 20 — so you can tell at a glance what is
+   sitting in anybody's book. The top edge stays visible when a hand is
+   layered, which the corners do not. */
+.card.wild::before{
+  content:'';position:absolute;left:0;right:0;top:0;height:4px;
+  border-radius:5px 5px 0 0;background:var(--wc);
+}
+.card.joker{--wc:var(--brass)}
+.card.deuce{--wc:var(--deuce)}
 .card.tiny{--card-w:30px;--card-h:43px;width:30px;height:43px;border-radius:4px}
+.card.tiny.wild::before{height:3px;border-radius:3px 3px 0 0}
 .card.tiny .r{font-size:12px}
 .card.tiny .s{font-size:10px}
 .card[disabled]{cursor:default}
@@ -179,7 +191,8 @@ input[type=text]::placeholder{color:#5f776c}
 .mini{
   width:13px;height:18px;border-radius:2px;background:var(--bone-2);border:1px solid #b3a894;
 }
-.mini.w{background:var(--brass)}
+.mini.joker{background:var(--brass)}
+.mini.deuce{background:var(--deuce)}
 
 /* ---------- my area ---------- */
 .mine{display:flex;flex-direction:column;gap:12px}
@@ -197,7 +210,7 @@ input[type=text]::placeholder{color:#5f776c}
 .hand-row .card + .card{margin-left:-28px}
 .hand.layered .card{
   justify-content:flex-start;align-items:flex-start;
-  padding:4px 0 0 4px;gap:0;
+  padding:6px 0 0 4px;gap:0;          /* clear of the wild band */
 }
 .hand.layered .card .r{font-size:14px}
 .hand.layered .card .s{font-size:12px}
