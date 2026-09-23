@@ -97,9 +97,16 @@ function botStep(c) {
         !E.isRedThree(v.discardTop)) {
       const r = E.rankOf(v.discardTop);
       const nat = hand.filter(function (x) { return !E.isWild(x) && E.rankOf(x) === r; });
-      const value = nat.concat([v.discardTop]).reduce(function (s, x) { return s + cardValue(x); }, 0);
-      if (nat.length >= S.pileNaturalsRequired && (v.you.hasInitialMeld || value >= v.minMeld)) {
-        send(c, { t: 'action', action: 'pile', cards: nat.slice(0, 6) });
+      // Value exactly what will be sent, not everything of that rank in hand.
+      // A book holds bookSize, and the top card takes one of those places, so
+      // only bookSize - 1 can come from the hand. Counting all of them made the
+      // bot believe a take cleared the minimum when the referee scored only the
+      // cards it was actually handed, and it then offered the same refused move
+      // forever.
+      const take = nat.slice(0, S.bookSize - 1);
+      const value = take.concat([v.discardTop]).reduce(function (s, x) { return s + cardValue(x); }, 0);
+      if (take.length >= S.pileNaturalsRequired && (v.you.hasInitialMeld || value >= v.minMeld)) {
+        send(c, { t: 'action', action: 'pile', cards: take });
         return true;
       }
     }
@@ -123,9 +130,9 @@ function botStep(c) {
   for (const m of mine) {
     if (m.cards.length >= S.bookSize) continue;
     const add = (byRank[m.rank] || []).slice(0, S.bookSize - m.cards.length);
-    // Once in the foot you must keep a card to discard, or the referee refuses
-    // the add — and this loop would just offer it again, forever.
-    if (v.you.inFoot && hand.length - add.length < 2 && !v.you.canGoOut.ok) continue;
+    // Once in the foot you must keep a card to discard unless you are going
+    // out, or the referee refuses the add and this loop offers it forever.
+    if (v.you.inFoot && hand.length - add.length < 1 && !v.you.canGoOut.ok) continue;
     if (add.length) {
       send(c, { t: 'action', action: 'meldAdd', meldId: m.id, cards: add });
       return true;
@@ -139,7 +146,7 @@ function botStep(c) {
     if (cards.length < 3) continue;
     const value = cards.reduce(function (s, x) { return s + cardValue(x); }, 0);
     if (!v.you.hasInitialMeld && value < v.minMeld) continue;
-    if (v.you.inFoot && hand.length - cards.length < 2 && !v.you.canGoOut.ok) continue;
+    if (v.you.inFoot && hand.length - cards.length < 1 && !v.you.canGoOut.ok) continue;
     send(c, { t: 'action', action: 'meldNew', rank: rank, cards: cards });
     return true;
   }
@@ -285,6 +292,7 @@ function botStep(c) {
   let turns = 0;
   const started = Date.now();
   const BUDGET = Number(process.env.GAME_BUDGET_MS || 180000);
+  let refusalStorm = null;
   while (Date.now() - started < BUDGET) {
     const v = a2.view;
     if (!v) { await wait(20); continue; }
@@ -300,12 +308,43 @@ function botStep(c) {
     const acted = botStep(actor);
     if (!acted) { await wait(20); }
     else { turns++; await wait(4); }
-    if (turns > 6000) break;
+    // A ceiling on actions, not the real stall detector — the time budget above
+    // is. Set high enough that an unusually long but perfectly healthy random
+    // game does not read as a failure; rules.test.js's 1,200-game sweep is what
+    // actually catches a game that cannot finish.
+    if (turns > 20000) break;
+    /* A refused move changes nothing, so a bot that keeps offering one will
+     * offer it until the budget runs out and report only that the game did not
+     * finish. Stop at the first sign of that and say which move and whose, so
+     * the next person sees the cause instead of the symptom. */
+    const stuck = players.find(function (p) { return p.errors.length > 200; });
+    if (stuck) {
+      refusalStorm = stuck.name + ' had ' + stuck.errors.length + ' moves refused, last: ' +
+        JSON.stringify(stuck.errors[stuck.errors.length - 1]);
+      break;
+    }
   }
+
+  ok(!refusalStorm, 'no player is left offering a move the referee keeps refusing' +
+    (refusalStorm ? ' — ' + refusalStorm : ''));
 
   if (a2.view.phase !== 'gameEnd') {
     console.log('     (reached ' + a2.view.phase + ' after ' + turns + ' actions in ' +
       Math.round((Date.now() - started) / 1000) + 's — budget ' + Math.round(BUDGET / 1000) + 's)');
+    if (process.env.DIAG) {
+      const v = a2.view;
+      console.log('     DIAG round=' + v.round + ' turn=' + v.turn + ' phase=' + v.turnPhase +
+        ' stocks=' + JSON.stringify(v.stocks) + ' discard=' + v.discardCount);
+      [a2, b, d].forEach(function (c, i) {
+        const last = c.errors.slice(-3);
+        console.log('     DIAG seat' + i + ' errors=' + c.errors.length +
+          ' hand=' + (c.view.you ? c.view.you.hand.length : '?') +
+          ' inFoot=' + (c.view.you ? c.view.you.inFoot : '?') +
+          ' down=' + (c.view.you ? c.view.you.hasInitialMeld : '?') +
+          ' melds=' + c.view.seats[c.view.you.seat].melds.length +
+          (last.length ? ' | ' + JSON.stringify(last) : ''));
+      });
+    }
   }
   ok(a2.view.phase === 'gameEnd', 'four rounds play out to a finish');
   ok(a2.view.scores.length === 4, 'four rounds are scored');
@@ -348,6 +387,48 @@ function botStep(c) {
   ok(sawPicked, 'a player is told which cards they just picked up');
   ok(!pickedStrayed, 'a card marked as just picked up is never in anyone else’s books');
   ok(sawOnlyMine, 'the marked cards show up in the holder’s own hand');
+
+  /* ---------- the pile peek is a rule, and a redaction ---------- */
+  console.log('\n-- showing what the pile holds --');
+
+  const cap = a2.view.settings.pileTakeExtra + 1;
+  const peek = a2.view.discardPeek;
+  ok(Array.isArray(peek), 'the table plays the pile open by default, so the cards come through');
+  ok(peek && peek.length <= cap,
+    'and never more than a take would actually reach (' + (peek && peek.length) + ' <= ' + cap + ')');
+  ok(peek && peek[peek.length - 1] === a2.view.discardTop,
+    'the last of them is the top card, the one a take is built on');
+
+  // Everyone sees the same pile: it is a table rule, not a private hint.
+  ok(JSON.stringify(b.view.discardPeek) === JSON.stringify(a2.view.discardPeek),
+    'every seat is shown the same cards');
+
+  // Turning it off must actually withhold them, not merely hide them in the
+  // interface — a browser that ignores the setting has to come up empty.
+  send(a2, { t: 'action', action: 'setRule', key: 'revealPileTake', value: false });
+  await untilTrue(function () { return a2.view.discardPeek === null; }, 'the pile to close', 3000);
+  ok(a2.view.discardPeek === null, 'closing it withholds the cards from the payload, not just the page');
+  ok(b.view.discardPeek === null, 'and from every other seat too');
+  ok(a2.view.settings.revealPileTake === false, 'the setting itself rides along so the switch can show it');
+
+  const closedPayload = a2.seenPayloads[a2.seenPayloads.length - 1];
+  const buried = a2.view.discardCount > cap;
+  ok(!buried || !closedPayload.includes('"discardPeek":['),
+    'a closed pile sends no cards at all');
+
+  send(a2, { t: 'action', action: 'setRule', key: 'revealPileTake', value: true });
+  await untilTrue(function () { return Array.isArray(a2.view.discardPeek); }, 'the pile to reopen', 3000);
+  ok(Array.isArray(a2.view.discardPeek), 'and it can be turned back on');
+
+  // The allowlist is the whole point: a client must not be able to reach a
+  // rule that decides what is a legal play.
+  const bookBefore = a2.view.settings.bookSize;
+  const errsBefore = a2.errors.length;
+  send(a2, { t: 'action', action: 'setRule', key: 'bookSize', value: true });
+  send(a2, { t: 'action', action: 'setRule', key: 'minMelds', value: false });
+  await wait(250);
+  ok(a2.view.settings.bookSize === bookBefore, 'a client cannot set a rule that decides legal play');
+  ok(a2.errors.length > errsBefore, 'and is told the rule is not adjustable');
 
   console.log('\n' + pass + ' passed, ' + failed + ' failed');
   if (problems.length) problems.forEach(function (p) { console.log('   - ' + p); });
