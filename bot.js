@@ -258,7 +258,7 @@ function decide(view) {
       const st = E.meldStats(m, S);
       if (st.complete) continue;
       if (m.cards.length === S.bookSize - 1 && st.wilds < S.maxWildsInBook &&
-          st.naturals > st.wilds + 1 && budget >= 1) {
+          st.naturals >= 2 && budget >= 1) {
         return { action: 'meldAdd', meldId: m.id, cards: [spare[0]] };
       }
     }
