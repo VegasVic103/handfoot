@@ -94,8 +94,8 @@
       <b>red book</b> all naturals, 500; <b>black book</b> with wilds, 300. Threes never meld
       &mdash; a black three on top freezes the pile, and a <b>red three</b> is dead weight you
       discard like any other card: it costs you <b>100</b> only if you are still holding one when
-      the round ends. Go out
-      from your foot with a red book and a black book, discarding your last card. +100 for going out.
+      the round ends. To <b>go out</b> you must be in your foot with a red book and a black book, and
+      then play <b>every card left in your hand</b> into melds &mdash; there is no final discard. +100 for going out.
     </div>
   </div>
 </section>
@@ -108,7 +108,7 @@
         <div class="code" id="tableCode">&mdash;</div>
       </div>
       <div class="bar-cell">
-        <div class="tag">Round</div>
+        <div class="tag"><span class="only-wide">Round</span><span class="only-narrow">R</span></div>
         <div class="bar-val" id="roundLabel">1 of 4</div>
       </div>
       <div class="bar-cell">
@@ -118,6 +118,9 @@
       <div class="spacer"></div>
       <span class="pill" id="turnPill">&mdash;</span>
       <button class="btn ghost sm" id="scoresBtn">Scores</button>
+      <button class="btn ghost sm" id="rulesBtn" title="The house rules in force, and the ones this table can change">
+        <span class="only-wide">Rules</span><span class="only-narrow">&#9881;</span>
+      </button>
       <button class="btn ghost sm" id="leaveBtn">Leave</button>
     </div>
   </div>
@@ -142,7 +145,7 @@
       </div>
       <div class="melds" id="myMelds"></div>
 
-      <div class="sect-head">
+      <div class="sect-head hand-head">
         <h3 class="only-wide">Your hand</h3>
         <span class="pill" id="handPill">0 cards</span>
         <button class="btn ghost sm" id="sortBtn">Sort by rank</button>
@@ -158,6 +161,28 @@
     <div class="wrap actions-in" id="actionBar"></div>
   </div>
 </section>
+
+<div class="sheet" id="rulesSheet" hidden>
+  <div class="sheet-in">
+    <div class="sect-head" style="margin-bottom:14px">
+      <h2 style="font-size:22px">House rules</h2>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn ghost sm" id="closeRules">Close</button>
+    </div>
+    <div id="rulesBody"></div>
+  </div>
+</div>
+
+<div class="sheet" id="peekSheet" hidden>
+  <div class="sheet-in">
+    <div class="sect-head" style="margin-bottom:14px">
+      <h2 style="font-size:22px" id="peekTitle">The discard pile</h2>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn ghost sm" id="closePeek">Close</button>
+    </div>
+    <div id="peekBody"></div>
+  </div>
+</div>
 
 <div class="sheet" id="scoreSheet" hidden>
   <div class="sheet-in">
