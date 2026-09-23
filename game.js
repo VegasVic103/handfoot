@@ -94,8 +94,21 @@ function freshTurn(state) {
     tookPile: false,
     drew: false,
     pickedUpFoot: false,
+    // Cards that came into the hand this turn, so the player can see at a
+    // glance which ones are new. Only ever shown to the seat that holds them.
+    picked: [],
     snapshot: snapOf(state, state.turn),
   };
+}
+
+/* Remember a card as newly in hand this turn. Tolerates a turnState built
+ * before this field existed — a table restored from an older save, say — so a
+ * missing list is created rather than thrown over. */
+function notePicked(state, card) {
+  const ts = state.turnState;
+  if (!ts) return;
+  if (!Array.isArray(ts.picked)) ts.picked = [];
+  ts.picked.push(card);
 }
 
 /* ---------- draw ---------- */
@@ -177,6 +190,7 @@ function drawStock(state, seat, piles) {
       if (c === null) return endRoundOutOfCards(state);
     }
     p.hand.push(c);
+    notePicked(state, c);
   }
   state.turnState.drew = true;
   state.turnPhase = 'play';
@@ -245,7 +259,7 @@ function takePile(state, seat, handCards) {
 
     for (const c of taken) {
       if (E.isRedThree(c)) p.redThrees.push(c);
-      else p.hand.push(c);
+      else { p.hand.push(c); notePicked(state, c); }
     }
     state.turnState.melded += value;
     log(state, { t: 'pile', seat, n: takeCount, rank });
