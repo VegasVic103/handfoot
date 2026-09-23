@@ -292,8 +292,11 @@ function meldNew(state, seat, rank, cards) {
   if (!g.ok) return g;
   const S = state.settings;
   const p = state.players[seat];
-  if (p.melds.some((m) => m.rank === rank)) {
-    return fail(`You already have a ${E.rankName(rank)} meld — add to it instead.`);
+  /* A second book of a rank is allowed, but only once the one you have is
+   * closed — otherwise you could spread the same rank across two half-books and
+   * never finish either. */
+  if (p.melds.some((m) => m.rank === rank && m.cards.length < S.bookSize)) {
+    return fail(`You already have an open ${E.rankName(rank)} book — add to it instead.`);
   }
   const owned = cards.every((c) => p.hand.includes(c));
   if (!owned) return fail('Those cards are not in your hand.');
@@ -316,8 +319,14 @@ function meldAdd(state, seat, meldId, cards) {
   const p = state.players[seat];
   const m = p.melds.find((x) => x.id === meldId);
   if (!m) return fail('No such meld.');
-  if (E.meldStats(m, S).complete) return fail('That book is closed.');
   if (!cards.every((c) => p.hand.includes(c))) return fail('Those cards are not in your hand.');
+  /* A closed book keeps taking cards, but a red one must stay red: slipping a
+   * wild onto it would quietly turn 500 points into 300. Start a second book of
+   * the rank for that wild instead. */
+  const st = E.meldStats(m, S);
+  if (st.complete && st.wilds === 0 && cards.some((c) => E.isWild(c))) {
+    return fail('That is a red book — a wild would turn it black. Start another book of that rank.');
+  }
   const chk = E.checkMeld(m.rank, m.cards.concat(cards), S);
   if (!chk.ok) return fail(chk.reason);
 
@@ -354,6 +363,14 @@ function tx(state, seat, apply) {
     state.log.length = before.logLen;
     return r.ok ? legal : r;
   }
+  /* Playing your last card from your foot is how you go out at this table:
+   * every card has to land in a meld and there is no final discard. Checked
+   * here rather than inside the play, because ending the round writes the
+   * scores and is not something the rollback above could undo. */
+  if (p.inFoot && p.hand.length === 0 && canGoOut(state, seat).ok) {
+    p.wentOut = true;
+    return endRound(state, seat);
+  }
   return r;
 }
 
@@ -367,13 +384,13 @@ function legalToStop(state, seat) {
   const live = state.settings.redThreeAutoLayOff
     ? p.hand.filter((c) => !E.isRedThree(c)).length
     : p.hand.length;
-  if (live >= 2) return done();
-  if (live === 1) {
-    const out = canGoOut(state, seat);
-    if (out.ok) return done();
-    return fail('Keep two cards unless you can go out — ' + out.reason.toLowerCase());
-  }
-  return fail('Keep a card to discard — you cannot meld your last card.');
+  // One card left is enough: you discard it and the turn ends normally.
+  if (live >= 1) return done();
+  /* Nothing left at all. The only legal way to be here is going out, which at
+   * this table means every card played into a meld and none discarded. */
+  const out = canGoOut(state, seat);
+  if (out.ok) return done();
+  return fail('Keep a card to discard unless you are going out — ' + out.reason.toLowerCase());
 }
 
 /* Emptying the hand picks up the foot and the turn continues. */
@@ -437,20 +454,13 @@ function discard(state, seat, card) {
   }
   if (state.turnState.melded > 0 && !p.hasInitialMeld) p.hasInitialMeld = true;
 
-  const willEmpty = p.hand.length === 1;
-  if (willEmpty && p.inFoot) {
-    const out = canGoOut(state, seat);
-    if (!out.ok) return fail('You cannot go out yet: ' + out.reason);
-  }
-
   p.hand.splice(p.hand.indexOf(card), 1);
   state.discard.push(card);
   log(state, { t: 'discard', seat, card });
 
-  if (p.hand.length === 0 && p.inFoot) {
-    p.wentOut = true;
-    return endRound(state, seat);
-  }
+  /* A discard never goes out — going out is melding your last card, handled in
+   * tx. Emptying your hand this way just leaves you with nothing until you draw
+   * again, which is legal and sometimes the only move you have. */
   if (p.hand.length === 0 && !p.inFoot) {
     p.hand = p.foot;
     p.foot = [];
@@ -506,6 +516,21 @@ function log(state, entry) {
   entry.id = state.logSeq;
   state.log.push(entry);
   if (state.log.length > 200) state.log.splice(0, state.log.length - 200);
+}
+
+/* A house rule changed mid-game. It goes in the log so nobody looks up to find
+ * the table playing differently than it was a minute ago. */
+function logRule(state, seat, key, value) {
+  log(state, { t: 'rule', seat, key, value: !!value });
+}
+
+/* The cards a pile-take would bring in: the top card and the ones behind it,
+ * top last, exactly as takePile would splice them off. Never more than a take
+ * would actually reach, so showing this can never become a window onto the
+ * rest of the pile. */
+function pileTakeCards(state) {
+  const n = Math.min(state.settings.pileTakeExtra + 1, state.discard.length);
+  return n > 0 ? state.discard.slice(state.discard.length - n) : [];
 }
 
 /* ---------- scoring ---------- */
@@ -572,4 +597,5 @@ module.exports = {
   createGame, startRound, drawStock, takePile, meldNew, meldAdd,
   discard, undoTurnMelds, canGoOut, scoreRound, endRound, nextRound,
   totals, minMeldFor, emptyPlayer, stockCount, livePiles, splitPiles,
+  logRule, pileTakeCards,
 };
