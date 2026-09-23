@@ -19,7 +19,8 @@ const DEFAULTS = {
   pileTakeExtra: 6,       // top card + this many behind it
   pileNaturalsRequired: 2, // naturals in hand matching the top card
   bookSize: 7,
-  maxWildsInBook: 3,       // naturals must outnumber wilds in a book of 7
+  maxWildsInBook: 2,       // at most this many wilds in a book, start to finish
+  minNaturalsInMeld: 2,    // and never fewer than this many real cards
   allowWildBooks: false,
   minMelds: [50, 90, 120, 150],
   redBookBonus: 500,
@@ -106,9 +107,11 @@ function checkMeld(rank, cards, S) {
   const wilds = cards.filter((c) => isWild(c)).length;
   if (cards.length < 3) return { ok: false, reason: 'A meld needs at least 3 cards.' };
   if (cards.length > S.bookSize) return { ok: false, reason: `A book holds at most ${S.bookSize} cards.` };
-  if (naturals < 2) return { ok: false, reason: 'A meld needs at least 2 natural cards.' };
+  const minNat = S.minNaturalsInMeld || 2;
+  if (naturals < minNat) return { ok: false, reason: `A meld needs at least ${minNat} natural cards.` };
   if (wilds > S.maxWildsInBook) return { ok: false, reason: `At most ${S.maxWildsInBook} wilds in a book.` };
-  if (wilds >= naturals) return { ok: false, reason: 'Naturals must outnumber wilds.' };
+  /* There is deliberately no naturals-outnumber-wilds rule: with the wild cap
+   * and the minimum naturals above, the real cards can never fall behind. */
   return { ok: true };
 }
 
