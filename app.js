@@ -1194,6 +1194,37 @@ if (window.ResizeObserver) {
   window.addEventListener('resize', sizeBoard);
 }
 
+/* ---------------- the Home Screen ----------------
+ * Added to the Home Screen the game runs standalone: no address bar, no
+ * toolbar, roughly a hundred more pixels of table on a phone. iOS gives a page
+ * no way to trigger that itself, so all we can do is say where the button is —
+ * and only to the people it applies to. */
+
+function isStandalone() {
+  return (window.navigator.standalone === true) ||
+    !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+
+function isIOS() {
+  var ua = navigator.userAgent || '';
+  // iPadOS reports itself as a Mac, so a touch-capable "Mac" is really an iPad.
+  return /iPad|iPhone|iPod/.test(ua) ||
+    (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+
+(function installTip() {
+  var tip = document.getElementById('installTip');
+  var close = document.getElementById('installDismiss');
+  if (!tip || !close) return;
+  var dismissed = false;
+  try { dismissed = localStorage.getItem('hf-install-tip') === 'off'; } catch (e) {}
+  if (!dismissed && isIOS() && !isStandalone()) tip.hidden = false;
+  close.addEventListener('click', function () {
+    tip.hidden = true;
+    try { localStorage.setItem('hf-install-tip', 'off'); } catch (e) {}
+  });
+})();
+
 /* ---------------- keeping the server awake ----------------
  * Free hosting puts the server to sleep after ~15 quiet minutes. A hand can
  * easily sit still that long while someone studies their cards, so every open
