@@ -488,7 +488,8 @@ function renderSeats() {
       orderMelds(s.melds).forEach(function (m) {
         var st = meldStatsOf(m);
         var box = document.createElement('div');
-        box.className = 'meld' + (st.isRedBook ? ' done-red' : st.complete ? ' done-black' : '');
+        box.className = 'meld ' + (st.wilds === 0 ? 'clean' : 'dirty') +
+          (st.complete ? ' done' : '');
         var head = document.createElement('div'); head.className = 'meld-top';
         head.textContent = E.rankName(m.rank) + 's · ' + m.cards.length;
         var mini = document.createElement('div'); mini.className = 'meld-mini';
@@ -602,8 +603,11 @@ function renderMine() {
     var spoilsRed = st.isRedBook && sel.some(function (c) { return E.isWild(c); });
     var open = canTarget && !spoilsRed;
     var box = document.createElement(open ? 'button' : 'div');
-    box.className = 'meld' + (st.isRedBook ? ' done-red' : st.complete ? ' done-black' : '') +
-      (open ? ' target' : '');
+    /* Ringed red while it is still clean and black the moment a wild goes in,
+     * whether or not it has reached seven. The colour is what the book is worth
+     * if you finish it, which is the thing you are deciding about. */
+    box.className = 'meld ' + (st.wilds === 0 ? 'clean' : 'dirty') +
+      (st.complete ? ' done' : '') + (open ? ' target' : '');
     var head = document.createElement('div'); head.className = 'meld-top';
     // Seven is when a pile becomes a book, not a ceiling, so a closed one counts
     // up rather than showing a fraction it has already passed.
@@ -612,9 +616,16 @@ function renderMine() {
                    : m.cards.length + '/' + view.settings.bookSize);
     if (spoilsRed) box.title = 'A wild would turn this red book black. Start another book of that rank.';
     var cards = document.createElement('div'); cards.className = 'meld-cards';
-    orderCards(m.cards).forEach(function (c) {
+    /* Jokers and twos sort to the end of the book and sit at the back of the
+     * squared-up pile: the cards overlap, and painting each one over the next
+     * puts the naturals in front, so the wilds show as a sliver at the tail
+     * rather than covering the real cards. Descending z-index rather than
+     * reversing the order, because the order is the order of the book. */
+    var ordered = orderCards(m.cards);
+    ordered.forEach(function (c, i) {
       var el = cardEl(c, { tiny: true });
       if (isFreshPlay(c)) el.classList.add('just-played');
+      el.style.zIndex = String(ordered.length - i);
       cards.appendChild(el);
     });
     box.appendChild(head); box.appendChild(cards);
@@ -686,6 +697,11 @@ function renderHand() {
     sortHand(settled).forEach(function (c) { wrap.appendChild(make(c, false, false)); });
     fresh.forEach(function (c, i) { wrap.appendChild(make(c, true, i === 0)); });
   }
+
+  /* The hand builds upwards from the bottom edge, so when it is deep enough to
+   * scroll the rows worth seeing are the last ones — the cards nearest your
+   * thumb, including whatever you just picked up. */
+  wrap.scrollTop = wrap.scrollHeight;
 
   var n = myHand().length;
   $('handPill').textContent = n + ' card' + (n === 1 ? '' : 's') +
