@@ -168,6 +168,7 @@ input[type=text]::placeholder{color:#5f776c}
 }
 .card.joker{--wc:var(--brass)}
 .card.deuce{--wc:var(--deuce)}
+.card.dead{--wc:var(--rouge)}
 .card.tiny{--card-w:30px;--card-h:43px;width:30px;height:43px;border-radius:4px}
 .card.tiny.wild::before{height:3px;border-radius:3px 3px 0 0}
 .card.tiny .r{font-size:12px}
@@ -193,6 +194,7 @@ input[type=text]::placeholder{color:#5f776c}
 }
 .mini.joker{background:var(--brass)}
 .mini.deuce{background:var(--deuce)}
+.mini.dead{background:var(--rouge)}
 
 /* ---------- my area ---------- */
 .mine{display:flex;flex-direction:column;gap:12px}
@@ -286,3 +288,134 @@ tbody tr:last-child td{border-bottom:0}
   letter-spacing:.28em;color:var(--brass);
 }
 .share .note{flex:1;min-width:150px}
+
+.bar-cell{display:flex;flex-direction:column}
+.bar-val{font-weight:700}
+.only-narrow{display:none}
+
+/* Red threes are never in your hand — they lay themselves off — so this is the
+   one place you can see the ones counting against you. */
+.meld.threes{border-color:var(--rouge);background:rgba(184,52,44,.12)}
+.meld.threes .meld-top{color:var(--rouge-lt)}
+
+/* ---------- phone: one screen, no scrolling ----------
+   Everything a turn needs has to be visible at once on a phone — the piles you
+   draw from, your books, your hand and the buttons. So on a narrow screen the
+   whole table tightens: smaller cards, seats on one line each, your own seat
+   dropped (its badges move up beside your books, where they are not a
+   duplicate), and the long explanations cut to a few words with the rule behind
+   each one moved onto the button it belongs to. */
+@media (max-width:600px){
+  .only-wide{display:none}
+  .only-narrow{display:inline}
+
+  .wrap{padding-inline:10px}
+  .bar-in{gap:10px;padding-block:5px;flex-wrap:nowrap;overflow:hidden}
+  .bar-cell{flex-direction:row;align-items:baseline;gap:4px}
+  .bar-table{display:none}
+  /* The bar must stay one line: wrapped labels cost more height than the
+     whole seat strip below them. */
+  .tag{font-size:9px;letter-spacing:.1em;white-space:nowrap}
+  .bar-val{font-size:13px;white-space:nowrap}
+  .pill{padding:3px 8px;font-size:11px;white-space:nowrap}
+  .seat-meta,.chip,.sect-head h3{white-space:nowrap}
+  .btn.sm{padding:5px 9px;font-size:12px}
+
+  .board{padding-block:8px 108px;gap:8px}
+
+  /* seats: one compact line each, and never your own */
+  .seats{grid-template-columns:1fr;gap:5px}
+  .seat{
+    padding:5px 9px;border-radius:9px;
+    flex-direction:row;flex-wrap:wrap;align-items:center;row-gap:4px;column-gap:8px;
+  }
+  .seat.me{display:none}
+  .seat-top{flex:0 1 auto;gap:7px}
+  .seat-name{font-size:13px}
+  .seat-meta{margin-left:0;font-size:10.5px}
+  .chips{flex:1 1 auto;justify-content:flex-end;gap:4px}
+  .chip{font-size:9.5px;padding:1px 6px}
+  /* an opponent's books as bare strips of minis — the boxes and their captions
+     cost more height than they earn at this width */
+  /* A seat is two lines and stays two lines, however many books it has: the
+     strips run off to the side and can be swiped, rather than wrapping and
+     pushing the hand off the bottom of the screen. Same for the seat strip
+     itself once there are more than a couple of opponents. */
+  .seats{max-height:122px;overflow-y:auto}
+  .seat .melds{flex:1 1 100%;gap:8px;flex-wrap:nowrap;overflow-x:auto}
+  .seat .meld{flex:0 0 auto}
+  .seat .meld-mini{flex-wrap:nowrap;max-width:none}
+  .seat .meld{border:0;background:none;padding:0;gap:2px;flex-direction:row;align-items:center}
+  .seat .meld-top{font-size:9px;letter-spacing:.06em}
+  .seat .mini{width:9px;height:13px}
+  .seat .meld-mini{gap:1.5px;max-width:96px}
+
+  /* the piles */
+  .center{padding:8px 6px;gap:7px;border-radius:10px}
+  .center .card{--card-w:32px;--card-h:46px;width:32px;height:46px}
+  .center .card .r{font-size:13px}
+  .center .card .s{font-size:11px}
+  .stackbox{min-width:0;gap:3px}
+  .stackbox .tag{font-size:8.5px;letter-spacing:.06em}
+  .pilecount{font-size:9.5px}
+  .divider{margin-inline:0}
+
+  /* your books: a fixed band that scrolls inside itself rather than pushing
+     the hand off the bottom of the screen once you have several down */
+  .mine{gap:7px}
+  .sect-head{gap:7px}
+  .sect-head h3{font-size:13px}
+  .melds{gap:5px;max-height:86px;overflow-y:auto}
+  .meld{padding:5px 6px 6px}
+  .meld-top{font-size:9.5px}
+  .melds .card.tiny{--card-w:23px;--card-h:33px;width:23px;height:33px}
+  .melds .card.tiny .r{font-size:10px}
+  .melds .card.tiny .s{font-size:8px}
+
+  /* your hand — the cap only bites once you are holding far more than a
+     dealt hand, which happens after you pick up your foot */
+  .hand{gap:4px;max-height:190px;overflow-y:auto}
+  .hand .card{--card-w:41px;--card-h:58px;width:41px;height:58px}
+  .hand .card .r{font-size:15px}
+  .hand .card .s{font-size:13px}
+  .hand-row .card + .card{margin-left:-24px}
+  .hand.layered{gap:7px}
+  .hand.layered .card .r{font-size:13px}
+  .hand.layered .card .s{font-size:11px}
+  .hand.layered .hand-row .card:last-child .r{font-size:15px}
+  .hand.layered .hand-row .card:last-child .s{font-size:13px}
+  .card.fresh::after{width:5px;height:5px;left:3px;bottom:3px}
+  .card.fresh-first{margin-left:12px}
+
+  /* the history: one line you can swipe along, instead of a paragraph */
+  .log{margin-top:2px;font-size:10.5px;max-height:none;white-space:nowrap;overflow-x:auto}
+
+  .actions{padding-top:7px;padding-bottom:calc(7px + env(safe-area-inset-bottom,0px))}
+  .actions-in{gap:6px}
+  .hint{font-size:11.5px;flex:1 1 100%;min-width:0;order:-1}
+  .actions .btn{padding:8px 12px;font-size:13px}
+
+  .share{padding:8px 10px;gap:6px}
+  .share code{font-size:18px;letter-spacing:.2em}
+}
+
+/* Short phones — an SE, or Safari with both bars showing. Squeeze the two
+   things that give up the most height for the least loss. */
+@media (max-width:600px) and (max-height:700px){
+  .log{display:none}
+  .board{padding-block:6px 100px;gap:6px}
+  .melds{max-height:62px}
+  .melds .card.tiny{--card-w:20px;--card-h:28px;width:20px;height:28px}
+  .melds .card.tiny .r{font-size:9px}
+  .melds .card.tiny .s{font-size:7px}
+  .center{padding:6px}
+  .center .card{--card-w:29px;--card-h:41px;width:29px;height:41px}
+  .center .card .r{font-size:12px}
+  .center .card .s{font-size:10px}
+  .hand .card{--card-w:37px;--card-h:52px;width:37px;height:52px}
+  .hand .card .r{font-size:14px}
+  .hand .card .s{font-size:12px}
+  .hand-row .card + .card{margin-left:-21px}
+  .hand{max-height:170px}
+  .seats{max-height:92px}
+}
