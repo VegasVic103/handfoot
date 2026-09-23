@@ -11,8 +11,7 @@ var handLayout = 'spread';   // 'spread' = side by side, 'layered' = overlapped 
 var PER_ROW = 6;             // cards per row when layered
 var notice = '', noticeBad = false;
 var lastTurn = null;
-var nudgeOn = true;      // buzz or chime when the turn comes round to you
-var audioCtx = null;
+var nudgeOn = true;      // announce the turn coming round to you
 
 var $ = function (id) { return document.getElementById(id); };
 var SUIT_GLYPH = { S: '♠', H: '♥', D: '♦', C: '♣', R: '★', B: '★' };
@@ -62,7 +61,8 @@ function connect() {
          * miss your own coming round. Not on the first state of a session: that
          * arrives on a reload, and buzzing at somebody for reopening the page
          * teaches them to turn the whole thing off. */
-        if (!first && was !== null && isMyTurn() && view.phase === 'playing') nudge();
+        if (!first && was !== null && isMyTurn() && view.phase === 'playing') announceTurn();
+        else hideTurnBanner();
       }
       /* Melding or discarding takes cards out of the hand, but they stayed in
        * the selection — so the next thing you picked up was judged together
@@ -174,8 +174,6 @@ function wire() {
   };
   $('clearSel').onclick = function () { sel = []; render(); };
   nudgeOn = get('hf_nudge') !== 'off';
-  document.addEventListener('pointerdown', unlockAudio);
-  document.addEventListener('touchstart', unlockAudio);
   $('joinCode').oninput = function () {
     this.value = this.value.toUpperCase().replace(/[^A-Z]/g, '');
   };
@@ -398,11 +396,15 @@ function render() {
   } else if (view.phase === 'playing') {
     var mine = isMyTurn();
     pill.textContent = mine ? 'Your turn' : view.seats[view.turn].name + '’s turn';
-    pill.className = 'pill' + (mine ? ' you' : '');
+    // Pulses for as long as the turn is yours, so a glance at the top of the
+    // screen answers the question without anything having to flash at you.
+    pill.className = 'pill' + (mine ? ' you waiting-on-you' : '');
   } else {
     pill.textContent = view.phase === 'gameEnd' ? 'Game over' : 'Round over';
     pill.className = 'pill';
   }
+
+  syncTitle();
 
   var share = $('shareBox');
   share.hidden = !(view.phase === 'lobby' && !view.solo);
@@ -695,53 +697,51 @@ function renderHand() {
     : '';
 }
 
-/* Your turn, when you are not looking at the screen. iPhones are the catch:
- * Safari has no Vibration API at all, so navigator.vibrate is Android-only and
- * on iOS this has to be a sound instead. Web Audio will not make a noise until
- * the page has had a real tap, which unlockAudio below takes care of. */
-function nudge() {
+/* Your turn, said loudly and silently. A web page cannot make an iPhone
+ * vibrate — Safari has no Vibration API at all — so on a phone this notice is
+ * the whole alert, and it has to be impossible to miss without eating any of
+ * the one screen the table has to fit on. Three parts: a banner that shows
+ * itself and then gets out of the way, a pill that keeps pulsing for as long as
+ * the turn is yours, and the tab title for when the page is behind something
+ * else. navigator.vibrate is still called for anyone playing on Android. */
+function announceTurn() {
   if (!nudgeOn) return;
-  try {
-    if (navigator.vibrate && navigator.vibrate([90, 70, 90])) return;
-  } catch (e) { /* fall through to the chime */ }
-  chime();
+  try { if (navigator.vibrate) navigator.vibrate([90, 70, 90]); } catch (e) {}
+  showTurnBanner();
 }
 
-function audio() {
-  var AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return null;
-  if (!audioCtx) { try { audioCtx = new AC(); } catch (e) { return null; } }
-  if (audioCtx.state === 'suspended') { try { audioCtx.resume(); } catch (e) {} }
-  return audioCtx;
+var bannerTimer = null;
+
+function showTurnBanner() {
+  var el = $('turnBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'turnBanner';
+    el.className = 'turn-banner';
+    el.onclick = hideTurnBanner;
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '<b>Your turn</b><span class="note">Round ' + (view.round + 1) +
+    ' of ' + view.roundsTotal + ' · tap to dismiss</span>';
+  el.classList.remove('gone');
+  // Restart the animation if two turns come round in quick succession.
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(hideTurnBanner, 4500);
 }
 
-/* Two soft notes rather than a beep — this goes off in somebody's living room
- * every couple of minutes, so it has to be the kind of sound you stop noticing. */
-function chime() {
-  var ctx = audio();
-  if (!ctx) return;
-  try {
-    var t0 = ctx.currentTime + 0.01;
-    [659.25, 987.77].forEach(function (f, i) {
-      var at = t0 + i * 0.15;
-      var osc = ctx.createOscillator(), gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = f;
-      gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.14, at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.24);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(at); osc.stop(at + 0.26);
-    });
-  } catch (e) { /* no sound is better than a thrown error mid-render */ }
+function hideTurnBanner() {
+  var el = $('turnBanner');
+  if (el) { el.classList.remove('show'); el.classList.add('gone'); }
+  clearTimeout(bannerTimer);
 }
 
-/* Browsers keep audio silent until the person has interacted with the page, so
- * the first tap anywhere opens the context and every later chime just works. */
-function unlockAudio() {
-  audio();
-  document.removeEventListener('pointerdown', unlockAudio);
-  document.removeEventListener('touchstart', unlockAudio);
+/* The tab title, for a phone that has wandered off to another app or a laptop
+ * with the game in a background tab. */
+function syncTitle() {
+  var mine = view && view.phase === 'playing' && isMyTurn();
+  document.title = (mine ? '▶ Your turn · ' : '') + 'Hand & Foot';
 }
 
 function btn(label, fn, ghost) {
@@ -1023,17 +1023,18 @@ function renderRules() {
   nin.onchange = function () {
     nudgeOn = nin.checked;
     set('hf_nudge', nudgeOn ? 'on' : 'off');
-    if (nudgeOn) nudge();
+    if (nudgeOn) announceTurn();
   };
   var nlab = document.createElement('label');
   nlab.setAttribute('for', 'ruleNudge');
   var nt = document.createElement('div');
   nt.className = 'rule-title';
-  nt.textContent = 'Nudge me when it is my turn';
+  nt.textContent = 'Show a notice when it is my turn';
   var nd = document.createElement('div');
   nd.className = 'note';
-  nd.textContent = 'A short buzz, or two soft notes on an iPhone — Safari will not let a ' +
-    'web page vibrate, so there it has to be a sound. Just for you, on this device.';
+  nd.textContent = 'A banner across the top for a few seconds, and the turn pill keeps ' +
+    'pulsing until you play. No sound. On an Android phone it buzzes as well — an ' +
+    'iPhone cannot be made to vibrate from a web page. Just for you, on this device.';
   nlab.appendChild(nt); nlab.appendChild(nd);
   nbox.appendChild(nin); nbox.appendChild(nlab);
   body.appendChild(nbox);
@@ -1164,10 +1165,15 @@ function sizeBoard() {
   var board = document.querySelector('.board');
   if (!bar || !board) return;
   board.style.paddingBottom = (bar.offsetHeight + 8) + 'px';
+  // How far down the turn banner has to start to clear the top bar, which is a
+  // different height on a phone than on a laptop.
+  var top = document.querySelector('.bar');
+  if (top) document.documentElement.style.setProperty('--bar-h', top.offsetHeight + 'px');
 }
 if (window.ResizeObserver) {
   var ro = new ResizeObserver(sizeBoard);
   ro.observe(document.querySelector('.actions'));
+  ro.observe(document.querySelector('.bar'));
 } else {
   window.addEventListener('resize', sizeBoard);
 }
