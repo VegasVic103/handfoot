@@ -53,14 +53,18 @@ function startRound(state, rng) {
     state.players[i].foot = stock.splice(0, S.footSize);
   }
 
-  // Red threes dealt into a hand are laid off immediately and replaced. The
-  // replacement can itself be a red three, so keep drawing until it is not.
-  for (let i = 0; i < n; i++) {
-    const p = state.players[i];
-    for (let k = 0; k < p.hand.length; k++) {
-      while (E.isRedThree(p.hand[k]) && stock.length) {
-        p.redThrees.push(p.hand[k]);
-        p.hand[k] = stock.shift();
+  // Under the lay-off rule a dealt red three goes face up at once and is
+  // replaced; the replacement can itself be a red three, so keep drawing. This
+  // table plays them as dead cards instead, so by default nothing happens here
+  // and they stay in the hand to be discarded.
+  if (S.redThreeAutoLayOff) {
+    for (let i = 0; i < n; i++) {
+      const p = state.players[i];
+      for (let k = 0; k < p.hand.length; k++) {
+        while (E.isRedThree(p.hand[k]) && stock.length) {
+          p.redThrees.push(p.hand[k]);
+          p.hand[k] = stock.shift();
+        }
       }
     }
   }
@@ -182,9 +186,11 @@ function drawStock(state, seat, piles) {
     let c = takeFrom(state, idx);
     if (c === null) c = takeAny(state);
     if (c === null) return endRoundOutOfCards(state);
-    // Drawing a red three: lay it off and draw again from the same pile.
+    // Under the lay-off rule a drawn red three goes face up and you draw again
+    // from the same pile. Playing them as dead cards, it is just a card you now
+    // have to get rid of, so it comes into the hand like any other.
     let guardCount = 0;
-    while (E.isRedThree(c) && guardCount++ < 40) {
+    while (S.redThreeAutoLayOff && E.isRedThree(c) && guardCount++ < 40) {
       p.redThrees.push(c);
       c = takeFrom(state, idx);
       if (c === null) c = takeAny(state);
@@ -213,6 +219,9 @@ function takePile(state, seat, handCards) {
 
   const top = state.discard[state.discard.length - 1];
   if (E.isBlackThree(top)) return fail('A black three on top freezes the pile.');
+  // Threes never meld, so there is no pair of naturals that could take a red
+  // three off the top either. Saying so plainly beats a puzzle about matching.
+  if (E.isRedThree(top)) return fail('A red three on top freezes the pile.');
   if (E.isWild(top)) return fail('A wild on top freezes the pile.');
 
   const rank = E.rankOf(top);
@@ -244,7 +253,7 @@ function takePile(state, seat, handCards) {
     const need = minMeldFor(state);
     const total = state.turnState.melded + value;
     if (total < need) {
-      return fail(`Going down needs at least ${need} points — this comes to ${total}. Add more matching cards from your hand to the selection.`, 'initial_meld_short');
+      return fail(`Going down needs ${need} — this comes to ${total}.`, 'initial_meld_short');
     }
   }
 
@@ -260,7 +269,7 @@ function takePile(state, seat, handCards) {
     else p.melds.push({ id: newMeldId(), rank, cards });
 
     for (const c of taken) {
-      if (E.isRedThree(c)) p.redThrees.push(c);
+      if (S.redThreeAutoLayOff && E.isRedThree(c)) p.redThrees.push(c);
       else { p.hand.push(c); notePicked(state, c); }
     }
     state.turnState.melded += value;
@@ -352,7 +361,12 @@ function tx(state, seat, apply) {
 function legalToStop(state, seat) {
   const p = state.players[seat];
   if (!p.inFoot) return done();
-  const live = p.hand.filter((c) => !E.isRedThree(c)).length;
+  /* A red three counts as a card you can discard, because under this table's
+   * rule discarding it is exactly how you get rid of one. It only stops being a
+   * legal discard under the lay-off rule, where it never reaches the hand. */
+  const live = state.settings.redThreeAutoLayOff
+    ? p.hand.filter((c) => !E.isRedThree(c)).length
+    : p.hand.length;
   if (live >= 2) return done();
   if (live === 1) {
     const out = canGoOut(state, seat);
@@ -370,9 +384,12 @@ function afterHandShrink(state, seat) {
     p.foot = [];
     p.inFoot = true;
     state.turnState.pickedUpFoot = true;
-    // Red threes carried in the foot lay off at once.
-    for (let k = p.hand.length - 1; k >= 0; k--) {
-      if (E.isRedThree(p.hand[k])) p.redThrees.push(p.hand.splice(k, 1)[0]);
+    // Under the lay-off rule, red threes carried in the foot go face up at
+    // once. Played as dead cards they simply come up with the rest of it.
+    if (state.settings.redThreeAutoLayOff) {
+      for (let k = p.hand.length - 1; k >= 0; k--) {
+        if (E.isRedThree(p.hand[k])) p.redThrees.push(p.hand.splice(k, 1)[0]);
+      }
     }
     log(state, { t: 'foot', seat });
     return done({ pickedUpFoot: true });
@@ -404,12 +421,18 @@ function discard(state, seat, card) {
   const p = state.players[seat];
   if (!state.turnState.drew) return fail('Draw first.');
   if (!p.hand.includes(card)) return fail('That card is not in your hand.');
-  if (E.isRedThree(card)) return fail('Red threes are laid off, not discarded.');
+  // Discarding a red three is how you get rid of one. Only the other rule, where
+  // it goes face up the moment it arrives, puts it out of reach.
+  if (S.redThreeAutoLayOff && E.isRedThree(card)) {
+    return fail('Red threes are laid off, not discarded.');
+  }
 
   if (!p.hasInitialMeld && state.turnState.melded > 0) {
     const need = minMeldFor(state);
     if (state.turnState.melded < need) {
-      return fail(`Going down needs at least ${need} points, counted across every meld you lay this turn. You have laid ${state.turnState.melded} so far — lay more, or take the cards back.`, 'initial_meld_short');
+      // Short on purpose: this lands in a one-line bar on a phone, and the way
+      // out of it is the "Take melds back" button sitting right beside it.
+      return fail(`Going down needs ${need} — you have laid ${state.turnState.melded}.`, 'initial_meld_short');
     }
   }
   if (state.turnState.melded > 0 && !p.hasInitialMeld) p.hasInitialMeld = true;
@@ -432,8 +455,10 @@ function discard(state, seat, card) {
     p.hand = p.foot;
     p.foot = [];
     p.inFoot = true;
-    for (let k = p.hand.length - 1; k >= 0; k--) {
-      if (E.isRedThree(p.hand[k])) p.redThrees.push(p.hand.splice(k, 1)[0]);
+    if (S.redThreeAutoLayOff) {
+      for (let k = p.hand.length - 1; k >= 0; k--) {
+        if (E.isRedThree(p.hand[k])) p.redThrees.push(p.hand.splice(k, 1)[0]);
+      }
     }
     log(state, { t: 'foot', seat });
   }
@@ -495,8 +520,16 @@ function scoreRound(state) {
       else if (st.isBlackBook || st.isWildBook) { books += S.blackBookBonus; black++; }
       meldPts += m.cards.reduce((s, c) => s + E.cardValue(c), 0);
     }
-    const left = p.hand.concat(p.foot).reduce((s, c) => s + E.cardValue(c), 0);
-    const threes = p.redThrees.length * S.redThreeValue;
+    /* Red threes score in their own column rather than disappearing into the
+     * pile of cards left over, because 100 a piece is the thing you want to see
+     * on the sheet. Held ones — in the hand or in a foot you never reached — are
+     * what counts; ones laid off under the other rule score the same way. */
+    const held = p.hand.concat(p.foot);
+    const heldThrees = held.filter((c) => E.isRedThree(c));
+    const left = held
+      .filter((c) => !E.isRedThree(c))
+      .reduce((s, c) => s + E.cardValue(c), 0);
+    const threes = (p.redThrees.length + heldThrees.length) * S.redThreeValue;
     const out = p.wentOut ? S.goOutBonus : 0;
     return {
       books, meldPts, left, threes, out, redBooks: red, blackBooks: black,
