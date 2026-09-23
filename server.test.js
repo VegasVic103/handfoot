@@ -56,6 +56,22 @@ function send(c, obj) {
 
 function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
+/* fetch a path over plain HTTP and hand back the status, headers and body */
+function get(pathname) {
+  return new Promise(function (resolve, reject) {
+    require('http').get(
+      { host: '127.0.0.1', port: process.env.PORT, path: pathname },
+      function (res) {
+        const chunks = [];
+        res.on('data', function (d) { chunks.push(d); });
+        res.on('end', function () {
+          resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) });
+        });
+      }
+    ).on('error', reject);
+  });
+}
+
 /* poll a plain condition (used for things that arrive on another socket) */
 async function untilTrue(fn, label, ms) {
   const deadline = Date.now() + (ms || 3000);
@@ -429,6 +445,47 @@ function botStep(c) {
   await wait(250);
   ok(a2.view.settings.bookSize === bookBefore, 'a client cannot set a rule that decides legal play');
   ok(a2.errors.length > errsBefore, 'and is told the rule is not adjustable');
+
+  /* ---- the Home Screen app ----
+   * The icons are compiled into icons.js as base64, so the thing to prove is
+   * that they come back out as real images of the size the manifest claims. */
+  const man = await get('/manifest.webmanifest');
+  ok(man.status === 200, 'the web manifest is served');
+  ok(/application\/manifest\+json/.test(man.headers['content-type'] || ''),
+    'and with the content type a browser needs to accept it');
+  let parsed = null;
+  try { parsed = JSON.parse(man.body.toString('utf8')); } catch (e) {}
+  ok(parsed !== null, 'and it is valid JSON');
+  ok(parsed && parsed.display === 'standalone',
+    'the app opens standalone, without the address bar');
+  ok(parsed && parsed.start_url === '/', 'and starts at the table');
+
+  // PNG magic number, then the width and height out of the IHDR chunk.
+  function png(buf) {
+    if (buf.length < 24 || buf.slice(1, 4).toString() !== 'PNG') return null;
+    return buf.readUInt32BE(16) + 'x' + buf.readUInt32BE(20);
+  }
+  for (const [file, size] of [
+    ['/apple-touch-icon.png', '180x180'],
+    ['/icon-192.png', '192x192'],
+    ['/icon-512.png', '512x512'],
+  ]) {
+    const r = await get(file);
+    ok(r.status === 200 && r.headers['content-type'] === 'image/png',
+      file + ' is served as a PNG');
+    ok(png(r.body) === size, 'and it really is ' + size);
+  }
+  for (const ic of (parsed && parsed.icons) || []) {
+    const r = await get(ic.src);
+    ok(r.status === 200, 'the manifest icon ' + ic.src + ' exists');
+    ok(png(r.body) === ic.sizes, 'and matches the size the manifest declares');
+  }
+
+  // Adding an icon route must not have opened a door to the server's own files.
+  for (const secret of ['/icons.js', '/game.js', '/server.js', '/package.json']) {
+    const r = await get(secret);
+    ok(r.status === 404, secret + ' is still not served to browsers');
+  }
 
   console.log('\n' + pass + ' passed, ' + failed + ' failed');
   if (problems.length) problems.forEach(function (p) { console.log('   - ' + p); });
