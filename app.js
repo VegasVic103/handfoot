@@ -228,11 +228,20 @@ function meldStatsOf(m) {
 
 /* ---------------- rendering ---------------- */
 
+/* A joker is worth 50 and a deuce 20, so they must never look alike on the
+ * table. Each gets its own colour, here and on the little blocks that stand in
+ * for an opponent's book. */
+function wildClass(id) {
+  if (E.isJoker(id)) return ' wild joker';
+  if (E.rankOf(id) === '2') return ' wild deuce';
+  return '';
+}
+
 function cardEl(id, opts) {
   opts = opts || {};
   var b = document.createElement(opts.click ? 'button' : 'div');
   b.className = 'card' + (E.isRed(id) ? ' red' : '') + (opts.tiny ? ' tiny' : '') +
-    (opts.selected ? ' sel' : '');
+    (opts.selected ? ' sel' : '') + wildClass(id);
   var r = document.createElement('span'); r.className = 'r';
   var s = document.createElement('span'); s.className = 's';
   if (E.isJoker(id)) {
@@ -345,7 +354,8 @@ function renderSeats() {
         var mini = document.createElement('div'); mini.className = 'meld-mini';
         m.cards.forEach(function (c) {
           var sp = document.createElement('span');
-          sp.className = 'mini' + (E.isWild(c) ? ' w' : '');
+          sp.className = 'mini' + wildClass(c);
+          sp.title = E.label(c) + ' · ' + E.cardValue(c) + ' points';
           mini.appendChild(sp);
         });
         box.appendChild(head); box.appendChild(mini);
