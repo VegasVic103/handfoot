@@ -190,6 +190,37 @@ input[type=text]::placeholder{color:#5f776c}
 .hand .card:hover{transform:translateY(-4px)}
 .hand .card.sel:hover{transform:translateY(-10px)}
 
+/* Layered: the hand as you would actually hold it — overlapped, six to a row,
+   with each card's index pulled into the corner so the sliver still reads. */
+.hand.layered{flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:9px}
+.hand-row{display:flex;flex-wrap:nowrap}
+.hand-row .card + .card{margin-left:-28px}
+.hand.layered .card{
+  justify-content:flex-start;align-items:flex-start;
+  padding:4px 0 0 4px;gap:0;
+}
+.hand.layered .card .r{font-size:14px}
+.hand.layered .card .s{font-size:12px}
+/* The card on the end of a row is the one you can see whole, so let it sit
+   like a normal card rather than an index in a wide blank field. */
+.hand-row .card:last-child{
+  justify-content:center;align-items:center;padding:0;gap:1px;
+}
+.hand.layered .hand-row .card:last-child .r{font-size:17px}
+.hand.layered .hand-row .card:last-child .s{font-size:15px}
+.hand.layered .card:hover,
+.hand.layered .card.sel{z-index:3}
+
+/* Cards that arrived this turn: set apart, and dotted in brass down in the
+   bottom-left, the one corner that stays visible however they are stacked. */
+.card.fresh::after{
+  content:'';position:absolute;left:4px;bottom:4px;
+  width:6px;height:6px;border-radius:50%;
+  background:var(--brass);box-shadow:0 0 0 1px rgba(0,0,0,.4);
+}
+.card.fresh-first{margin-left:18px}
+.hand-row.fresh-row{margin-top:2px}
+
 /* ---------- action bar ---------- */
 .actions{
   position:fixed;left:0;right:0;bottom:0;z-index:30;
