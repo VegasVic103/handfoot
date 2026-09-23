@@ -174,6 +174,19 @@ t('undo returns melded cards to hand', () => {
   eq(s.players[0].melds.length, 0);
   eq(s.players[0].hand.sort(), handAfterDraw.sort());
 });
+t('undo takes the meld back out of the history too', () => {
+  const s = rigged([['4S0', '4H0', '4D0', '9C0']]);
+  G.drawStock(s, 0, [0, 1]);
+  const mine = () => s.log.filter((e) => e.t === 'meld' && e.seat === 0).length;
+  const draws = () => s.log.filter((e) => e.t === 'draw' && e.seat === 0).length;
+  G.meldNew(s, 0, '4', ['4S0', '4H0', '4D0']);
+  eq(mine(), 1, 'laying it says so once');
+  G.undoTurnMelds(s, 0);
+  eq(mine(), 0, 'taking it back removes the line');
+  eq(draws(), 1, 'the draw is not undone, so its line stays');
+  G.meldNew(s, 0, '4', ['4S0', '4H0', '4D0']);
+  eq(mine(), 1, 'laying it again reads as once, not twice');
+});
 
 console.log('\n-- four draw piles --');
 t('the stock is split into four piles', () => {
