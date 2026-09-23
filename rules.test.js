@@ -69,12 +69,17 @@ t('first discard is never a wild or red three', () => {
     ok(!E.isWild(top) && !E.isRedThree(top), 'seed ' + seed + ' turned ' + top);
   }
 });
-t('red threes dealt to hand are laid off and replaced', () => {
+t('red threes dealt to hand stay there, to be discarded', () => {
+  let seen = 0;
   for (let seed = 0; seed < 40; seed++) {
     const s = G.createGame(['A', 'B', 'C']);
     G.startRound(s, mulberry(seed));
-    for (const p of s.players) ok(!p.hand.some(E.isRedThree), 'red three left in hand');
+    for (const p of s.players) {
+      eq(p.redThrees.length, 0, 'nothing laid off at the deal');
+      seen += p.hand.filter(E.isRedThree).length;
+    }
   }
+  ok(seen > 0, 'over 40 deals at least one red three reached a hand');
 });
 
 console.log('\n-- meld validation --');
@@ -82,16 +87,19 @@ const S = E.DEFAULTS;
 t('three of a rank is a legal meld', () => ok(E.checkMeld('K', ['KS0', 'KH0', 'KD0'], S).ok));
 t('two cards is not', () => no(E.checkMeld('K', ['KS0', 'KH0'], S)));
 t('off-rank card rejected', () => no(E.checkMeld('K', ['KS0', 'KH0', 'QD0'], S)));
-t('wilds allowed while naturals outnumber them', () => {
+t('up to two wilds ride in a meld', () => {
   ok(E.checkMeld('K', ['KS0', 'KH0', '2D0'], S).ok, '2 naturals 1 wild');
   ok(E.checkMeld('K', ['KS0', 'KH0', 'KD0', '2D0'], S).ok, '3 naturals 1 wild');
+  ok(E.checkMeld('K', ['KS0', 'KH0', 'XR0', '2D0'], S).ok, '2 naturals 2 wilds');
   ok(E.checkMeld('K', ['KS0', 'KH0', 'KD0', 'KC0', '2D0', 'XR0'], S).ok, '4 naturals 2 wilds');
 });
 t('a meld needs two naturals even with wilds to spare', () => {
   no(E.checkMeld('K', ['KS0', '2D0', 'XR0'], S));
 });
-t('wilds may not equal or outnumber naturals', () => {
-  no(E.checkMeld('K', ['KS0', 'KH0', 'XR0', '2D0'], S), 'two wilds two naturals');
+t('a third wild is refused, however many naturals', () => {
+  no(E.checkMeld('K', ['KS0', 'KH0', 'XR0', 'XB0', '2D0'], S), 'three wilds');
+  no(E.checkMeld('K', ['KS0', 'KH0', 'KD0', 'KC0', 'XR0', 'XB0', '2D0'], S),
+    'four naturals cannot buy a third wild');
 });
 t('book caps at seven', () => {
   no(E.checkMeld('K', ['KS0', 'KH0', 'KD0', 'KC0', 'KS1', 'KH1', 'KD1', 'KC1'], S));
@@ -147,7 +155,9 @@ t('initial meld below the round minimum is blocked at discard', () => {
   const r = G.discard(s, 0, '9C0');
   no(r, 'discard below minimum');
   eq(r.code, 'initial_meld_short', 'refusal carries a stable code');
-  ok(/50/.test(r.reason) && /at least/.test(r.reason), 'and says at least 50: ' + r.reason);
+  // The wording is kept short so it fits a phone's action bar; what the test
+  // pins down is that both numbers are in it — the target and the shortfall.
+  ok(/50/.test(r.reason) && /15/.test(r.reason), 'names the 50 needed and the 15 laid: ' + r.reason);
 });
 t('initial meld at or above the minimum goes through', () => {
   // three aces = 60 >= 50
@@ -204,11 +214,9 @@ t('drawing two takes one card from each named pile', () => {
   ok(G.drawStock(s, 0, [0, 2]).ok);
   eq(s.stocks[0].length, n0 - 1, 'pile 1 down one');
   eq(s.stocks[2].length, n2 - 1, 'pile 3 down one');
-  // the drawn cards are in hand unless they were red threes
+  // every drawn card lands in the hand, red threes included
   const hand = s.players[0].hand;
-  [a, b].forEach((c) => {
-    ok(hand.indexOf(c) !== -1 || s.players[0].redThrees.indexOf(c) !== -1, c + ' went somewhere');
-  });
+  [a, b].forEach((c) => { ok(hand.indexOf(c) !== -1, c + ' reached the hand'); });
 });
 t('both cards from one pile is rejected', () => {
   const s = rigged([['KS0']]);
@@ -377,13 +385,28 @@ t('taking the pile cannot dodge the initial meld minimum', () => {
   const s = rigged([['4H0', '4D0', '4C0', '9C1']], { discard: ['7S0', '4S0'] });
   no(G.takePile(s, 0, ['4H0', '4D0', '4C0']));
 });
-t('red threes inside the taken pile lay off instead of entering the hand', () => {
+t('a red three inside the taken pile comes into the hand like any other card', () => {
   const pile = ['3H0', '5S0', '6H0', '7D0', '8C0', '9S0', 'AS0'];
   const s = rigged([['AH0', 'AD0', 'AC0', '9C1']], { discard: pile });
-  const before = s.players[0].redThrees.length;
   ok(G.takePile(s, 0, ['AH0', 'AD0', 'AC0']).ok);
-  eq(s.players[0].redThrees.length, before + 1);
-  ok(!s.players[0].hand.some(E.isRedThree));
+  eq(s.players[0].redThrees.length, 0, 'nothing is laid off');
+  ok(s.players[0].hand.indexOf('3H0') !== -1, 'the red three is in hand, to be discarded');
+});
+t('a red three can be discarded, and freezes the pile behind it', () => {
+  const s = rigged([['3H0', '9C0']]);
+  ok(G.drawStock(s, 0, [0, 1]).ok);
+  ok(G.discard(s, 0, '3H0').ok, 'a red three is a legal discard');
+  ok(!s.players[0].hand.some(E.isRedThree), 'and it leaves the hand');
+  // the next player cannot take a pile topped by one: threes never meld
+  const r = G.takePile(s, 1, []);
+  no(r, 'pile topped by a red three');
+  ok(/red three/i.test(r.reason), 'and says why: ' + r.reason);
+});
+t('a red three is never dealt away or replaced', () => {
+  const s = G.createGame(['A', 'B']);
+  G.startRound(s, mulberry(9));
+  const laidOff = s.players.reduce((n, p) => n + p.redThrees.length, 0);
+  eq(laidOff, 0, 'nobody has anything laid off at the deal');
 });
 
 console.log('\n-- foot and going out --');
@@ -481,14 +504,32 @@ t('books, melds, leftovers and red threes all count', () => {
     { id: 'm1', rank: 'K', cards: ['KS0', 'KH0', 'KD0', 'KC0', 'KS1', 'KH1', 'KD1'] }, // red book 500 + 70
     { id: 'm2', rank: 'Q', cards: ['QS0', 'QH0', 'QD0', 'QC0', 'QS1', '2H0', 'XR0'] }, // black 300 + 50+20+50 = 120
   ];
-  p.hand = ['9C0']; p.foot = []; p.redThrees = ['3H0']; p.wentOut = true;
+  // held in hand, not laid off — this table plays red threes as dead cards
+  p.hand = ['9C0', '3H0']; p.foot = []; p.redThrees = []; p.wentOut = true;
   const rows = G.scoreRound(s);
   const r = rows[0];
   eq(r.books, 800); eq(r.meldPts, 190);
-  eq(r.left, 5, 'a nine left in hand costs five');
-  eq(r.threes, -100, 'a red three is a hundred against you');
+  eq(r.left, 5, 'a nine left in hand costs five, and the red three is not double-counted');
+  eq(r.threes, -100, 'a red three you are still holding is a hundred against you');
   eq(r.out, 100);
   eq(r.total, 800 + 190 - 100 + 100 - 5);
+});
+t('a red three in a foot you never reached costs you the hundred', () => {
+  const s = G.createGame(['A', 'B']);
+  G.startRound(s, mulberry(2));
+  const p = s.players[1];
+  p.melds = []; p.hand = []; p.foot = ['3H0', '9C0']; p.redThrees = [];
+  const r = G.scoreRound(s)[1];
+  eq(r.threes, -100, 'still holding it, so it still counts');
+  eq(r.left, 5, 'and it is not counted a second time among the leftovers');
+  eq(r.total, -105);
+});
+t('going out on a red three leaves nothing to be caught with', () => {
+  const s = G.createGame(['A', 'B']);
+  G.startRound(s, mulberry(2));
+  const p = s.players[0];
+  p.melds = []; p.hand = []; p.foot = []; p.redThrees = []; p.wentOut = true;
+  eq(G.scoreRound(s)[0].threes, 0, 'discarded, so nothing counts against you');
 });
 t('cards left in an unplayed foot still count against you', () => {
   const s = G.createGame(['A', 'B']);
@@ -544,8 +585,11 @@ function bot(s, seat) {
   }
   // discard the cheapest card, undoing a short initial meld if need be
   for (let attempt = 0; attempt < 3; attempt++) {
-    const cands = p.hand.filter((c) => !E.isRedThree(c))
-      .sort((a, b) => E.cardValue(a) - E.cardValue(b));
+    // Red threes are discardable now, and they are the first thing to shed --
+    // a hundred against you for as long as you hold one.
+    const cands = p.hand.slice().sort((a, b) =>
+      (E.isRedThree(b) ? 1 : 0) - (E.isRedThree(a) ? 1 : 0) ||
+      E.cardValue(a) - E.cardValue(b));
     if (!cands.length) return;
     let discarded = false;
     for (const c of cands) {
