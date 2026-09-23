@@ -390,10 +390,46 @@ t('a short pile is taken entirely', () => {
   ok(G.takePile(s, 0, ['AH0', 'AD0', 'AC0']).ok);
   eq(s.discard.length, 0);
 });
-t('taking the pile cannot dodge the initial meld minimum', () => {
-  // three 4s + a 4 from the pile = 20, short of 50
+t('taking the pile short of the minimum is allowed, but counts towards it', () => {
+  // three 4s + a 4 from the pile = 20, short of 50 — the take itself is fine
   const s = rigged([['4H0', '4D0', '4C0', '9C1']], { discard: ['7S0', '4S0'] });
-  no(G.takePile(s, 0, ['4H0', '4D0', '4C0']));
+  ok(G.takePile(s, 0, ['4H0', '4D0', '4C0']).ok, 'the take goes through');
+  eq(s.turnState.melded, 20, 'and is 20 towards the 50');
+  ok(!s.players[0].hasInitialMeld, 'but it did not put you down on its own');
+});
+t('you cannot end the turn still short after taking the pile', () => {
+  const s = rigged([['4H0', '4D0', '4C0', '9C1']], { discard: ['7S0', '4S0'] });
+  ok(G.takePile(s, 0, ['4H0', '4D0', '4C0']).ok);
+  const r = G.discard(s, 0, '9C1');
+  no(r, 'twenty is not fifty');
+  eq(r.code, 'initial_meld_short');
+});
+t('melds laid after the take carry you over the minimum', () => {
+  const s = rigged([['4H0', '4D0', '4C0', 'AH1', 'AD1', 'AC1', '9C1']], { discard: ['7S0', '4S0'] });
+  ok(G.takePile(s, 0, ['4H0', '4D0', '4C0']).ok, 'take the pile for 20');
+  ok(G.meldNew(s, 0, 'A', ['AH1', 'AD1', 'AC1']).ok, 'three aces for 60 more');
+  eq(s.turnState.melded, 80);
+  ok(G.discard(s, 0, '9C1').ok, 'eighty clears the fifty');
+  ok(s.players[0].hasInitialMeld, 'and that is going down');
+});
+t('putting the pile back leaves it exactly as it was', () => {
+  const pile = ['5S0', '6H0', '7D0', '8C0', '9S0', 'TH0', 'JD0', 'QC0', '4S0'];
+  const s = rigged([['4H0', '4D0', '4C0', '9C1']], { discard: pile.slice() });
+  const hand = s.players[0].hand.slice();
+  ok(G.takePile(s, 0, ['4H0', '4D0', '4C0']).ok);
+  ok(G.undoTurnMelds(s, 0).ok, 'and hand it back');
+  eq(s.discard.join(','), pile.join(','), 'every card of the pile is where it was');
+  eq(s.players[0].hand.join(','), hand.join(','), 'and the hand is untouched');
+  eq(s.players[0].melds.length, 0, 'with no meld left behind');
+  eq(s.turnPhase, 'draw', 'so the turn starts over at the draw');
+  ok(G.drawStock(s, 0, [0, 1]).ok, 'and drawing normally is available again');
+});
+t('undo takes going down back with it', () => {
+  const s = rigged([['AS0', 'AH0', 'AD0', '9C0']]);
+  G.drawStock(s, 0, [0, 1]);
+  ok(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']).ok);
+  ok(G.undoTurnMelds(s, 0).ok);
+  ok(!s.players[0].hasInitialMeld, 'a turn you took back did not open your account');
 });
 t('a red three inside the taken pile comes into the hand like any other card', () => {
   const pile = ['3H0', '5S0', '6H0', '7D0', '8C0', '9S0', 'AS0'];
@@ -458,7 +494,7 @@ t('a second book of a rank waits until the first one is closed', () => {
 
   ok(G.meldNew(s, 0, 'K', ['KS2', 'KH2', 'KD2']).ok, 'now a second kings book is fine');
   eq(p.melds.length, 2, 'two kings books');
-  eq(G.scoreRound(s)[0].books, s.settings.redBookBonus, 'and only the closed one pays a bonus');
+  eq(G.scoreRound(s)[0].redPts, s.settings.redBookBonus, 'and only the closed one pays a bonus');
 });
 t('a closed book keeps taking cards, but a red one stays red', () => {
   const s = rigged([['KC1', 'XR0', '9C0']]);
@@ -574,7 +610,8 @@ t('going out with both books ends the round and pays the bonus', () => {
   ok(p.wentOut, 'went out');
   eq(s.phase, 'roundEnd');
   eq(G.scoreRound(s)[0].out, s.settings.goOutBonus, 'and collects the bonus');
-  eq(G.scoreRound(s)[0].left, 0, 'with nothing left to count against');
+  eq(s.settings.goOutBonus, 500, 'which is 500 at this table');
+  eq(G.scoreRound(s)[0].handCount, 0, 'with nothing left to count against');
 });
 t('a player not in their foot cannot go out', () => {
   const s = rigged([['9C0']]);
@@ -592,7 +629,7 @@ t('a player not in their foot cannot go out', () => {
 });
 
 console.log('\n-- scoring --');
-t('books, melds, leftovers and red threes all count', () => {
+t('the sheet is black books, red books, table count and out', () => {
   const s = G.createGame(['A', 'B']);
   G.startRound(s, mulberry(2));
   const p = s.players[0];
@@ -604,11 +641,13 @@ t('books, melds, leftovers and red threes all count', () => {
   p.hand = ['9C0', '3H0']; p.foot = []; p.redThrees = []; p.wentOut = true;
   const rows = G.scoreRound(s);
   const r = rows[0];
-  eq(r.books, 800); eq(r.meldPts, 190);
-  eq(r.left, 5, 'a nine left in hand costs five, and the red three is not double-counted');
-  eq(r.threes, -100, 'a red three you are still holding is a hundred against you');
-  eq(r.out, 100);
-  eq(r.total, 800 + 190 - 100 + 100 - 5);
+  eq(r.redBooks, 1); eq(r.redPts, 500);
+  eq(r.blackBooks, 1); eq(r.blackPts, 300);
+  eq(r.meldPts, 190);
+  eq(r.handCount, 105, 'a nine is five and the red three is a hundred against you');
+  eq(r.tableCount, 190 - 105, 'table count is what is melded less what you hold');
+  eq(r.out, 500);
+  eq(r.total, 500 + 300 + (190 - 105) + 500);
 });
 t('a red three in a foot you never reached costs you the hundred', () => {
   const s = G.createGame(['A', 'B']);
@@ -616,8 +655,8 @@ t('a red three in a foot you never reached costs you the hundred', () => {
   const p = s.players[1];
   p.melds = []; p.hand = []; p.foot = ['3H0', '9C0']; p.redThrees = [];
   const r = G.scoreRound(s)[1];
-  eq(r.threes, -100, 'still holding it, so it still counts');
-  eq(r.left, 5, 'and it is not counted a second time among the leftovers');
+  eq(r.handCount, 105, 'still holding it, so it still counts — once');
+  eq(r.tableCount, -105);
   eq(r.total, -105);
 });
 t('going out on a red three leaves nothing to be caught with', () => {
@@ -625,7 +664,7 @@ t('going out on a red three leaves nothing to be caught with', () => {
   G.startRound(s, mulberry(2));
   const p = s.players[0];
   p.melds = []; p.hand = []; p.foot = []; p.redThrees = []; p.wentOut = true;
-  eq(G.scoreRound(s)[0].threes, 0, 'discarded, so nothing counts against you');
+  eq(G.scoreRound(s)[0].handCount, 0, 'discarded, so nothing counts against you');
 });
 t('cards left in an unplayed foot still count against you', () => {
   const s = G.createGame(['A', 'B']);
@@ -634,15 +673,24 @@ t('cards left in an unplayed foot still count against you', () => {
   p.melds = []; p.hand = ['AS0']; p.foot = ['XR0']; p.redThrees = [];
   eq(G.scoreRound(s)[1].total, -70);
 });
+t('going out is worth 500', () => {
+  const s = G.createGame(['A', 'B']);
+  G.startRound(s, mulberry(2));
+  const p = s.players[0];
+  p.melds = []; p.hand = []; p.foot = []; p.redThrees = []; p.wentOut = true;
+  eq(G.scoreRound(s)[0].total, 500);
+});
 
 console.log('\n-- full games --');
-function bot(s, seat) {
+/* `noPile` is how the turn is replayed after handing the pile back: taking it
+ * again would only land in the same place, so the retry draws from stock. */
+function bot(s, seat, noPile) {
   const p = s.players[seat];
   // draw
   if (s.turnPhase === 'draw') {
     let took = false;
     const top = s.discard[s.discard.length - 1];
-    if (top && !E.isWild(top) && !E.isBlackThree(top) && !E.isRedThree(top)) {
+    if (!noPile && top && !E.isWild(top) && !E.isBlackThree(top) && !E.isRedThree(top)) {
       const r = E.rankOf(top);
       const nat = p.hand.filter((c) => !E.isWild(c) && E.rankOf(c) === r);
       if (nat.length >= 2) {
@@ -691,7 +739,14 @@ function bot(s, seat) {
     for (const c of cands) {
       const r = G.discard(s, seat, c);
       if (r.ok) { discarded = true; break; }
-      if (r.code === 'initial_meld_short') { G.undoTurnMelds(s, seat); break; }
+      if (r.code === 'initial_meld_short') {
+        const tookPile = s.turnState && s.turnState.tookPile;
+        G.undoTurnMelds(s, seat);
+        // Handing the pile back rewinds to the draw, so the turn is played again
+        // from there rather than continuing half-finished.
+        if (tookPile && !noPile) return bot(s, seat, true);
+        break;
+      }
     }
     if (discarded) return;
   }
