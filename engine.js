@@ -30,7 +30,7 @@ const DEFAULTS = {
   minMelds: [50, 90, 120, 150],
   redBookBonus: 500,
   blackBookBonus: 300,
-  goOutBonus: 100,
+  goOutBonus: 500,
   redThreeValue: -100,
   redThreeMode: 'penalty', // 'penalty' | 'bonus' | 'meldable'
   /* How a red three behaves in play. This table plays them as dead cards: they
