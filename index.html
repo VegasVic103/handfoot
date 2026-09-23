@@ -92,7 +92,9 @@
       Or take the discard pile with two naturals matching the top card, and you get that card
       plus the six behind it. To go down the first time you need <b>at least</b> 50 / 90 / 120 / 150 across the four rounds &mdash; totalled over every meld you lay in that one turn, not a single meld and not an exact figure. Books of seven:
       <b>red book</b> all naturals, 500; <b>black book</b> with wilds, 300. Threes never meld
-      &mdash; a black three on top freezes the pile, a red three lays off at &minus;100. Go out
+      &mdash; a black three on top freezes the pile, and a <b>red three</b> is dead weight you
+      discard like any other card: it costs you <b>100</b> only if you are still holding one when
+      the round ends. Go out
       from your foot with a red book and a black book, discarding your last card. +100 for going out.
     </div>
   </div>
@@ -101,17 +103,17 @@
 <section class="screen" id="table" hidden>
   <div class="bar">
     <div class="wrap bar-in">
-      <div>
+      <div class="bar-cell bar-table">
         <div class="tag">Table</div>
         <div class="code" id="tableCode">&mdash;</div>
       </div>
-      <div>
+      <div class="bar-cell">
         <div class="tag">Round</div>
-        <div style="font-weight:700" id="roundLabel">1 of 4</div>
+        <div class="bar-val" id="roundLabel">1 of 4</div>
       </div>
-      <div>
-        <div class="tag">Initial meld</div>
-        <div style="font-weight:700" id="minLabel">50</div>
+      <div class="bar-cell">
+        <div class="tag"><span class="only-wide">Initial meld</span><span class="only-narrow">Meld</span></div>
+        <div class="bar-val" id="minLabel">50</div>
       </div>
       <div class="spacer"></div>
       <span class="pill" id="turnPill">&mdash;</span>
@@ -135,16 +137,17 @@
     <div class="mine">
       <div class="sect-head">
         <h3>Your books</h3>
+        <div class="chips" id="myChips"></div>
         <span class="note" id="meldHint"></span>
       </div>
       <div class="melds" id="myMelds"></div>
 
       <div class="sect-head">
-        <h3>Your hand</h3>
+        <h3 class="only-wide">Your hand</h3>
         <span class="pill" id="handPill">0 cards</span>
         <button class="btn ghost sm" id="sortBtn">Sort by rank</button>
         <button class="btn ghost sm" id="layoutBtn">Side by side</button>
-        <button class="btn ghost sm" id="clearSel" hidden>Clear selection</button>
+        <button class="btn ghost sm" id="clearSel" hidden>Clear</button>
       </div>
       <div class="hand" id="myHand"></div>
       <div class="log" id="logBox"></div>
