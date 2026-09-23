@@ -18,6 +18,11 @@ const DEFAULTS = {
   distinctDrawPiles: 2,   // a two-card draw must come from this many different piles
   pileTakeExtra: 6,       // top card + this many behind it
   pileNaturalsRequired: 2, // naturals in hand matching the top card
+  /* Whether you may look at the cards a pile-take would bring in before you
+   * commit to it. At a physical table the pile is squared face-down and the
+   * take is a gamble; this table plays it open. It changes no rule — only what
+   * you are allowed to know — so it is the same for every seat, always. */
+  revealPileTake: true,
   bookSize: 7,
   maxWildsInBook: 2,       // at most this many wilds in a book, start to finish
   minNaturalsInMeld: 2,    // and never fewer than this many real cards
