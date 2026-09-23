@@ -7,6 +7,8 @@ var myCode = null, retry = 0, retryTimer = null, closedByUs = false;
 var sel = [];          // selected card ids, in click order
 var pileSel = [];      // chosen draw piles, in click order
 var sortMode = 'rank';
+var handLayout = 'spread';   // 'spread' = side by side, 'layered' = overlapped rows
+var PER_ROW = 6;             // cards per row when layered
 var notice = '', noticeBad = false;
 var lastTurn = null;
 
@@ -139,6 +141,14 @@ function wire() {
     $('sortBtn').textContent = sortMode === 'rank' ? 'Sort by rank' : 'Group by count';
     render();
   };
+  handLayout = get('hf_layout') === 'layered' ? 'layered' : 'spread';
+  syncLayoutBtn();
+  $('layoutBtn').onclick = function () {
+    handLayout = handLayout === 'spread' ? 'layered' : 'spread';
+    set('hf_layout', handLayout);
+    syncLayoutBtn();
+    render();
+  };
   $('clearSel').onclick = function () { sel = []; render(); };
   $('joinCode').oninput = function () {
     this.value = this.value.toUpperCase().replace(/[^A-Z]/g, '');
@@ -161,8 +171,25 @@ function wire() {
 
 /* ---------------- selection helpers ---------------- */
 
+function syncLayoutBtn() {
+  var b = $('layoutBtn');
+  if (!b) return;
+  b.textContent = handLayout === 'spread' ? 'Side by side' : 'Layered rows';
+  b.title = handLayout === 'spread'
+    ? 'Every card fully visible, wrapping as it needs to. Click to overlap them instead.'
+    : 'Cards overlapped ' + PER_ROW + ' to a row, like a hand you are holding. Click to spread them out.';
+}
+
 function meSeat() { return view && view.you ? view.you.seat : -1; }
 function myHand() { return view && view.you ? view.you.hand : []; }
+
+/* Cards that came into the hand this turn, in the order they arrived. The
+ * server only sends these to the seat holding them. */
+function justPicked() {
+  if (!view || !view.you || !view.you.picked) return [];
+  var hand = myHand();
+  return view.you.picked.filter(function (c) { return hand.indexOf(c) !== -1; });
+}
 function myMelds() {
   var s = meSeat();
   return s >= 0 && view.seats[s] ? view.seats[s].melds : [];
@@ -408,22 +435,63 @@ function renderMine() {
     ? 'Click a book to add the ' + sel.length + ' selected card' + (sel.length > 1 ? 's' : '') + '.'
     : '';
 
-  var hand = $('myHand'); hand.innerHTML = '';
-  sortHand(myHand()).forEach(function (c) {
-    hand.appendChild(cardEl(c, {
+  renderHand();
+  $('clearSel').hidden = sel.length === 0;
+}
+
+/* The hand, in whichever arrangement this player prefers.
+ *
+ * Cards picked up this turn are held back and shown last — their own row when
+ * layered, set apart by a gap when spread — so you can always tell at a glance
+ * what just arrived, whatever the sort is doing to everything else. */
+function renderHand() {
+  var wrap = $('myHand');
+  wrap.innerHTML = '';
+  wrap.className = 'hand' + (handLayout === 'layered' ? ' layered' : '');
+
+  var fresh = justPicked();
+  var settled = myHand().filter(function (c) { return fresh.indexOf(c) === -1; });
+
+  var make = function (c, isFresh, firstFresh) {
+    var el = cardEl(c, {
       click: function () {
         var i = sel.indexOf(c);
         if (i === -1) sel.push(c); else sel.splice(i, 1);
         render();
       },
       selected: sel.indexOf(c) !== -1,
-      title: E.label(c) + ' · ' + E.cardValue(c) + ' points',
-    }));
-  });
+      title: E.label(c) + ' · ' + E.cardValue(c) + ' points' + (isFresh ? ' · just picked up' : ''),
+    });
+    if (isFresh) el.classList.add('fresh');
+    if (firstFresh) el.classList.add('fresh-first');
+    return el;
+  };
+
+  if (handLayout === 'layered') {
+    var row = null;
+    sortHand(settled).forEach(function (c, i) {
+      if (i % PER_ROW === 0) {
+        row = document.createElement('div');
+        row.className = 'hand-row';
+        wrap.appendChild(row);
+      }
+      row.appendChild(make(c, false, false));
+    });
+    if (fresh.length) {
+      var freshRow = document.createElement('div');
+      freshRow.className = 'hand-row fresh-row';
+      fresh.forEach(function (c) { freshRow.appendChild(make(c, true, false)); });
+      wrap.appendChild(freshRow);
+    }
+  } else {
+    sortHand(settled).forEach(function (c) { wrap.appendChild(make(c, false, false)); });
+    fresh.forEach(function (c, i) { wrap.appendChild(make(c, true, i === 0)); });
+  }
+
   var n = myHand().length;
   $('handPill').textContent = n + ' card' + (n === 1 ? '' : 's') +
+    (fresh.length ? ' · ' + fresh.length + ' just picked up' : '') +
     (view.you && view.you.inFoot ? ' · in foot' : '');
-  $('clearSel').hidden = sel.length === 0;
 }
 
 function btn(label, fn, ghost) {
