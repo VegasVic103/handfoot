@@ -15,13 +15,15 @@ No accounts, no downloads, no app.
 | Draw piles | the stock is split into **4 piles** |
 | Drawing two | one card from each of **two different piles** |
 | Taking the discard pile | 2 naturals in hand matching the top card; you take that card **plus the 6 behind it** |
+| Seeing the pile | **On by default** — tap the top card to see all 7 a take would bring in. Turn it off in **Rules** and only the top card shows, the way a squared-up pile plays at a real table. It is a table rule: everyone sees the same thing |
 | Going down | **At least** 50 / 90 / 120 / 150 across four rounds, totalled over every meld you lay in that turn |
-| Book | 7 cards. **Red book** = all naturals (500). **Black book** = contains wilds (300) |
+| Book | 7 cards **closes** a book — it is not a ceiling. **Red book** = all naturals (500). **Black book** = contains wilds (300) |
+| After a book closes | keep adding cards of that rank to the same pile, **or** start a second book of that rank and earn another bonus. A wild may not be added to a closed red book — that would turn 500 into 300 |
 | Wilds in a book | **at most 2**, start to finish. Every meld needs **2 naturals**. No ratio rule beyond that |
 | Telling wilds apart | a joker is banded in brass (50), a deuce in blue (20) — in your hand and in everyone's books |
 | Threes | never meld. A black three on top freezes the pile |
 | Red threes | **dead cards**. They sit in your hand like any other card, cannot be melded, and you get rid of one by **discarding** it. No replacement card. You lose **100** only if you are still holding one — in your hand or in a foot you never reached — when the round ends. A red three on top freezes the pile, since nothing can match it |
-| Going out | in your foot, 1 red book + 1 black book, discard your last card. +100 |
+| Going out | in your foot, 1 red book + 1 black book, then **every remaining card played into a meld**. No final discard. +100 |
 
 Everything above lives in one place: `engine.js`, in the `DEFAULTS` object.
 Change a number there and the whole game follows — the server, the interface, and the tests.
@@ -60,8 +62,8 @@ Run the tests any time with:
 npm test
 ```
 
-That runs 65 rules tests (including 1,200 randomly played complete games), 11 bot tests
-(including 300 complete games played by the computer), and 32 server tests that play a
+That runs 71 rules tests (including 1,200 randomly played complete games), 11 bot tests
+(including 300 complete games played by the computer), and 44 server tests that play a
 full game over real websockets.
 
 ---
@@ -149,6 +151,17 @@ rules match your group's before anyone else is involved.
   your hand and the buttons — sits on one screen with nothing to scroll past. The seat
   strip and your books scroll inside themselves once a round gets long, so the hand never
   gets pushed off the bottom.
+- **Nothing goes dead.** A card whose rank is already booked always has somewhere to go —
+  onto the closed pile, or into a second book of that rank. Without that, hands clog up and
+  rounds drag until the draw piles empty, which is not how the game is meant to end.
+- **Books sort themselves.** Everyone's books are shown in rank order however they were
+  laid, and inside a book the wilds sit at the end where they are easy to count.
+- **You see what everyone else played.** A card added to anyone's book glows for a few
+  seconds, so a bot's turn — which is over in well under a second — does not go past unnoticed.
+- **The rules are on screen.** The **Rules** button at the table lists every house rule in
+  force, so a disagreement mid-game has somewhere to be settled. The ones that are genuinely
+  a table's choice are switches there; the ones that decide what counts as a legal play stay
+  in `engine.js`, where no browser can reach them.
 - **No database, no accounts, nothing to maintain.**
 
 ## Layout
@@ -163,9 +176,9 @@ bot.js            the computer opponent, playing off the same view you see
 index.html        the page
 app.js            the interface
 style.css         the look
-rules.test.js     65 rules tests
+rules.test.js     71 rules tests
 bot.test.js       11 bot tests, 300 complete games
-server.test.js    32 end-to-end tests over real websockets
+server.test.js    44 end-to-end tests over real websockets
 package.json      what to install and how to start
 Dockerfile        only needed for Fly.io
 ```
