@@ -123,6 +123,10 @@ function viewFor(room, seat) {
     footCount: g.players[seat].foot.length,
     hasInitialMeld: g.players[seat].hasInitialMeld,
     canGoOut: g.phase === 'playing' ? G.canGoOut(g, seat) : { ok: false, reason: '' },
+    // Which cards arrived this turn. It rides inside `you`, never in the
+    // shared turnState, so it reaches only the seat holding those cards.
+    picked: (g.turnState && g.turn === seat && g.turnState.picked)
+      ? g.turnState.picked.slice() : [],
   } : null;
 
   return {
