@@ -49,7 +49,9 @@ function layBudget(view) {
   // anyway, so filtering it out costs nothing there either.
   const live = me.hand.length;
   if (!me.inFoot) return live;                 // emptying the hand just picks up the foot
-  return me.canGoOut && me.canGoOut.ok ? live - 1 : live - 2;
+  /* Going out means playing every card, so with the books in hand there is
+   * nothing to hold back. Without them, keep one card to discard. */
+  return me.canGoOut && me.canGoOut.ok ? live : live - 1;
 }
 
 /* ---------------- opening ---------------- */
@@ -148,6 +150,7 @@ function planOpening(view) {
 
 function chooseDiscard(view) {
   const me = view.you;
+  const S = view.settings;
   const live = me.hand.slice();
   if (!live.length) return null;
 
@@ -156,6 +159,11 @@ function chooseDiscard(view) {
     const r = E.rankOf(c);
     counts[r] = (counts[r] || 0) + 1;
   });
+
+  /* With both books down and the foot in hand, going out is no longer about
+   * points — every card has to reach a meld, and a card that cannot is the only
+   * thing standing between us and the round. Shed those first. */
+  const closing = me.inFoot && me.canGoOut && me.canGoOut.ok;
 
   const scored = live.map(function (c) {
     const rank = E.rankOf(c);
@@ -168,6 +176,13 @@ function chooseDiscard(view) {
     keep += (counts[rank] - 1) * 12;                    // pairs are worth holding
     if (openMeld(view, rank)) keep += 25;               // feeds a book we have open
     keep += E.cardValue(c) * 0.4;                       // shed the expensive ones late
+    if (closing) {
+      const open = openMeld(view, rank);
+      const placeable = E.isWild(c) ||
+        (open && open.cards.length < S.bookSize) ||
+        counts[rank] >= 3;
+      if (!placeable) keep -= 200;
+    }
     return { card: c, keep: keep };
   });
 
