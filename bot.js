@@ -44,7 +44,10 @@ function openMeld(view, rank) {
  * discard; mirrors the engine's own keep-a-discard rule */
 function layBudget(view) {
   const me = view.you;
-  const live = me.hand.filter(function (c) { return !E.isRedThree(c); }).length;
+  // A red three is a legal discard at this table, so it counts towards the card
+  // you have to keep back. Under the lay-off rule it never reaches the hand
+  // anyway, so filtering it out costs nothing there either.
+  const live = me.hand.length;
   if (!me.inFoot) return live;                 // emptying the hand just picks up the foot
   return me.canGoOut && me.canGoOut.ok ? live - 1 : live - 2;
 }
@@ -145,7 +148,7 @@ function planOpening(view) {
 
 function chooseDiscard(view) {
   const me = view.you;
-  const live = me.hand.filter(function (c) { return !E.isRedThree(c); });
+  const live = me.hand.slice();
   if (!live.length) return null;
 
   const counts = {};
@@ -159,6 +162,9 @@ function chooseDiscard(view) {
     let keep = 0;
     if (E.isWild(c)) keep += 100;                       // wilds finish books
     if (E.isBlackThree(c)) keep -= 30;                  // dead weight, dump it
+    // 100 against you if the round ends while you hold it, and it can never be
+    // melded — so it goes before anything else in the hand.
+    if (E.isRedThree(c)) keep -= 1000;
     keep += (counts[rank] - 1) * 12;                    // pairs are worth holding
     if (openMeld(view, rank)) keep += 25;               // feeds a book we have open
     keep += E.cardValue(c) * 0.4;                       // shed the expensive ones late
