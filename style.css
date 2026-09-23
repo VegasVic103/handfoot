@@ -102,6 +102,37 @@ input[type=text]::placeholder{color:#5f776c}
   border:1px solid var(--line);font-size:12px;font-weight:600;background:var(--felt-deep);
 }
 .pill.you{border-color:var(--brass);color:var(--brass);background:rgba(214,174,62,.1)}
+/* A slow breath rather than a blink: it runs for the whole of your turn, which
+   could be a minute of thinking, and anything sharper would be unbearable. */
+@keyframes waitingOnYou{
+  0%,100%{box-shadow:0 0 0 0 rgba(214,174,62,.55)}
+  50%{box-shadow:0 0 0 5px rgba(214,174,62,0)}
+}
+.pill.waiting-on-you{animation:waitingOnYou 2s ease-out infinite}
+
+/* The turn notice. Sits over the top of the board, says one thing, and takes
+   itself away after a few seconds so it never costs the table any height. */
+.turn-banner{
+  position:fixed;left:50%;top:0;z-index:60;
+  transform:translate(-50%,-140%);
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;justify-content:center;
+  max-width:min(520px,calc(100vw - 20px));
+  /* Clear of the top bar: the pill up there pulses for the whole turn and is
+     half the point, so the banner must not sit on top of it. */
+  margin-top:calc(var(--bar-h,46px) + 8px + env(safe-area-inset-top,0px));
+  padding:11px 18px;border-radius:12px;cursor:pointer;
+  background:var(--brass);color:var(--ink);
+  box-shadow:0 12px 30px -8px rgba(0,0,0,.7);
+  opacity:0;pointer-events:none;
+  transition:transform .28s cubic-bezier(.2,.9,.3,1.2),opacity .28s ease;
+}
+.turn-banner b{font-size:17px;letter-spacing:.01em}
+.turn-banner .note{color:rgba(23,19,16,.72);font-size:12px}
+.turn-banner.show{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+@media (prefers-reduced-motion:reduce){
+  .turn-banner{transition:opacity .2s ease;transform:translate(-50%,0)}
+  .pill.waiting-on-you{animation:none;box-shadow:0 0 0 2px rgba(214,174,62,.5)}
+}
 
 .board{flex:1;padding-block:14px 150px;display:flex;flex-direction:column;gap:16px}
 
