@@ -24,6 +24,11 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+/* A card game is all tapping, and iOS reads a quick second tap on a button as
+   double-tap-to-zoom. This tells the browser these elements are taps, not
+   gestures, which stops the accidental zoom without taking pinch-zoom away
+   from anyone who actually wants it. */
+button,.card,.stackbox,.meld,.chip,.pill,label{touch-action:manipulation}
 img{max-width:100%}
 html,body{height:100%}
 body{
@@ -39,7 +44,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 :focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:4px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
-.screen{min-height:100%;display:flex;flex-direction:column}
+/* dvh, not %: #app has no height of its own, so a percentage min-height here
+   resolved against nothing and the board never filled the screen — which left
+   the hand floating in the middle with dead space under it. dvh also tracks
+   Safari's collapsing address bar, which % cannot. */
+.screen{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 .wrap{width:100%;max-width:960px;margin:0 auto;padding-inline:16px}
 
 /* ---------- lobby ---------- */
@@ -196,8 +205,30 @@ input[type=text]::placeholder{color:#5f776c}
 .mini.deuce{background:var(--deuce)}
 .mini.dead{background:var(--rouge)}
 
+/* Cards that landed on the table in the last few seconds. A bot's turn is over
+   almost before you look up, so anything newly played glows until you have had
+   a chance to see it. */
+@keyframes justPlayed{
+  0%{box-shadow:0 0 0 0 var(--brass);transform:translateY(-2px)}
+  60%{box-shadow:0 0 7px 2px var(--brass);transform:translateY(0)}
+  100%{box-shadow:0 0 0 0 rgba(214,174,62,0);transform:translateY(0)}
+}
+.mini.just-played,.card.just-played{
+  animation:justPlayed 1.15s ease-out infinite;
+  outline:1px solid var(--brass);
+}
+.seat.just-played-seat{border-color:var(--brass)}
+@media (prefers-reduced-motion:reduce){
+  /* No pulse, but the mark still has to be visible. */
+  .mini.just-played,.card.just-played{animation:none;box-shadow:0 0 0 2px var(--brass)}
+}
+
 /* ---------- my area ---------- */
-.mine{display:flex;flex-direction:column;gap:12px}
+/* The hand hugs the bottom of the board and any slack collects above it, which
+   puts the spare room where the table is — the seats and the books — instead of
+   leaving a green gap under your cards. */
+.mine{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0}
+.hand-head{margin-top:auto}
 .sect-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .sect-head h3{font-size:15px}
 .hand{display:flex;flex-wrap:wrap;gap:5px}
@@ -289,6 +320,31 @@ tbody tr:last-child td{border-bottom:0}
 }
 .share .note{flex:1;min-width:150px}
 
+/* ---------- rules sheet and pile peek ---------- */
+.rule-toggle{
+  display:flex;gap:11px;align-items:flex-start;
+  background:var(--felt-deep);border:1px solid var(--line);border-radius:10px;padding:13px 14px;
+}
+.rule-toggle input{
+  appearance:none;flex:0 0 auto;width:44px;height:25px;border-radius:999px;margin:1px 0 0;
+  background:#2a4d41;border:1px solid var(--line);cursor:pointer;position:relative;
+  transition:background .15s, border-color .15s;
+}
+.rule-toggle input::after{
+  content:'';position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;
+  background:var(--bone-2);transition:transform .15s;
+}
+.rule-toggle input:checked{background:var(--brass-dim);border-color:var(--brass)}
+.rule-toggle input:checked::after{transform:translateX(19px);background:var(--bone)}
+.rule-toggle label{cursor:pointer;display:block}
+.rule-title{font-weight:700;font-size:14px;margin-bottom:3px}
+
+.peek-cards{display:flex;flex-wrap:wrap;gap:9px}
+.peek-card{display:flex;flex-direction:column;align-items:center;gap:4px}
+/* The top card is the one the rule is about, so it is marked as such. */
+.peek-card:first-child .card{box-shadow:0 2px 8px rgba(0,0,0,.5),0 0 0 2px var(--brass)}
+.peek-card:first-child .tag{color:var(--brass)}
+
 .bar-cell{display:flex;flex-direction:column}
 .bar-val{font-weight:700}
 .only-narrow{display:none}
@@ -310,7 +366,7 @@ tbody tr:last-child td{border-bottom:0}
   .only-narrow{display:inline}
 
   .wrap{padding-inline:10px}
-  .bar-in{gap:10px;padding-block:5px;flex-wrap:nowrap;overflow:hidden}
+  .bar-in{gap:8px;padding-block:5px;flex-wrap:nowrap;overflow:hidden}
   .bar-cell{flex-direction:row;align-items:baseline;gap:4px}
   .bar-table{display:none}
   /* The bar must stay one line: wrapped labels cost more height than the
@@ -330,7 +386,11 @@ tbody tr:last-child td{border-bottom:0}
     flex-direction:row;flex-wrap:wrap;align-items:center;row-gap:4px;column-gap:8px;
   }
   .seat.me{display:none}
-  .seat-top{flex:0 1 auto;gap:7px}
+  /* min-width:0 lets the name and count give way so a badge is never pushed off
+     the edge; overflow:hidden is the backstop if something still will not fit. */
+  .seat{overflow:hidden}
+  .seat-top{flex:0 1 auto;gap:7px;min-width:0}
+  .seat-name{overflow:hidden;text-overflow:ellipsis}
   .seat-name{font-size:13px}
   .seat-meta{margin-left:0;font-size:10.5px}
   .chips{flex:1 1 auto;justify-content:flex-end;gap:4px}
@@ -341,13 +401,31 @@ tbody tr:last-child td{border-bottom:0}
      strips run off to the side and can be swiped, rather than wrapping and
      pushing the hand off the bottom of the screen. Same for the seat strip
      itself once there are more than a couple of opponents. */
-  .seats{max-height:122px;overflow-y:auto}
-  .seat .melds{flex:1 1 100%;gap:8px;flex-wrap:nowrap;overflow-x:auto}
+  .seats{max-height:150px;overflow-y:auto}
+  /* A taller strip with room above and below the blocks: the swipe has to land
+     somewhere, and a 16px band is smaller than a fingertip. pan-x tells the
+     browser to commit to sideways straight away rather than deciding between
+     this and the page's own scroll. */
+  .seat .melds{
+    flex:1 1 100%;gap:10px;flex-wrap:nowrap;
+    overflow-x:auto;overscroll-behavior-x:contain;
+    touch-action:pan-x;-webkit-overflow-scrolling:touch;
+    padding:6px 2px;margin:-4px -2px -2px;
+    /* A shadow at whichever edge still has books beyond it. The `local` pair are
+       cover panels that ride with the content; the `scroll` pair are shadows
+       pinned to the box. They cancel out exactly when there is nothing more that
+       way, so the cue appears only when a swipe would actually do something. */
+    background:
+      linear-gradient(to right, var(--rail), rgba(29,63,52,0)) left/18px 100% no-repeat local,
+      linear-gradient(to left, var(--rail), rgba(29,63,52,0)) right/18px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.4), rgba(0,0,0,0)) left/9px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.4), rgba(0,0,0,0)) right/9px 100% no-repeat scroll;
+  }
   .seat .meld{flex:0 0 auto}
-  .seat .meld-mini{flex-wrap:nowrap;max-width:none}
+  .seat .meld-mini{flex-wrap:nowrap;max-width:none;gap:2px}
+  .seat .mini{width:11px;height:16px}
   .seat .meld{border:0;background:none;padding:0;gap:2px;flex-direction:row;align-items:center}
   .seat .meld-top{font-size:9px;letter-spacing:.06em}
-  .seat .mini{width:9px;height:13px}
   .seat .meld-mini{gap:1.5px;max-width:96px}
 
   /* the piles */
@@ -365,7 +443,7 @@ tbody tr:last-child td{border-bottom:0}
   .mine{gap:7px}
   .sect-head{gap:7px}
   .sect-head h3{font-size:13px}
-  .melds{gap:5px;max-height:86px;overflow-y:auto}
+  .melds{gap:5px;max-height:118px;overflow-y:auto}
   .meld{padding:5px 6px 6px}
   .meld-top{font-size:9.5px}
   .melds .card.tiny{--card-w:23px;--card-h:33px;width:23px;height:33px}
@@ -417,5 +495,6 @@ tbody tr:last-child td{border-bottom:0}
   .hand .card .s{font-size:12px}
   .hand-row .card + .card{margin-left:-21px}
   .hand{max-height:170px}
-  .seats{max-height:92px}
+  .seats{max-height:112px}
+  .melds{max-height:84px}
 }
