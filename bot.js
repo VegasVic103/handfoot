@@ -34,6 +34,9 @@ function myMelds(view) {
   return (view.seats[seat] && view.seats[seat].melds) || [];
 }
 
+/* A book of this rank that is still short of closing. A closed one can still
+ * take cards, but it is not where the bot wants them — a fresh book of the same
+ * rank earns a second bonus, so `openMeld` means "not yet a book". */
 function openMeld(view, rank) {
   return myMelds(view).filter(function (m) {
     return m.rank === rank && m.cards.length < view.settings.bookSize;
@@ -59,11 +62,11 @@ function layBudget(view) {
 /* How many more cards a meld of this rank can still take, and whether we
  * would be starting one or adding to one we already have. */
 function roomFor(view, rank) {
-  const existing = myMelds(view).filter(function (m) { return m.rank === rank; })[0];
-  if (!existing) return { room: view.settings.bookSize, meld: null };
-  const st = E.meldStats(existing, view.settings);
-  if (st.complete) return { room: 0, meld: existing };
-  return { room: view.settings.bookSize - existing.cards.length, meld: existing };
+  const open = openMeld(view, rank);
+  // Nothing of this rank still open: start a fresh book, which has room for a
+  // whole book of its own.
+  if (!open) return { room: view.settings.bookSize, meld: null };
+  return { room: view.settings.bookSize - open.cards.length, meld: open };
 }
 
 /* Wilds in a fixed order, richest first, so that a plan made now and the same
@@ -178,9 +181,7 @@ function chooseDiscard(view) {
     keep += E.cardValue(c) * 0.4;                       // shed the expensive ones late
     if (closing) {
       const open = openMeld(view, rank);
-      const placeable = E.isWild(c) ||
-        (open && open.cards.length < S.bookSize) ||
-        counts[rank] >= 3;
+      const placeable = E.isWild(c) || open || counts[rank] >= 3;
       if (!placeable) keep -= 200;
     }
     return { card: c, keep: keep };
@@ -210,13 +211,11 @@ function decide(view) {
       if (naturals.length >= S.pileNaturalsRequired) {
         const take = naturals.slice(0, S.bookSize - 1);
         const worth = values(take.concat([top]));
-        const open = openMeld(view, rank);
         // only worth it if it is legal: either we are already down, or this
         // alone clears the minimum
         const downAlready = me.hasInitialMeld ||
           (view.turnState && view.turnState.melded >= view.minMeld);
-        const fits = open ? open.cards.length + take.length + 1 <= S.bookSize : true;
-        if (fits && (downAlready || worth >= view.minMeld)) {
+        if (downAlready || worth >= view.minMeld) {
           return { action: 'pile', cards: take };
         }
       }
@@ -287,7 +286,7 @@ function decide(view) {
 
   // new melds from three or more of a rank
   const fresh = Object.keys(groups)
-    .filter(function (r) { return !openMeld(view, r) && !myMelds(view).some(function (m) { return m.rank === r; }); })
+    .filter(function (r) { return !openMeld(view, r); })
     .map(function (r) {
       const cards = groups[r].slice(0, S.bookSize);
       return { rank: r, cards: cards, value: values(cards) };
@@ -297,6 +296,48 @@ function decide(view) {
   for (const f of fresh) {
     if (f.cards.length <= budget) {
       return { action: 'meldNew', rank: f.rank, cards: f.cards };
+    }
+  }
+
+  /* A pair plus a wild is a legal book, and the single most common way to get a
+   * stubborn pair out of your hand. planOpening has always known that; the rest
+   * of the turn did not, so once the bot was down it sat on every pair it held
+   * and its hand stopped emptying — which is why it so rarely reached its foot,
+   * let alone went out. */
+  if (spare.length) {
+    const pairs = Object.keys(groups)
+      .filter(function (r) {
+        return groups[r].length === 2 && !openMeld(view, r);
+      })
+      .map(function (r) {
+        const cards = groups[r].slice(0, 2).concat([spare[0]]);
+        return { rank: r, cards: cards, value: values(cards) };
+      });
+    pairs.sort(function (a, b) { return b.value - a.value; });
+    for (const p of pairs) {
+      if (p.cards.length <= budget) {
+        return { action: 'meldNew', rank: p.rank, cards: p.cards };
+      }
+    }
+  }
+
+  /* Last resort, and the reason a hand stops clogging: a closed book still
+   * takes cards of its rank. A second book of that rank would be worth more, so
+   * this only runs once starting one has been ruled out — but a card parked on
+   * a closed pile is a card you no longer have to go out around. Naturals only:
+   * `groups` holds no wilds, so a red book can never be spoiled here. */
+  const closedAdds = [];
+  myMelds(view).forEach(function (m) {
+    if (!E.meldStats(m, S).complete) return;
+    const naturals = groups[m.rank] || [];
+    if (naturals.length) {
+      closedAdds.push({ meld: m, cards: naturals, value: values(naturals) });
+    }
+  });
+  closedAdds.sort(function (a, b) { return b.value - a.value; });
+  for (const a of closedAdds) {
+    if (a.cards.length <= budget) {
+      return { action: 'meldAdd', meldId: a.meld.id, cards: a.cards };
     }
   }
 
