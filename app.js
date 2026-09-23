@@ -54,6 +54,15 @@ function connect() {
       var first = !view;
       view = msg.view;
       if (view.turn !== lastTurn) { sel = []; pileSel = []; lastTurn = view.turn; }
+      /* Melding or discarding takes cards out of the hand, but they stayed in
+       * the selection — so the next thing you picked up was judged together
+       * with cards you had already laid down, and no legal play could be
+       * found. Keep only what is still in hand. A refused move leaves the hand
+       * untouched, so a selection worth retrying survives this. */
+      if (view.you && view.you.hand) {
+        var inHand = view.you.hand;
+        sel = sel.filter(function (c) { return inHand.indexOf(c) !== -1; });
+      }
       if (first) { notice = ''; noticeBad = false; }
       showTable();
       render();
