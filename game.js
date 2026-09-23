@@ -98,6 +98,7 @@ function freshTurn(state) {
     // glance which ones are new. Only ever shown to the seat that holds them.
     picked: [],
     snapshot: snapOf(state, state.turn),
+    logMark: state.logSeq || 0,
   };
 }
 
@@ -197,6 +198,7 @@ function drawStock(state, seat, piles) {
   // Undo rolls back melds laid this turn, never the draw itself.
   state.turnState.snapshot = snapOf(state, seat);
   log(state, { t: 'draw', seat, n: S.drawCount, piles: picks.map((i) => i + 1) });
+  state.turnState.logMark = state.logSeq;   // the draw itself survives an undo
   return done();
 }
 
@@ -448,6 +450,11 @@ function undoTurnMelds(state, seat) {
   p.hand = snap.hand; p.foot = snap.foot; p.inFoot = snap.inFoot; p.melds = snap.melds;
   ts.melded = 0;
   ts.pickedUpFoot = false;
+  // The melds are off the table again, so the lines announcing them should go
+  // too — otherwise the history reads as though they were laid twice.
+  if (typeof ts.logMark === 'number') {
+    state.log = state.log.filter(function (e) { return !e.id || e.id <= ts.logMark; });
+  }
   return done();
 }
 
@@ -466,7 +473,12 @@ function guard(state, seat, phase) {
   return done();
 }
 
+/* Each entry carries a rising id so that taking melds back can remove exactly
+ * the lines it undid. Plain counting would not do it: the log is trimmed from
+ * the front once it is long, which shifts every position. */
 function log(state, entry) {
+  state.logSeq = (state.logSeq || 0) + 1;
+  entry.id = state.logSeq;
   state.log.push(entry);
   if (state.log.length > 200) state.log.splice(0, state.log.length - 200);
 }
