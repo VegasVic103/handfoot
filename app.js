@@ -145,9 +145,10 @@ function wire() {
     sel = []; pileSel = [];
     showLobby();
   };
+  syncSortBtn();
   $('sortBtn').onclick = function () {
     sortMode = sortMode === 'rank' ? 'group' : 'rank';
-    $('sortBtn').textContent = sortMode === 'rank' ? 'Sort by rank' : 'Group by count';
+    syncSortBtn();
     render();
   };
   handLayout = get('hf_layout') === 'layered' ? 'layered' : 'spread';
@@ -180,13 +181,25 @@ function wire() {
 
 /* ---------------- selection helpers ---------------- */
 
+/* Both buttons name what the hand is doing now, not what a click would do, and
+ * the explanation rides in the tooltip — labels short enough that the hand's
+ * controls stay on one line on a phone. */
 function syncLayoutBtn() {
   var b = $('layoutBtn');
   if (!b) return;
-  b.textContent = handLayout === 'spread' ? 'Side by side' : 'Layered rows';
+  b.textContent = handLayout === 'spread' ? 'Spread' : 'Layered';
   b.title = handLayout === 'spread'
     ? 'Every card fully visible, wrapping as it needs to. Click to overlap them instead.'
     : 'Cards overlapped ' + PER_ROW + ' to a row, like a hand you are holding. Click to spread them out.';
+}
+
+function syncSortBtn() {
+  var b = $('sortBtn');
+  if (!b) return;
+  b.textContent = sortMode === 'rank' ? 'By rank' : 'By count';
+  b.title = sortMode === 'rank'
+    ? 'Wilds first, then low to high. Click to bring your biggest groups to the front instead.'
+    : 'Your biggest groups first, so near-books are together. Click to sort by rank instead.';
 }
 
 function meSeat() { return view && view.you ? view.you.seat : -1; }
@@ -234,6 +247,9 @@ function meldStatsOf(m) {
 function wildClass(id) {
   if (E.isJoker(id)) return ' wild joker';
   if (E.rankOf(id) === '2') return ' wild deuce';
+  // A red three is 100 against you and can never be melded, so it is banded in
+  // rouge to stand out from every other card in the hand as something to shed.
+  if (E.isRedThree(id)) return ' wild dead';
   return '';
 }
 
@@ -304,6 +320,7 @@ function render() {
   renderMine();
   renderActions();
   renderLog();
+  sizeBoard();
   if (!$('scoreSheet').hidden) renderScores();
   if (view.phase === 'roundEnd' || view.phase === 'gameEnd') {
     $('scoreSheet').hidden = false; renderScores();
@@ -317,11 +334,33 @@ function chip(text, cls) {
   return s;
 }
 
+/* The little badges describing a seat's standing. Built in one place because
+ * they appear twice: on every seat, and — since a phone hides your own seat to
+ * save a row — beside your own books. */
+function seatChips(s, mine) {
+  var out = [];
+  // No "Computer" badge: the seat is named "… (bot)" already, and a row that
+  // says the same thing twice is a row of screen nobody gets back.
+  if (!s.bot && s.seated && !s.connected && !view.solo) out.push(chip('Disconnected'));
+  if (s.redBooks) out.push(chip(s.redBooks + ' red book' + (s.redBooks > 1 ? 's' : ''), 'red'));
+  if (s.blackBooks) out.push(chip(s.blackBooks + ' black book' + (s.blackBooks > 1 ? 's' : ''), 'black'));
+  if (s.inFoot) out.push(chip('In foot', 'foot'));
+  if (view.phase === 'playing' && !s.hasInitialMeld) out.push(chip('No initial meld'));
+  /* Only ever your own — the server sends nobody else's. Spelling out the
+   * penalty stops it reading as something you are holding. */
+  if (mine && s.redThrees) {
+    var many = s.redThrees > 1;
+    out.push(chip(s.redThrees + ' red three' + (many ? 's' : '') + ' · −100' + (many ? ' each' : ''), 'red'));
+  }
+  return out;
+}
+
 function renderSeats() {
   var wrap = $('seats'); wrap.innerHTML = '';
   view.seats.forEach(function (s, i) {
     var d = document.createElement('div');
-    d.className = 'seat' + (view.phase === 'playing' && view.turn === i ? ' active' : '');
+    d.className = 'seat' + (view.phase === 'playing' && view.turn === i ? ' active' : '') +
+      (i === meSeat() ? ' me' : '');
 
     var top = document.createElement('div'); top.className = 'seat-top';
     var nm = document.createElement('span'); nm.className = 'seat-name';
@@ -334,13 +373,7 @@ function renderSeats() {
     d.appendChild(top);
 
     var chips = document.createElement('div'); chips.className = 'chips';
-    if (s.bot) chips.appendChild(chip('Computer'));
-    else if (s.seated && !s.connected && !view.solo) chips.appendChild(chip('Disconnected'));
-    if (s.redBooks) chips.appendChild(chip(s.redBooks + ' red book' + (s.redBooks > 1 ? 's' : ''), 'red'));
-    if (s.blackBooks) chips.appendChild(chip(s.blackBooks + ' black book' + (s.blackBooks > 1 ? 's' : ''), 'black'));
-    if (s.inFoot) chips.appendChild(chip('In foot', 'foot'));
-    if (view.phase === 'playing' && !s.hasInitialMeld) chips.appendChild(chip('No initial meld'));
-    if (s.redThrees) chips.appendChild(chip(s.redThrees + ' red three' + (s.redThrees > 1 ? 's' : '')));
+    seatChips(s, i === meSeat()).forEach(function (c) { chips.appendChild(c); });
     if (chips.children.length) d.appendChild(chips);
 
     if (s.melds.length) {
@@ -423,12 +456,26 @@ function renderMine() {
   var melds = myMelds();
   var canTarget = isMyTurn() && view.turnPhase === 'play' && sel.length > 0;
 
-  if (!melds.length) {
+  /* Red threes laid off under the other rule \u2014 this table keeps them in hand,
+   * so this is normally empty and nothing is drawn. */
+  var threes = (view.you && view.you.redThrees) || [];
+  if (threes.length) {
+    var tb = document.createElement('div');
+    tb.className = 'meld threes';
+    var th = document.createElement('div'); th.className = 'meld-top';
+    th.textContent = 'Red threes \u00b7 \u2212100 each';
+    var tc = document.createElement('div'); tc.className = 'meld-cards';
+    threes.forEach(function (c) {
+      tc.appendChild(cardEl(c, { tiny: true, title: E.label(c) + ' \u00b7 counts \u2212100 against you' }));
+    });
+    tb.appendChild(th); tb.appendChild(tc);
+    wrap.appendChild(tb);
+  }
+
+  if (!melds.length && !threes.length) {
     var empty = document.createElement('p');
     empty.className = 'note';
-    empty.textContent = view.phase === 'playing'
-      ? 'Nothing down yet. Going down needs ' + view.minMeld + ' or more \u2014 you can spread that across as many melds as you like, as long as they all go down in the same turn.'
-      : 'No books yet.';
+    empty.textContent = 'Nothing down yet.';
     wrap.appendChild(empty);
   }
 
@@ -451,8 +498,12 @@ function renderMine() {
   });
 
   $('meldHint').textContent = canTarget
-    ? 'Click a book to add the ' + sel.length + ' selected card' + (sel.length > 1 ? 's' : '') + '.'
+    ? 'Click a book to add ' + sel.length + ' card' + (sel.length > 1 ? 's' : '') + '.'
     : '';
+
+  var mc = $('myChips'); mc.innerHTML = '';
+  var meSeatObj = meSeat() >= 0 ? view.seats[meSeat()] : null;
+  if (meSeatObj) seatChips(meSeatObj, true).forEach(function (c) { mc.appendChild(c); });
 
   renderHand();
   $('clearSel').hidden = sel.length === 0;
@@ -479,7 +530,9 @@ function renderHand() {
         render();
       },
       selected: sel.indexOf(c) !== -1,
-      title: E.label(c) + ' · ' + E.cardValue(c) + ' points' + (isFresh ? ' · just picked up' : ''),
+      title: E.label(c) + ' · ' +
+        (E.isRedThree(c) ? '−100 if you are still holding it — discard it' : E.cardValue(c) + ' points') +
+        (isFresh ? ' · just picked up' : ''),
     });
     if (isFresh) el.classList.add('fresh');
     if (firstFresh) el.classList.add('fresh-first');
@@ -509,8 +562,12 @@ function renderHand() {
 
   var n = myHand().length;
   $('handPill').textContent = n + ' card' + (n === 1 ? '' : 's') +
-    (fresh.length ? ' · ' + fresh.length + ' just picked up' : '') +
+    (fresh.length ? ' · ' + fresh.length + ' new' : '') +
     (view.you && view.you.inFoot ? ' · in foot' : '');
+  $('handPill').title = fresh.length
+    ? 'The ' + fresh.length + ' card' + (fresh.length > 1 ? 's' : '') +
+      ' you just picked up sit last, dotted in brass.'
+    : '';
 }
 
 function btn(label, fn, ghost) {
@@ -582,14 +639,15 @@ function renderActions() {
     var spread = live.length >= S.distinctDrawPiles;
     var left = S.drawCount - pileSel.length;
 
+    /* Kept to a few words so the bar stays one line on a phone. The rule behind
+     * each one lives on the button it belongs to, as a tooltip. */
     if (notice) hint.innerHTML = esc(notice);
     else if (!spread) {
-      hint.innerHTML = 'Only pile <b>' + (live[0] + 1) + '</b> has cards left, so both of your ' +
-        'cards come from it.';
+      hint.innerHTML = 'Only pile <b>' + (live[0] + 1) + '</b> left — both cards come from it.';
     } else if (left > 0) {
-      hint.innerHTML = 'Pick <b>' + left + ' more pile' + (left === 1 ? '' : 's') + '</b> — ' +
-        'your two cards must come from two different piles. Or take the discard pile with two ' +
-        'matching naturals.';
+      hint.innerHTML = pileSel.length
+        ? 'Pick <b>1 more pile</b>.'
+        : 'Pick <b>2 different piles</b>.';
     } else {
       hint.innerHTML = 'Drawing from piles <b>' +
         pileSel.map(function (i) { return i + 1; }).join('</b> and <b>') + '</b>.';
@@ -603,7 +661,9 @@ function renderActions() {
       act('draw', { piles: spread ? pileSel.slice() : [] });
     });
     d.disabled = spread && left !== 0;
-    if (d.disabled) d.title = 'Click two different draw piles first.';
+    d.title = spread
+      ? 'Your two cards must come from two different draw piles.'
+      : 'One pile left, so the two-different-piles rule relaxes.';
     bar.appendChild(d);
 
     var offer = pileOffer();
@@ -611,9 +671,10 @@ function renderActions() {
       act('pile', { cards: sel.slice() });
     }, true);
     take.disabled = !offer;
-    if (!offer && view.discardCount) {
-      take.title = 'Select two or more naturals matching the top card first.';
-    }
+    take.title = offer
+      ? 'Takes the top card plus the ' + view.settings.pileTakeExtra + ' behind it.'
+      : 'Select ' + view.settings.pileNaturalsRequired +
+        ' naturals matching the top discard, then take the pile.';
     bar.appendChild(take);
     return;
   }
@@ -621,7 +682,9 @@ function renderActions() {
   // play phase
   var msgs = [];
   if (view.you && !view.you.hasInitialMeld) {
-    msgs.push('Going down needs ' + view.minMeld + ' or more, added up across this whole turn. Laid so far: ' +
+    // The running total against the round's minimum, and nothing else — the
+    // header already carries the number, and the rule is in the lobby notes.
+    msgs.push('Down needs ' + view.minMeld + ' · laid ' +
       (view.turnState ? view.turnState.melded : 0) + '.');
   }
   if (view.you && view.you.inFoot) {
@@ -738,6 +801,24 @@ function renderScores() {
     p.textContent = 'No rounds scored yet.';
     body.appendChild(p);
   }
+}
+
+/* ---------------- room for the action bar ----------------
+ * The bar is fixed to the bottom, so the board has to reserve exactly its
+ * height or the last row of cards hides behind it. The height changes with the
+ * hint text and the number of buttons, and on a phone a guessed constant is
+ * either dead space or a clipped card — so measure it. */
+function sizeBoard() {
+  var bar = document.querySelector('.actions');
+  var board = document.querySelector('.board');
+  if (!bar || !board) return;
+  board.style.paddingBottom = (bar.offsetHeight + 8) + 'px';
+}
+if (window.ResizeObserver) {
+  var ro = new ResizeObserver(sizeBoard);
+  ro.observe(document.querySelector('.actions'));
+} else {
+  window.addEventListener('resize', sizeBoard);
 }
 
 /* ---------------- keeping the server awake ----------------
