@@ -89,7 +89,10 @@ function startRound(state, rng) {
 
 function snapOf(state, seat) {
   const p = state.players[seat];
-  return JSON.stringify({ hand: p.hand, foot: p.foot, inFoot: p.inFoot, melds: p.melds });
+  return JSON.stringify({
+    hand: p.hand, foot: p.foot, inFoot: p.inFoot, melds: p.melds,
+    hasInitialMeld: p.hasInitialMeld,
+  });
 }
 
 function freshTurn(state) {
@@ -249,15 +252,17 @@ function takePile(state, seat, handCards) {
   }
 
   const value = cards.reduce((s, c) => s + E.cardValue(c), 0);
-  if (!p.hasInitialMeld) {
-    const need = minMeldFor(state);
-    const total = state.turnState.melded + value;
-    if (total < need) {
-      return fail(`Going down needs ${need} — this comes to ${total}.`, 'initial_meld_short');
-    }
-  }
-
+  /* No initial-meld check here. Taking the pile is a draw, and at this table the
+   * minimum is totalled across everything you lay in the turn — so two kings and
+   * the king on top is 30 towards the 50, not a refusal. What it cannot do is
+   * end the turn short: `discard` holds you to the minimum, and until you get
+   * there `undo` hands the pile back. */
   const targetId = target ? target.id : null;
+  /* The pile as it stands right now, so the take can be handed back card for
+   * card. Taken here rather than at the start of the turn because this is the
+   * only thing being undone, and a table restored from a save has no reliable
+   * memory of what the pile looked like before its current turn began. */
+  const pileBefore = state.discard.slice();
   const r = tx(state, seat, () => {
     const takeCount = Math.min(S.pileTakeExtra + 1, state.discard.length);
     const taken = state.discard.splice(state.discard.length - takeCount, takeCount);
@@ -279,8 +284,14 @@ function takePile(state, seat, handCards) {
   if (!r.ok) return r;
 
   state.turnState.tookPile = true;
+  state.turnState.pileSnapshot = pileBefore;
   state.turnState.drew = true;
-  if (!p.hasInitialMeld) p.hasInitialMeld = true;
+  /* Down only if the take got you there on its own. Otherwise the turn carries
+   * on owing the difference, and every meld you lay after this counts towards
+   * it, because turnState.melded is what the check reads. */
+  if (!p.hasInitialMeld && state.turnState.melded >= minMeldFor(state)) {
+    p.hasInitialMeld = true;
+  }
   state.turnPhase = 'play';
   return r;
 }
@@ -479,10 +490,23 @@ function undoTurnMelds(state, seat) {
   if (state.turn !== seat) return fail('Not your turn.');
   const ts = state.turnState;
   if (!ts || !ts.snapshot) return fail('Nothing to undo.');
-  if (ts.tookPile) return fail('You cannot undo after taking the pile.');
   const snap = JSON.parse(ts.snapshot);
   const p = state.players[seat];
   p.hand = snap.hand; p.foot = snap.foot; p.inFoot = snap.inFoot; p.melds = snap.melds;
+  /* Going down is part of what the turn did, so taking the melds back takes that
+   * back too — otherwise a turn you undid would still have opened your account. */
+  if (typeof snap.hasInitialMeld === 'boolean') p.hasInitialMeld = snap.hasInitialMeld;
+  /* Taking the pile back puts every card of it where it was and returns you to
+   * the draw, so the turn starts over rather than stranding you mid-way. A
+   * normal draw is not undone: those cards came off a stock nobody can see. */
+  if (ts.tookPile && ts.pileSnapshot) {
+    state.discard = ts.pileSnapshot.slice();
+    ts.tookPile = false;
+    ts.pileSnapshot = null;
+    ts.drew = false;
+    ts.picked = [];
+    state.turnPhase = 'draw';
+  }
   ts.melded = 0;
   ts.pickedUpFoot = false;
   // The melds are off the table again, so the lines announcing them should go
@@ -538,27 +562,27 @@ function pileTakeCards(state) {
 function scoreRound(state) {
   const S = state.settings;
   return state.players.map((p) => {
-    let books = 0, red = 0, black = 0, meldPts = 0;
+    let redPts = 0, blackPts = 0, red = 0, black = 0, meldPts = 0;
     for (const m of p.melds) {
       const st = E.meldStats(m, S);
-      if (st.isRedBook) { books += S.redBookBonus; red++; }
-      else if (st.isBlackBook || st.isWildBook) { books += S.blackBookBonus; black++; }
+      if (st.isRedBook) { redPts += S.redBookBonus; red++; }
+      else if (st.isBlackBook || st.isWildBook) { blackPts += S.blackBookBonus; black++; }
       meldPts += m.cards.reduce((s, c) => s + E.cardValue(c), 0);
     }
-    /* Red threes score in their own column rather than disappearing into the
-     * pile of cards left over, because 100 a piece is the thing you want to see
-     * on the sheet. Held ones — in the hand or in a foot you never reached — are
-     * what counts; ones laid off under the other rule score the same way. */
+    /* The sheet the table keeps: books, what is on the table against what is in
+     * your hand, and the bonus for going out. A red three needs no column of its
+     * own — it is simply an expensive card to be caught with, 100 against you
+     * inside the hand count like any other card. cardValue already prices it,
+     * and ones laid off under the other rule are added back here. */
     const held = p.hand.concat(p.foot);
-    const heldThrees = held.filter((c) => E.isRedThree(c));
-    const left = held
-      .filter((c) => !E.isRedThree(c))
-      .reduce((s, c) => s + E.cardValue(c), 0);
-    const threes = (p.redThrees.length + heldThrees.length) * S.redThreeValue;
+    const handCount = held.reduce((s, c) => s + E.cardValue(c), 0) +
+      p.redThrees.length * Math.abs(S.redThreeValue);
+    const tableCount = meldPts - handCount;
     const out = p.wentOut ? S.goOutBonus : 0;
     return {
-      books, meldPts, left, threes, out, redBooks: red, blackBooks: black,
-      total: books + meldPts + threes + out - left,
+      redPts, blackPts, redBooks: red, blackBooks: black,
+      meldPts, handCount, tableCount, out,
+      total: redPts + blackPts + tableCount + out,
     };
   });
 }
