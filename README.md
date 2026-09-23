@@ -17,8 +17,10 @@ No accounts, no downloads, no app.
 | Taking the discard pile | 2 naturals in hand matching the top card; you take that card **plus the 6 behind it** |
 | Going down | **At least** 50 / 90 / 120 / 150 across four rounds, totalled over every meld you lay in that turn |
 | Book | 7 cards. **Red book** = all naturals (500). **Black book** = contains wilds (300) |
-| Wilds in a book | up to 3 — naturals must outnumber wilds |
-| Threes | never meld. Black three on top freezes the pile. Red three lays off at −100 |
+| Wilds in a book | **at most 2**, start to finish. Every meld needs **2 naturals**. No ratio rule beyond that |
+| Telling wilds apart | a joker is banded in brass (50), a deuce in blue (20) — in your hand and in everyone's books |
+| Threes | never meld. A black three on top freezes the pile |
+| Red threes | **dead cards**. They sit in your hand like any other card, cannot be melded, and you get rid of one by **discarding** it. No replacement card. You lose **100** only if you are still holding one — in your hand or in a foot you never reached — when the round ends. A red three on top freezes the pile, since nothing can match it |
 | Going out | in your foot, 1 red book + 1 black book, discard your last card. +100 |
 
 Everything above lives in one place: `engine.js`, in the `DEFAULTS` object.
@@ -28,10 +30,15 @@ Change a number there and the whole game follows — the server, the interface, 
 
 1. **When only one draw pile has cards left**, the two-different-piles rule relaxes and both
    cards come from the last pile. Otherwise the final turns of a round would have no legal draw.
-2. **Red threes** are worth −100 each and lay off automatically when drawn.
+2. **Red threes** in a foot you never picked up still count against you, the same as
+   anything else left in it.
 
 If your table plays either differently, change `distinctDrawPiles` / `redThreeValue` in
 `engine.js`, or ask and I'll change it.
+
+The other common red-three rule — where a red three flips face up the instant it is dealt
+or drawn and you take a replacement card, as in Canasta — is one setting away: set
+`redThreeAutoLayOff: true` in `engine.js`. Everything else follows, scoring included.
 
 ---
 
@@ -53,8 +60,9 @@ Run the tests any time with:
 npm test
 ```
 
-That runs 52 rules tests (including 1,200 randomly played complete games) and 28 server
-tests that play a full game over real websockets.
+That runs 65 rules tests (including 1,200 randomly played complete games), 11 bot tests
+(including 300 complete games played by the computer), and 32 server tests that play a
+full game over real websockets.
 
 ---
 
@@ -137,6 +145,10 @@ rules match your group's before anyone else is involved.
 - **Tables survive a restart.** Games are written to `tables.json` and reloaded on boot, so a
   redeploy or a host restart mid-game doesn't lose the night. Tables are forgotten after 12
   quiet hours.
+- **It fits a phone.** On a narrow screen the whole turn — the piles, everyone's books,
+  your hand and the buttons — sits on one screen with nothing to scroll past. The seat
+  strip and your books scroll inside themselves once a round gets long, so the hand never
+  gets pushed off the bottom.
 - **No database, no accounts, nothing to maintain.**
 
 ## Layout
@@ -147,11 +159,13 @@ Every file sits in this one folder, so there is nothing to arrange.
 server.js         the server: rooms, seats, and keeping hands private
 engine.js         cards, values, meld legality, your house-rule settings
 game.js           turn logic: draw, meld, discard, foot, going out, scoring
+bot.js            the computer opponent, playing off the same view you see
 index.html        the page
 app.js            the interface
 style.css         the look
-rules.test.js     52 rules tests
-server.test.js    28 end-to-end tests over real websockets
+rules.test.js     65 rules tests
+bot.test.js       11 bot tests, 300 complete games
+server.test.js    32 end-to-end tests over real websockets
 package.json      what to install and how to start
 Dockerfile        only needed for Fly.io
 ```
