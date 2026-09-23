@@ -49,6 +49,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    the hand floating in the middle with dead space under it. dvh also tracks
    Safari's collapsing address bar, which % cannot. */
 .screen{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+/* The table is exactly one screen tall, never more. A minimum height alone lets
+   the column grow to fit its contents, which is the same as having no limit —
+   nothing inside is ever asked to shrink, and a deep hand pushes the board off
+   the bottom. With a real height the flex shrinking actually engages and the
+   hand and the books give up room in that order. The lobby keeps min-height,
+   because it is a page you scroll. */
+#table{height:100dvh;overflow:hidden}
 .wrap{width:100%;max-width:960px;margin:0 auto;padding-inline:16px}
 
 /* ---------- lobby ---------- */
@@ -134,7 +141,10 @@ input[type=text]::placeholder{color:#5f776c}
   .pill.waiting-on-you{animation:none;box-shadow:0 0 0 2px rgba(214,174,62,.5)}
 }
 
-.board{flex:1;padding-block:14px 150px;display:flex;flex-direction:column;gap:16px}
+/* min-height:0 or the board refuses to shrink below the height of its contents,
+   which is the default for a flex item and would let a big hand push the table
+   off the bottom of the screen instead of scrolling inside itself. */
+.board{flex:1;min-height:0;padding-block:14px 150px;display:flex;flex-direction:column;gap:16px}
 
 /* ---------- seats ---------- */
 .seats{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
@@ -224,8 +234,20 @@ input[type=text]::placeholder{color:#5f776c}
 }
 .meld.target{cursor:pointer}
 .meld.target:hover{border-color:var(--brass);background:rgba(214,174,62,.1)}
-.meld.done-red{border-color:var(--rouge)}
-.meld.done-black{border-color:#6f7d76}
+/* Clean or dirty, from the first three cards rather than only once the book
+   closes: a pile with no wilds in it is on its way to 500 and is ringed in red,
+   one with a wild in it is on its way to 300 and is ringed in black. Knowing
+   which is which at a glance is the whole point — it decides where your next
+   natural goes. The black is lifted off pure black so the box still reads as a
+   box against the felt. */
+.meld.clean{border-color:var(--rouge);background:rgba(184,52,44,.1)}
+.meld.dirty{border-color:#11161a;background:rgba(0,0,0,.34)}
+.meld.clean .meld-top{color:var(--rouge-lt)}
+.meld.dirty .meld-top{color:#b9c6be}
+/* Closed books say so more loudly — the ring thickens rather than changing hue,
+   so a closed red book still reads as the same red as the open one. */
+.meld.clean.done{box-shadow:inset 0 0 0 1px var(--rouge)}
+.meld.dirty.done{box-shadow:inset 0 0 0 1px #2b3640}
 .meld-top{display:flex;align-items:center;gap:6px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700}
 .meld-cards{display:flex;gap:3px;flex-wrap:wrap}
 .meld-mini{display:flex;gap:2px;flex-wrap:wrap;max-width:132px}
@@ -266,7 +288,7 @@ input[type=text]::placeholder{color:#5f776c}
 #myMelds{flex:1 1 0;min-height:0;overflow-y:auto;align-content:flex-start}
 .sect-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .sect-head h3{font-size:15px}
-.hand{display:flex;flex-wrap:wrap;gap:5px}
+.hand{display:flex;flex-wrap:wrap;gap:5px;align-content:flex-end}
 .hand .card{cursor:pointer}
 .hand .card:hover{transform:translateY(-4px)}
 .hand .card.sel:hover{transform:translateY(-10px)}
@@ -502,7 +524,10 @@ tbody tr:last-child td{border-bottom:0}
      fit on the screen at once. Wilds sort to the end, so the one card whose face
      actually differs is the one left fully showing. */
   #myMelds .meld-cards{flex-wrap:nowrap;gap:0}
-  #myMelds .meld-cards .card.tiny + .card.tiny{margin-left:-12px}
+  /* A hairline down the left edge of each card so an overlapped book can still
+     be counted at a glance — without it seven kings read as one smear. */
+  #myMelds .meld-cards .card.tiny{position:relative;box-shadow:-1px 0 0 rgba(0,0,0,.4)}
+  #myMelds .meld-cards .card.tiny + .card.tiny{margin-left:-9px}
   .meld{padding:5px 6px 6px}
   .meld-top{font-size:9.5px}
   .melds .card.tiny{--card-w:23px;--card-h:33px;width:23px;height:33px}
@@ -516,10 +541,20 @@ tbody tr:last-child td{border-bottom:0}
      rather than growing, so a big hand and eight books still end at the action
      bar instead of pushing the page into a scroll. The minimums stop either one
      being squeezed to nothing on a short screen. */
+  /* Cards sit on the bottom edge and build upwards, the way a hand you are
+     holding grows: the last row is always in the same place under your thumb,
+     and a big hand adds a row above rather than pushing everything down and
+     leaving a band of empty felt under your cards. */
+  /* The cap is what stops a big hand growing the page: the screen is sized with
+     min-height, so without it the column simply gets taller than the phone. Past
+     the cap the hand scrolls, and renderHand keeps it scrolled to the last row. */
   .hand{
-    gap:4px;overflow-y:auto;align-content:flex-start;
-    flex:1.6 1 0;min-height:76px;max-height:none;
+    gap:4px;overflow-y:auto;align-content:flex-end;
+    flex:0 1 auto;min-height:56px;max-height:34dvh;
   }
+  /* The hand takes exactly the rows it has and no more, so the slack collects in
+     your books above it rather than as a band of empty felt. A hand too big for
+     what is left shrinks and scrolls instead of pushing the table off-screen. */
   #myMelds{flex:1 1 0;min-height:52px}
   .hand .card{--card-w:41px;--card-h:58px;width:41px;height:58px}
   .hand .card .r{font-size:15px}
@@ -570,7 +605,7 @@ tbody tr:last-child td{border-bottom:0}
   .hand .card .r{font-size:14px}
   .hand .card .s{font-size:12px}
   .hand-row .card + .card{margin-left:-21px}
-  .hand{min-height:56px}
+  .hand{min-height:56px;max-height:30dvh}
   #myMelds{min-height:40px}
   .seats{max-height:112px}
 }
