@@ -11,6 +11,8 @@ var handLayout = 'spread';   // 'spread' = side by side, 'layered' = overlapped 
 var PER_ROW = 6;             // cards per row when layered
 var notice = '', noticeBad = false;
 var lastTurn = null;
+var nudgeOn = true;      // buzz or chime when the turn comes round to you
+var audioCtx = null;
 
 var $ = function (id) { return document.getElementById(id); };
 var SUIT_GLYPH = { S: '♠', H: '♥', D: '♦', C: '♣', R: '★', B: '★' };
@@ -53,7 +55,15 @@ function connect() {
     if (msg.t === 'state') {
       var first = !view;
       view = msg.view;
-      if (view.turn !== lastTurn) { sel = []; pileSel = []; lastTurn = view.turn; }
+      if (view.turn !== lastTurn) {
+        var was = lastTurn;
+        sel = []; pileSel = []; lastTurn = view.turn;
+        /* Bot turns go by in a second or two and it is easy to look away and
+         * miss your own coming round. Not on the first state of a session: that
+         * arrives on a reload, and buzzing at somebody for reopening the page
+         * teaches them to turn the whole thing off. */
+        if (!first && was !== null && isMyTurn() && view.phase === 'playing') nudge();
+      }
       /* Melding or discarding takes cards out of the hand, but they stayed in
        * the selection — so the next thing you picked up was judged together
        * with cards you had already laid down, and no legal play could be
@@ -163,6 +173,9 @@ function wire() {
     render();
   };
   $('clearSel').onclick = function () { sel = []; render(); };
+  nudgeOn = get('hf_nudge') !== 'off';
+  document.addEventListener('pointerdown', unlockAudio);
+  document.addEventListener('touchstart', unlockAudio);
   $('joinCode').oninput = function () {
     this.value = this.value.toUpperCase().replace(/[^A-Z]/g, '');
   };
@@ -682,6 +695,55 @@ function renderHand() {
     : '';
 }
 
+/* Your turn, when you are not looking at the screen. iPhones are the catch:
+ * Safari has no Vibration API at all, so navigator.vibrate is Android-only and
+ * on iOS this has to be a sound instead. Web Audio will not make a noise until
+ * the page has had a real tap, which unlockAudio below takes care of. */
+function nudge() {
+  if (!nudgeOn) return;
+  try {
+    if (navigator.vibrate && navigator.vibrate([90, 70, 90])) return;
+  } catch (e) { /* fall through to the chime */ }
+  chime();
+}
+
+function audio() {
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!audioCtx) { try { audioCtx = new AC(); } catch (e) { return null; } }
+  if (audioCtx.state === 'suspended') { try { audioCtx.resume(); } catch (e) {} }
+  return audioCtx;
+}
+
+/* Two soft notes rather than a beep — this goes off in somebody's living room
+ * every couple of minutes, so it has to be the kind of sound you stop noticing. */
+function chime() {
+  var ctx = audio();
+  if (!ctx) return;
+  try {
+    var t0 = ctx.currentTime + 0.01;
+    [659.25, 987.77].forEach(function (f, i) {
+      var at = t0 + i * 0.15;
+      var osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.14, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.24);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(at); osc.stop(at + 0.26);
+    });
+  } catch (e) { /* no sound is better than a thrown error mid-render */ }
+}
+
+/* Browsers keep audio silent until the person has interacted with the page, so
+ * the first tap anywhere opens the context and every later chime just works. */
+function unlockAudio() {
+  audio();
+  document.removeEventListener('pointerdown', unlockAudio);
+  document.removeEventListener('touchstart', unlockAudio);
+}
+
 function btn(label, fn, ghost) {
   var b = document.createElement('button');
   b.className = 'btn' + (ghost ? ' ghost' : '');
@@ -771,10 +833,18 @@ function renderActions() {
      * tooltip cannot reach anyone on a phone. */
     if (!notice && chance) {
       var offered = pileOffer();
+      var cards = chance.take + ' card' + (chance.take === 1 ? '' : 's');
       hint.innerHTML += offered
-        ? ' Or press <b>Take pile</b> for ' + chance.take + ' cards.'
+        ? ' Or press <b>Take pile</b> for ' + cards + '.'
         : ' Or select <b>' + chance.need + ' ' + E.rankName(chance.rank) + 's</b>' +
-          ' to take the pile — ' + chance.take + ' cards.';
+          ' to take the pile — ' + cards + '.';
+      /* Taking the pile before you are down is a part payment towards the
+       * minimum, not the whole of it. Saying so here is the difference between
+       * a play you make and a refusal you do not understand. */
+      if (view.you && !view.you.hasInitialMeld) {
+        hint.innerHTML += ' It counts towards your ' + view.minMeld +
+          ' — lay the rest before you discard.';
+      }
     }
     bar.appendChild(hint);
 
@@ -791,7 +861,8 @@ function renderActions() {
     bar.appendChild(d);
 
     var offer = pileOffer();
-    var take = btn('Take pile' + (offer ? ' · ' + offer.take + ' cards' : ''), function () {
+    var take = btn('Take pile' +
+      (offer ? ' · ' + offer.take + ' card' + (offer.take === 1 ? '' : 's') : ''), function () {
       act('pile', { cards: sel.slice() });
     }, true);
     take.disabled = !offer;
@@ -839,8 +910,12 @@ function renderActions() {
     }));
   }
 
-  if (view.turnState && view.turnState.melded > 0 && !view.turnState.tookPile) {
-    bar.appendChild(btn('Take melds back', function () { act('undo'); }, true));
+  /* Undoing a pile take hands the whole pile back and returns you to the draw,
+   * which is the only way out of taking it and then falling short of the
+   * minimum. Say which one the button is about to do. */
+  if (view.turnState && view.turnState.melded > 0) {
+    bar.appendChild(btn(view.turnState.tookPile ? 'Put the pile back' : 'Take melds back',
+      function () { act('undo'); }, true));
   }
 }
 
@@ -939,6 +1014,30 @@ function renderRules() {
   box.appendChild(input); box.appendChild(lab);
   body.appendChild(box);
 
+  /* Yours alone, not the table's — it lives in this browser and nobody else is
+   * affected by it, which is why it does not go through setRule. */
+  var nbox = document.createElement('div');
+  nbox.className = 'rule-toggle';
+  var nin = document.createElement('input');
+  nin.type = 'checkbox'; nin.id = 'ruleNudge'; nin.checked = nudgeOn;
+  nin.onchange = function () {
+    nudgeOn = nin.checked;
+    set('hf_nudge', nudgeOn ? 'on' : 'off');
+    if (nudgeOn) nudge();
+  };
+  var nlab = document.createElement('label');
+  nlab.setAttribute('for', 'ruleNudge');
+  var nt = document.createElement('div');
+  nt.className = 'rule-title';
+  nt.textContent = 'Nudge me when it is my turn';
+  var nd = document.createElement('div');
+  nd.className = 'note';
+  nd.textContent = 'A short buzz, or two soft notes on an iPhone — Safari will not let a ' +
+    'web page vibrate, so there it has to be a sound. Just for you, on this device.';
+  nlab.appendChild(nt); nlab.appendChild(nd);
+  nbox.appendChild(nin); nbox.appendChild(nlab);
+  body.appendChild(nbox);
+
   var h = document.createElement('h3');
   h.style.cssText = 'font-size:14px;margin:18px 0 8px';
   h.textContent = 'Fixed for this table';
@@ -950,7 +1049,8 @@ function renderRules() {
     ['Draw piles', S.stockPiles + ', and a two-card draw takes one from each of ' +
       S.distinctDrawPiles + ' different piles'],
     ['Taking the pile', S.pileNaturalsRequired + ' naturals matching the top card; you get it plus the ' +
-      S.pileTakeExtra + ' behind it'],
+      S.pileTakeExtra + ' behind it. Before you are down it counts towards the minimum ' +
+      'rather than having to cover it — put the pile back if you cannot get there'],
     ['Going down', S.minMelds.join(' / ') + ' across the four rounds, totalled over every meld that turn'],
     ['Book', S.bookSize + ' cards closes a book · red ' + S.redBookBonus + ' · black ' + S.blackBookBonus +
       '. A closed book keeps taking cards, and once it is closed you may start another of the same rank'],
@@ -997,14 +1097,24 @@ function renderScores() {
     h.textContent = 'This round';
     body.appendChild(h);
     var t1 = document.createElement('table');
-    t1.innerHTML = '<thead><tr><th>Player</th><th>Books</th><th>Melded</th><th>Red 3s</th>' +
-      '<th>Out</th><th>In hand</th><th>Round</th></tr></thead>';
+    t1.innerHTML = '<thead><tr><th>Player</th><th>Black books</th><th>Red books</th>' +
+      '<th>Table count</th><th>Out</th><th>Round</th></tr></thead>';
     var tb = document.createElement('tbody');
+    /* The columns the table keeps by hand. A books cell carries how many as well
+     * as what they were worth, because "600" on its own makes you do the division
+     * yourself. Table count is melded minus what you were caught holding, so it
+     * goes negative often enough to need its sign spelled out. */
+    var bookCell = function (n, pts) {
+      return n ? '<td>' + pts + '<span class="sub"> ×' + n + '</span></td>' : '<td>—</td>';
+    };
+    var signed = function (n) { return n < 0 ? '−' + Math.abs(n) : String(n); };
     view.roundDetail.forEach(function (r, i) {
       var tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + esc(view.seats[i].name) + '</td><td>' + r.books + '</td><td>' +
-        r.meldPts + '</td><td>' + r.threes + '</td><td>' + r.out + '</td><td>−' + r.left +
-        '</td><td class="total">' + r.total + '</td>';
+      tr.innerHTML = '<td>' + esc(view.seats[i].name) + '</td>' +
+        bookCell(r.blackBooks, r.blackPts) + bookCell(r.redBooks, r.redPts) +
+        '<td>' + signed(r.tableCount) + '</td>' +
+        '<td>' + (r.out || '—') + '</td>' +
+        '<td class="total">' + signed(r.total) + '</td>';
       tb.appendChild(tr);
     });
     t1.appendChild(tb);
