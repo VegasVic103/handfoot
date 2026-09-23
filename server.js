@@ -157,13 +157,30 @@ function viewFor(room, seat) {
       pileNaturalsRequired: S.pileNaturalsRequired,
       pileTakeExtra: S.pileTakeExtra,
       maxWildsInBook: S.maxWildsInBook,
+      minNaturalsInMeld: S.minNaturalsInMeld,
       minMelds: S.minMelds,
+      handSize: S.handSize,
+      footSize: S.footSize,
+      stockPiles: S.stockPiles,
+      redBookBonus: S.redBookBonus,
+      blackBookBonus: S.blackBookBonus,
+      goOutBonus: S.goOutBonus,
+      redThreeValue: S.redThreeValue,
+      redThreeAutoLayOff: !!S.redThreeAutoLayOff,
+      requireRedBook: S.requireRedBook,
+      requireBlackBook: S.requireBlackBook,
+      revealPileTake: !!S.revealPileTake,
     },
     seats: seats,
     you: you,
     stocks: (g.stocks || []).map(function (p) { return p.length; }),
     discardTop: g.discard.length ? g.discard[g.discard.length - 1] : null,
     discardCount: g.discard.length,
+    /* The cards a pile-take would bring in, when the table plays the pile
+     * open. Capped at what a take actually reaches, so it is never a window
+     * onto the rest of the pile — and null when the rule is off, so a browser
+     * that ignores the setting still has nothing to show. */
+    discardPeek: S.revealPileTake && g.discard.length ? G.pileTakeCards(g) : null,
     scores: g.scores,
     roundDetail: g.roundDetail || null,
     outSeat: typeof g.outSeat === 'number' ? g.outSeat : null,
@@ -269,6 +286,11 @@ function actingSeat(room, token) {
   return room.solo ? room.game.turn : seatOf(room, token);
 }
 
+/* House rules a player may change from the table. Deliberately short: these
+ * only change what everyone is allowed to see, never what counts as a legal
+ * play. Adding a rule here makes it settable by anyone at the table. */
+const SETTABLE_RULES = ['revealPileTake'];
+
 function applyAction(room, token, msg, forcedSeat) {
   const g = room.game;
   const seat = typeof forcedSeat === 'number' ? forcedSeat : actingSeat(room, token);
@@ -311,6 +333,19 @@ function applyAction(room, token, msg, forcedSeat) {
       return G.discard(g, seat, String(msg.card || ''));
     case 'undo':
       return G.undoTurnMelds(g, seat);
+    case 'setRule': {
+      /* Only the house rules that are genuinely a table's choice can be set
+       * from a browser, and only to a boolean. Everything that decides what is
+       * a legal play — book size, the minimums, the wild cap — stays in
+       * engine.js where no client can reach it. */
+      const key = String(msg.key || '');
+      if (SETTABLE_RULES.indexOf(key) === -1) return { ok: false, reason: 'That rule is not adjustable.' };
+      const value = !!msg.value;
+      if (g.settings[key] === value) return { ok: true };
+      g.settings[key] = value;
+      G.logRule(g, seat, key, value);
+      return { ok: true };
+    }
     case 'nextRound':
       if (g.phase !== 'roundEnd') return { ok: false, reason: 'The round is still in play.' };
       return G.nextRound(g);
