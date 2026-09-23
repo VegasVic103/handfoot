@@ -316,6 +316,32 @@ function botStep(c) {
   });
   ok(!everLeaked, 'no snapshot in the whole game carried another hand');
 
+  /* The just-picked-up markers are real card ids, so they have to ride inside
+   * `you` and never in the turnState everyone receives. If someone later moves
+   * that field for convenience, this is what should stop them. */
+  let pickedLeaked = false, sawPicked = false, pickedStrayed = false, sawOnlyMine = false;
+  a2.seenPayloads.forEach(function (p) {
+    const v = JSON.parse(p).view;
+    if (v.turnState && v.turnState.picked) pickedLeaked = true;
+    const picked = v.you && v.you.picked;
+    if (!picked || !picked.length) return;
+    sawPicked = true;
+    // A picked card may since have been melded or discarded — the interface
+    // shows only the ones still in hand — but it must never be a card sitting
+    // in somebody else's books.
+    const theirs = [];
+    v.seats.forEach(function (s, i) {
+      if (i === v.you.seat) return;
+      s.melds.forEach(function (m) { m.cards.forEach(function (c) { theirs.push(c); }); });
+    });
+    if (picked.some(function (c) { return theirs.indexOf(c) !== -1; })) pickedStrayed = true;
+    if (picked.some(function (c) { return v.you.hand.indexOf(c) !== -1; })) sawOnlyMine = true;
+  });
+  ok(!pickedLeaked, 'cards picked up this turn never ride in the shared turnState');
+  ok(sawPicked, 'a player is told which cards they just picked up');
+  ok(!pickedStrayed, 'a card marked as just picked up is never in anyone else’s books');
+  ok(sawOnlyMine, 'the marked cards show up in the holder’s own hand');
+
   console.log('\n' + pass + ' passed, ' + failed + ' failed');
   if (problems.length) problems.forEach(function (p) { console.log('   - ' + p); });
   [a2, b, d].forEach(function (c) { try { c.ws.close(); } catch (x) {} });
