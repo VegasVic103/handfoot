@@ -7,6 +7,14 @@
 <meta name="description" content="Online Hand and Foot for a small group — solo scoring, house rules refereed.">
 <meta name="theme-color" content="#16332b">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2316332b'/%3E%3Crect x='7' y='6' width='13' height='19' rx='2' fill='%23f2ece0'/%3E%3Cpath d='M22 9h4v17h-11' stroke='%23d6ae3e' stroke-width='2' fill='none'/%3E%3Cpath d='M13.5 11.5l3 4.5-3 4.5-3-4.5z' fill='%23b8342c'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<!-- Added to the Home Screen, the game runs without Safari's address bar and
+     toolbar, which is worth about a hundred pixels of table on a phone. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hand &amp; Foot">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Archivo:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
@@ -84,6 +92,20 @@
     </div>
 
     <p class="err" id="lobbyErr" hidden></p>
+
+    <!-- Shown only on an iPhone or iPad that is still in Safari. app.js hides it
+         once the game is running from the Home Screen, where it is just noise. -->
+    <div class="install" id="installTip" hidden>
+      <span class="install-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/>
+        </svg>
+      </span>
+      <span><b>Add it to your Home Screen.</b> Tap Share, then <b>Add to Home Screen</b>.
+        It opens full screen with no address bar, which gives you back a good inch of table.</span>
+      <button class="install-x" id="installDismiss" type="button" aria-label="Dismiss">&times;</button>
+    </div>
 
     <div class="rules-note">
       <b>House rules in force.</b>
