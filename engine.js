@@ -28,6 +28,13 @@ const DEFAULTS = {
   goOutBonus: 100,
   redThreeValue: -100,
   redThreeMode: 'penalty', // 'penalty' | 'bonus' | 'meldable'
+  /* How a red three behaves in play. This table plays them as dead cards: they
+   * sit in your hand like anything else, they cannot be melded, you discard
+   * them to be rid of them, and they only cost you the 100 if you are still
+   * holding one when the round ends. Set this true for the other common rule,
+   * where a red three lays itself face up the moment it arrives and a
+   * replacement card is drawn in its place. */
+  redThreeAutoLayOff: false,
   requireRedBook: 1,
   requireBlackBook: 1,
 };
