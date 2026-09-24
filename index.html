@@ -18,6 +18,21 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Archivo:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
+<!-- Your deck and cloth, set before anything is drawn. app.js runs at the end
+     of the body, which is one paint too late: without this the table appears
+     in the default green and then changes under you. -->
+<script>
+(function () {
+  try {
+    var d = document.documentElement;
+    var c = localStorage.getItem('hf_cards');
+    var t = localStorage.getItem('hf_theme');
+    d.setAttribute('data-cards', /^(classic|two|four)$/.test(c || '') ? c : 'classic');
+    d.setAttribute('data-theme',
+      /^(room|midnight|claret|graphite|mahogany)$/.test(t || '') ? t : 'room');
+  } catch (e) { /* private window: the defaults in the stylesheet stand */ }
+})();
+</script>
 </head>
 <body>
 
@@ -142,7 +157,7 @@
       <div class="spacer"></div>
       <span class="pill" id="turnPill">&mdash;</span>
       <button class="btn ghost sm" id="scoresBtn">Scores</button>
-      <button class="btn ghost sm" id="rulesBtn" title="The house rules in force, and the ones this table can change">
+      <button class="btn ghost sm" id="rulesBtn" title="The house rules in force, the ones this table can change, and your own choice of cards and cloth">
         <span class="only-wide">Rules</span><span class="only-narrow">&#9881;</span>
       </button>
       <button class="btn ghost sm" id="leaveBtn">Leave</button>
@@ -189,7 +204,7 @@
 <div class="sheet" id="rulesSheet" hidden>
   <div class="sheet-in">
     <div class="sect-head" style="margin-bottom:14px">
-      <h2 style="font-size:22px">House rules</h2>
+      <h2 style="font-size:22px">Rules &amp; look</h2>
       <div class="spacer" style="flex:1"></div>
       <button class="btn ghost sm" id="closeRules">Close</button>
     </div>
