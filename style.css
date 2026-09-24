@@ -4,8 +4,11 @@
 :root{
   --felt:#16332b;
   --felt-deep:#0e221c;
+  --felt-hi:#1d4136;            /* the lit top of the table, in the body wash */
+  --bar-bg:rgba(14,34,28,.94);
   --rail:#1d3f34;
   --rail-hi:#27503f;
+  --rail-lo:#1a3a30;            /* the foot of a lobby panel */
   --line:#2f5748;
   --bone:#f2ece0;
   --bone-2:#e3dacb;
@@ -21,6 +24,54 @@
   --card-w:46px;
   --card-h:66px;
   color-scheme:dark;
+
+  /* Faces for the solid card styles. Chosen by measured contrast, not by eye:
+     each carries at least 5.8:1 against the card's own lettering, and the three
+     coloured ones sit within 0.002 of each other in luminance so they read as
+     one set rather than one of them looking washed out next to the others. */
+  --suit-black:#1b2026;
+  --suit-red:#ae2f28;
+  --suit-blue:#1f5fa8;
+  --suit-green:#1d6b41;
+  --suit-dead:#4a5560;          /* red threes: a dead card should look dead */
+  --face-ink:#f7f4ec;
+
+  /* The deck in force, as inherited properties rather than descendant rules.
+     That matters because the settings sheet shows a sample of each deck while
+     the page is wearing a different one: a custom property is taken from the
+     nearest ancestor that sets it, so a sample can carry its own data-cards
+     and win locally, which `[data-cards] .card` could never do — those would
+     all match and source order, not nesting, would decide.
+     These are the Classic values, and they also stand in for a browser that
+     never got the attribute set at all. */
+  --f-bone:linear-gradient(170deg,var(--bone) 0%,var(--bone-2) 100%);
+  --f-s:var(--f-bone);--f-h:var(--f-bone);--f-d:var(--f-bone);
+  --f-c:var(--f-bone);--f-r:var(--f-bone);--f-b:var(--f-bone);
+  --f-dead:var(--f-bone);
+  --f-edge:#c9bfad;
+  --tx-black:var(--ink);
+  --tx-red:var(--rouge);
+  --wc-deuce:var(--deuce);
+}
+
+/* ---------- table themes ----------
+   Only the table changes. Cards, brass and the red of a clean book stay put,
+   so a book still reads the same whichever cloth you are playing on. */
+:root[data-theme="midnight"]{
+  --felt:#182234;--felt-deep:#0d1420;--felt-hi:#1f2d45;--bar-bg:rgba(13,20,32,.94);
+  --rail:#1d2a40;--rail-lo:#1a2538;--rail-hi:#27364f;--line:#2f4258;--dim:#9aa8bd;
+}
+:root[data-theme="claret"]{
+  --felt:#2a1519;--felt-deep:#1a0c0f;--felt-hi:#371c21;--bar-bg:rgba(26,12,15,.94);
+  --rail:#351a1f;--rail-lo:#2f171c;--rail-hi:#452228;--line:#4a2a30;--dim:#bda3a3;
+}
+:root[data-theme="graphite"]{
+  --felt:#22262b;--felt-deep:#15181c;--felt-hi:#2b3036;--bar-bg:rgba(21,24,28,.94);
+  --rail:#2a2f35;--rail-lo:#262b31;--rail-hi:#353b42;--line:#3c434b;--dim:#a8aeb5;
+}
+:root[data-theme="mahogany"]{
+  --felt:#2b1d14;--felt-deep:#1a110b;--felt-hi:#38271b;--bar-bg:rgba(26,17,11,.94);
+  --rail:#372619;--rail-lo:#312116;--rail-hi:#463122;--line:#4b3524;--dim:#bda898;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -34,7 +85,7 @@ html,body{height:100%}
 body{
   margin:0;
   background:
-    radial-gradient(120% 90% at 50% 0%, #1d4136 0%, var(--felt) 45%, var(--felt-deep) 100%);
+    radial-gradient(120% 90% at 50% 0%, var(--felt-hi) 0%, var(--felt) 45%, var(--felt-deep) 100%);
   color:var(--bone);
   font:400 14px/1.45 Archivo, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing:antialiased;
@@ -69,7 +120,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .brand p{color:var(--dim);margin:12px auto 0;max-width:46ch;font-size:14px}
 .panels{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:26px}
 .panel{
-  background:linear-gradient(180deg,var(--rail) 0%,#1a3a30 100%);
+  background:linear-gradient(180deg,var(--rail) 0%,var(--rail-lo) 100%);
   border:1px solid var(--line);border-radius:14px;padding:18px;
   display:flex;flex-direction:column;gap:10px;
 }
@@ -80,7 +131,7 @@ input[type=text],select{
   background:var(--felt-deep);border:1px solid var(--line);color:var(--bone);
   border-radius:8px;padding:9px 11px;font:500 15px Archivo,sans-serif;width:100%;
 }
-input[type=text]::placeholder{color:#5f776c}
+input[type=text]::placeholder{color:var(--dim);opacity:.6}
 #joinCode{text-transform:uppercase;letter-spacing:.3em;font-weight:700;font-family:"Bodoni Moda",serif;font-size:19px}
 .btn{
   background:var(--brass);color:#22190a;border-radius:8px;padding:10px 16px;
@@ -113,7 +164,7 @@ input[type=text]::placeholder{color:#5f776c}
 /* ---------- table chrome ---------- */
 .bar{
   position:sticky;top:0;z-index:20;
-  background:rgba(14,34,28,.94);backdrop-filter:blur(8px);
+  background:var(--bar-bg);backdrop-filter:blur(8px);
   border-bottom:1px solid var(--line);
   /* Run the bar's own background up behind the notch and push its contents
      clear of it. In Safari this inset is zero and nothing moves; added to the
@@ -212,8 +263,9 @@ input[type=text]::placeholder{color:#5f776c}
 /* ---------- cards ---------- */
 .card{
   width:var(--card-w);height:var(--card-h);border-radius:6px;
-  background:linear-gradient(170deg,var(--bone) 0%,var(--bone-2) 100%);
-  color:var(--ink);border:1px solid #c9bfad;
+  --face:var(--f-s);
+  background:var(--face);
+  color:var(--tx-black);border:1px solid var(--f-edge);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   font-weight:700;line-height:1;position:relative;
   box-shadow:0 1px 2px rgba(0,0,0,.45);
@@ -222,7 +274,15 @@ input[type=text]::placeholder{color:#5f776c}
 }
 .card .r{font-size:17px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .card .s{font-size:15px;line-height:1}
-.card.red{color:var(--rouge)}
+.card.red{color:var(--tx-red)}
+/* Each card takes its face from its own suit. In Classic all six resolve to
+   the same bone, so this costs nothing there. */
+.card.su-s{--face:var(--f-s)}
+.card.su-h{--face:var(--f-h)}
+.card.su-d{--face:var(--f-d)}
+.card.su-c{--face:var(--f-c)}
+.card.su-r{--face:var(--f-r)}
+.card.su-b{--face:var(--f-b)}
 .card.back{
   background:
     repeating-linear-gradient(45deg,#7c2a25 0 4px,#8f312b 4px 8px);
@@ -239,13 +299,56 @@ input[type=text]::placeholder{color:#5f776c}
   border-radius:5px 5px 0 0;background:var(--wc);
 }
 .card.joker{--wc:var(--brass)}
-.card.deuce{--wc:var(--deuce)}
-.card.dead{--wc:var(--rouge)}
+.card.deuce{--wc:var(--wc-deuce)}
+/* After the suit rules on purpose: a red three gives up its suit colour. */
+.card.dead{--wc:var(--rouge);--face:var(--f-dead)}
 .card.tiny{--card-w:30px;--card-h:43px;width:30px;height:43px;border-radius:4px}
 .card.tiny.wild::before{height:3px;border-radius:3px 3px 0 0}
 .card.tiny .r{font-size:12px}
 .card.tiny .s{font-size:10px}
 .card[disabled]{cursor:default}
+
+/* ---------- the solid decks ----------
+   The whole face carries the colour instead of just the pip. At the size a
+   meld card is drawn on a phone that is far easier to read across a table than
+   a small red or black mark on cream, which is why the online rooms moved to
+   it. The rank and the pip both stay: in the two-colour deck hearts and
+   diamonds share a red, so colour alone can never tell you the suit.
+
+   A deuce's band is normally blue, which would disappear on a blue diamond, so
+   on a solid face it turns bone. The joker's brass already stands off all four
+   colours. A red three can never be played, so it gives up its suit colour and
+   goes grey — which also leaves its red band somewhere to show. */
+/* Classic has to be able to state itself, not just be the :root default: a
+   Classic sample sits inside a page that may be wearing a solid deck, and
+   without this it would inherit that page's colours. */
+[data-cards="classic"]{
+  --f-s:var(--f-bone);--f-h:var(--f-bone);--f-d:var(--f-bone);
+  --f-c:var(--f-bone);--f-r:var(--f-bone);--f-b:var(--f-bone);
+  --f-dead:var(--f-bone);
+  --f-edge:#c9bfad;
+  --tx-black:var(--ink);
+  --tx-red:var(--rouge);
+  --wc-deuce:var(--deuce);
+}
+[data-cards="two"],[data-cards="four"]{
+  --f-edge:rgba(255,255,255,.3);
+  --tx-black:var(--face-ink);
+  --tx-red:var(--face-ink);
+  --wc-deuce:var(--bone);
+  --f-dead:var(--suit-dead);
+}
+[data-cards="two"]{
+  --f-s:var(--suit-black);--f-c:var(--suit-black);--f-b:var(--suit-black);
+  --f-h:var(--suit-red);--f-d:var(--suit-red);--f-r:var(--suit-red);
+}
+/* The four-colour deck as the online rooms settled it. */
+[data-cards="four"]{
+  --f-s:var(--suit-black);--f-b:var(--suit-black);
+  --f-h:var(--suit-red);--f-r:var(--suit-red);
+  --f-d:var(--suit-blue);
+  --f-c:var(--suit-green);
+}
 
 /* ---------- melds ---------- */
 .melds{display:flex;flex-wrap:wrap;gap:8px}
@@ -413,7 +516,7 @@ tbody tr:last-child td{border-bottom:0}
 }
 .rule-toggle input{
   appearance:none;flex:0 0 auto;width:44px;height:25px;border-radius:999px;margin:1px 0 0;
-  background:#2a4d41;border:1px solid var(--line);cursor:pointer;position:relative;
+  background:var(--rail-hi);border:1px solid var(--line);cursor:pointer;position:relative;
   transition:background .15s, border-color .15s;
 }
 .rule-toggle input::after{
@@ -424,6 +527,36 @@ tbody tr:last-child td{border-bottom:0}
 .rule-toggle input:checked::after{transform:translateX(19px);background:var(--bone)}
 .rule-toggle label{cursor:pointer;display:block}
 .rule-title{font-weight:700;font-size:14px;margin-bottom:3px}
+.rule-head{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+  font-family:Archivo,sans-serif;font-weight:700;margin:22px 0 9px}
+.rule-head:first-child{margin-top:0}
+
+/* ---------- picking a deck and a cloth ---------- */
+.look-row{
+  background:var(--felt-deep);border:1px solid var(--line);border-radius:10px;
+  padding:13px 14px;margin-bottom:10px;
+}
+.look-opts{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.look-opt{
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  border:1px solid var(--line);border-radius:9px;padding:8px 9px;
+  background:rgba(0,0,0,.2);transition:border-color .12s, background .12s;
+}
+.look-opt:hover{border-color:var(--rail-hi)}
+.look-opt.on{border-color:var(--brass);background:rgba(214,174,62,.12)}
+.look-name{font-size:12px;font-weight:600;color:var(--dim)}
+.look-opt.on .look-name{color:var(--brass)}
+.look-note{margin-top:9px}
+/* The deck sample is built from real cards, so it comes with their sizing.
+   Squared up like a meld, which is where the deck has to work hardest. */
+.deck-sample{display:flex}
+.deck-sample .card{--card-w:22px;--card-h:32px;width:22px;height:32px;
+  border-radius:3px;cursor:default}
+.deck-sample .card + .card{margin-left:-6px}
+.deck-sample .card .r{font-size:10px}
+.deck-sample .card .s{font-size:8px}
+.deck-sample .card.wild::before{height:3px;border-radius:2px 2px 0 0}
+.theme-sample{display:block;width:62px;height:32px;border-radius:4px;border:1px solid var(--line)}
 
 .peek-cards{display:flex;flex-wrap:wrap;gap:9px}
 .peek-card{display:flex;flex-direction:column;align-items:center;gap:4px}
