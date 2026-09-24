@@ -16,11 +16,64 @@ var nudgeOn = true;      // announce the turn coming round to you
 var $ = function (id) { return document.getElementById(id); };
 var SUIT_GLYPH = { S: '♠', H: '♥', D: '♦', C: '♣', R: '★', B: '★' };
 
+/* ---------------- how it looks ----------------
+ * Yours alone. Nobody else at the table sees your choice and none of it
+ * reaches the server, so two people can sit at the same table with different
+ * decks and different cloth. It is kept in this browser, which means it
+ * follows you between games but not between devices. */
+
+var CARD_STYLES = [
+  { id: 'classic', name: 'Classic',
+    note: 'Bone faces with a red or black pip, the way a real deck is printed.' },
+  { id: 'two', name: 'Two colour',
+    note: 'The whole face is red or black. Easiest to read across a table.' },
+  { id: 'four', name: 'Four colour',
+    note: 'Spades black, hearts red, diamonds blue, clubs green, as the online rooms do it.' },
+];
+/* Each swatch is a miniature of the real table: the same three stops the body
+ * wash uses, so what you pick is what you get. */
+var THEMES = [
+  { id: 'room', name: 'Card room', hi: '#1d4136', mid: '#16332b', lo: '#0e221c' },
+  { id: 'midnight', name: 'Midnight', hi: '#1f2d45', mid: '#182234', lo: '#0d1420' },
+  { id: 'claret', name: 'Claret', hi: '#371c21', mid: '#2a1519', lo: '#1a0c0f' },
+  { id: 'graphite', name: 'Graphite', hi: '#2b3036', mid: '#22262b', lo: '#15181c' },
+  { id: 'mahogany', name: 'Mahogany', hi: '#38271b', mid: '#2b1d14', lo: '#1a110b' },
+];
+var cardStyle = 'classic';
+var theme = 'room';
+
 /* ---------------- storage (never load-bearing) ---------------- */
 
 function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } }
 function del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+
+function has(list, id) {
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return true;
+  return false;
+}
+
+/* Written straight onto <html>, so a theme or a deck is one attribute and the
+ * stylesheet does the rest. Applied before the first paint, not on render, so
+ * nobody watches the table change colour a moment after it appears. */
+function applyLook() {
+  var el = document.documentElement;
+  el.setAttribute('data-cards', cardStyle);
+  el.setAttribute('data-theme', theme);
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.setAttribute('content',
+      getComputedStyle(el).getPropertyValue('--felt').trim() || '#16332b');
+  }
+}
+
+function loadLook() {
+  var c = get('hf_cards'), t = get('hf_theme');
+  if (c && has(CARD_STYLES, c)) cardStyle = c;
+  if (t && has(THEMES, t)) theme = t;
+  applyLook();
+}
+loadLook();
 
 var memory = {};
 function sessionToken() {
@@ -347,7 +400,8 @@ function wildClass(id) {
 function cardEl(id, opts) {
   opts = opts || {};
   var b = document.createElement(opts.click ? 'button' : 'div');
-  b.className = 'card' + (E.isRed(id) ? ' red' : '') + (opts.tiny ? ' tiny' : '') +
+  b.className = 'card' + (E.isRed(id) ? ' red' : '') +
+    ' su-' + E.suitOf(id).toLowerCase() + (opts.tiny ? ' tiny' : '') +
     (opts.selected ? ' sel' : '') + wildClass(id);
   var r = document.createElement('span'); r.className = 'r';
   var s = document.createElement('span'); s.className = 's';
@@ -1004,9 +1058,142 @@ function showPeek() {
 /* The house rules, with the ones this table can actually change as switches.
  * Everything else is shown so nobody has to remember, and so a disagreement
  * mid-game has somewhere to be settled. */
+/* A row of choices with a live sample beside them. The sample is built from
+ * real card elements rather than a picture, so it is always exactly what the
+ * table will look like — there is nothing to keep in step. */
+function lookPicker(label, blurb, options, current, onPick, sample) {
+  var wrap = document.createElement('div');
+  wrap.className = 'look-row';
+
+  var head = document.createElement('div');
+  head.className = 'rule-title';
+  head.textContent = label;
+  wrap.appendChild(head);
+
+  if (blurb) {
+    var b = document.createElement('div');
+    b.className = 'note';
+    b.textContent = blurb;
+    wrap.appendChild(b);
+  }
+
+  var opts = document.createElement('div');
+  opts.className = 'look-opts';
+  options.forEach(function (o) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'look-opt' + (o.id === current ? ' on' : '');
+    btn.setAttribute('aria-pressed', o.id === current ? 'true' : 'false');
+    if (sample) btn.appendChild(sample(o));
+    var n = document.createElement('span');
+    n.className = 'look-name';
+    n.textContent = o.name;
+    btn.appendChild(n);
+    btn.onclick = function () { onPick(o.id); };
+    opts.appendChild(btn);
+  });
+  wrap.appendChild(opts);
+
+  var note = null;
+  options.forEach(function (o) { if (o.id === current && o.note) note = o.note; });
+  if (note) {
+    var nd = document.createElement('div');
+    nd.className = 'note look-note';
+    nd.textContent = note;
+    wrap.appendChild(nd);
+  }
+  return wrap;
+}
+
+/* Four cards that between them show everything the deck has to say: a red
+ * suit, a black suit, the two other suits the four-colour deck splits out,
+ * and a deuce, whose band changes on a solid face. */
+var LOOK_SAMPLE = ['AH', 'KS', 'QD', '2C'];
+
+function deckSample(styleId) {
+  var box = document.createElement('span');
+  box.className = 'deck-sample';
+  // The sample must ignore whatever is currently applied to the page and show
+  // the style being offered, so it carries its own data-cards.
+  box.setAttribute('data-cards', styleId);
+  LOOK_SAMPLE.forEach(function (c) {
+    box.appendChild(cardEl(c, { tiny: true }));
+  });
+  return box;
+}
+
+function themeSample(t) {
+  var s = document.createElement('span');
+  s.className = 'theme-sample';
+  s.style.background = 'radial-gradient(120% 90% at 50% 0%, ' +
+    t.hi + ' 0%, ' + t.mid + ' 45%, ' + t.lo + ' 100%)';
+  return s;
+}
+
+function renderLook(body) {
+  var h = document.createElement('h3');
+  h.className = 'rule-head';
+  h.textContent = 'Just for you';
+  body.appendChild(h);
+
+  var intro = document.createElement('div');
+  intro.className = 'note';
+  intro.style.marginBottom = '12px';
+  intro.textContent = 'Nobody else at the table sees these. They are kept in this ' +
+    'browser, so they follow you from game to game but not onto another device.';
+  body.appendChild(intro);
+
+  body.appendChild(lookPicker(
+    'Cards', null, CARD_STYLES, cardStyle,
+    function (id) {
+      cardStyle = id; set('hf_cards', id); applyLook(); renderRules(); render();
+    },
+    function (o) { return deckSample(o.id); }
+  ));
+
+  body.appendChild(lookPicker(
+    'Table', null, THEMES, theme,
+    function (id) {
+      theme = id; set('hf_theme', id); applyLook(); renderRules();
+    },
+    themeSample
+  ));
+
+  /* Also yours alone, and for the same reason it does not go through setRule. */
+  var nbox = document.createElement('div');
+  nbox.className = 'rule-toggle';
+  var nin = document.createElement('input');
+  nin.type = 'checkbox'; nin.id = 'ruleNudge'; nin.checked = nudgeOn;
+  nin.onchange = function () {
+    nudgeOn = nin.checked;
+    set('hf_nudge', nudgeOn ? 'on' : 'off');
+    if (nudgeOn) announceTurn();
+  };
+  var nlab = document.createElement('label');
+  nlab.setAttribute('for', 'ruleNudge');
+  var nt = document.createElement('div');
+  nt.className = 'rule-title';
+  nt.textContent = 'Show a notice when it is my turn';
+  var nd = document.createElement('div');
+  nd.className = 'note';
+  nd.textContent = 'A banner across the top for a few seconds, and the turn pill keeps ' +
+    'pulsing until you play. No sound. On an Android phone it buzzes as well — an ' +
+    'iPhone cannot be made to vibrate from a web page.';
+  nlab.appendChild(nt); nlab.appendChild(nd);
+  nbox.appendChild(nin); nbox.appendChild(nlab);
+  body.appendChild(nbox);
+}
+
 function renderRules() {
   var body = $('rulesBody'); body.innerHTML = '';
   var S = view.settings;
+
+  renderLook(body);
+
+  var rh = document.createElement('h3');
+  rh.className = 'rule-head';
+  rh.textContent = 'Agreed at this table';
+  body.appendChild(rh);
 
   var box = document.createElement('div');
   box.className = 'rule-toggle';
@@ -1030,33 +1217,8 @@ function renderRules() {
   box.appendChild(input); box.appendChild(lab);
   body.appendChild(box);
 
-  /* Yours alone, not the table's — it lives in this browser and nobody else is
-   * affected by it, which is why it does not go through setRule. */
-  var nbox = document.createElement('div');
-  nbox.className = 'rule-toggle';
-  var nin = document.createElement('input');
-  nin.type = 'checkbox'; nin.id = 'ruleNudge'; nin.checked = nudgeOn;
-  nin.onchange = function () {
-    nudgeOn = nin.checked;
-    set('hf_nudge', nudgeOn ? 'on' : 'off');
-    if (nudgeOn) announceTurn();
-  };
-  var nlab = document.createElement('label');
-  nlab.setAttribute('for', 'ruleNudge');
-  var nt = document.createElement('div');
-  nt.className = 'rule-title';
-  nt.textContent = 'Show a notice when it is my turn';
-  var nd = document.createElement('div');
-  nd.className = 'note';
-  nd.textContent = 'A banner across the top for a few seconds, and the turn pill keeps ' +
-    'pulsing until you play. No sound. On an Android phone it buzzes as well — an ' +
-    'iPhone cannot be made to vibrate from a web page. Just for you, on this device.';
-  nlab.appendChild(nt); nlab.appendChild(nd);
-  nbox.appendChild(nin); nbox.appendChild(nlab);
-  body.appendChild(nbox);
-
   var h = document.createElement('h3');
-  h.style.cssText = 'font-size:14px;margin:18px 0 8px';
+  h.className = 'rule-head';
   h.textContent = 'Fixed for this table';
   body.appendChild(h);
 
