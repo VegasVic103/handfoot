@@ -272,8 +272,20 @@ function forceBotDiscard(room, seat) {
     G.drawStock(g, seat, live.length >= g.settings.distinctDrawPiles ? [live[0], live[1]] : []);
   }
   if (g.phase !== 'playing' || g.turn !== seat) return;
-  const hand = g.players[seat].hand.filter(function (c) { return !E.isRedThree(c); });
-  for (const c of hand) { if (G.discard(g, seat, c).ok) return; }
+  const tryAll = function () {
+    const hand = g.players[seat].hand.filter(function (c) { return !E.isRedThree(c); });
+    for (const c of hand) { if (G.discard(g, seat, c).ok) return true; }
+    // A red three is a legal discard at this table, so fall back to one.
+    for (const c of g.players[seat].hand.slice()) { if (G.discard(g, seat, c).ok) return true; }
+    return false;
+  };
+  if (tryAll()) return;
+  /* Nothing it holds can be thrown. In the foot that means it has melded down
+   * past the two cards the rule makes it keep, so hand back this turn's melds
+   * and discard from the hand it started with. A bot should never reach here —
+   * layBudget stops it — but a wedged seat would stall the whole table. */
+  G.undoTurnMelds(g, seat);
+  tryAll();
 }
 
 function sendTo(ws, obj) {
