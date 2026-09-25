@@ -385,7 +385,10 @@ function tx(state, seat, apply) {
   return r;
 }
 
-/* After a play, a player in their foot must still have a legal discard. */
+/* After a play, a player in their foot must still be able to finish the turn
+ * holding something. Once you are in your foot you may never be left with an
+ * empty hand unless you are going out, so a turn that ends in a discard needs
+ * two cards: one to throw and one to keep. */
 function legalToStop(state, seat) {
   const p = state.players[seat];
   if (!p.inFoot) return done();
@@ -395,13 +398,29 @@ function legalToStop(state, seat) {
   const live = state.settings.redThreeAutoLayOff
     ? p.hand.filter((c) => !E.isRedThree(c)).length
     : p.hand.length;
-  // One card left is enough: you discard it and the turn ends normally.
-  if (live >= 1) return done();
+  const out = canGoOut(state, seat);
+
   /* Nothing left at all. The only legal way to be here is going out, which at
    * this table means every card played into a meld and none discarded. */
-  const out = canGoOut(state, seat);
+  if (p.hand.length === 0) {
+    if (out.ok) return done();
+    return fail('Keep a card to discard unless you are going out — ' + out.reason.toLowerCase(),
+      'foot_empty');
+  }
+  // Two cards: one to discard, and one still in hand when the turn ends.
+  if (live >= 1 && p.hand.length >= 2) return done();
+  /* Down to one. Allowed only while you are on your way out — you already hold
+   * the books, so that last card can still go into a meld. Stopping here is
+   * caught by the discard, which refuses to empty your hand. Without this a
+   * going out that takes two separate melds could never be played, because the
+   * state in between them would be rolled back. */
   if (out.ok) return done();
-  return fail('Keep a card to discard unless you are going out — ' + out.reason.toLowerCase());
+  if (live === 0) {
+    return fail('Nothing left that you are allowed to discard — ' + out.reason.toLowerCase(),
+      'foot_no_discard');
+  }
+  return fail('In your foot, keep two cards back — one to discard and one to hold on to — ' +
+    'unless you are going out. ' + out.reason, 'foot_keep_two');
 }
 
 /* Emptying the hand picks up the foot and the turn continues. */
@@ -453,6 +472,16 @@ function discard(state, seat, card) {
   // it goes face up the moment it arrives, puts it out of reach.
   if (S.redThreeAutoLayOff && E.isRedThree(card)) {
     return fail('Red threes are laid off, not discarded.');
+  }
+  /* In your foot you may never be left holding nothing. Going out is the one
+   * way to end a turn empty-handed, and going out has no discard at all —
+   * every card goes into a meld — so a discard that empties your hand is
+   * always illegal here, books or no books. Checked before anything is moved,
+   * so a refusal costs the player nothing. */
+  if (p.inFoot && p.hand.length === 1) {
+    return fail('That is your last card. In your foot you have to keep one — ' +
+      'the only way to finish with an empty hand is to go out, which means ' +
+      'melding it instead of discarding it.', 'foot_last_card');
   }
 
   if (!p.hasInitialMeld && state.turnState.melded > 0) {
