@@ -512,55 +512,115 @@ function seatChips(s, mine) {
   return out;
 }
 
-function renderSeats() {
-  var wrap = $('seats'); wrap.innerHTML = '';
-  view.seats.forEach(function (s, i) {
-    var d = document.createElement('div');
-    d.className = 'seat' + (view.phase === 'playing' && view.turn === i ? ' active' : '') +
-      (i === meSeat() ? ' me' : '');
+/* The seats are updated in place rather than rebuilt.
+ *
+ * Another player's books scroll sideways on a phone, and a scroll position
+ * does not survive its element being taken out of the page and put back —
+ * which is what a rebuild does. Every state message rebuilt them, so each card
+ * anybody played threw you back to their first book mid-swipe. Changing the
+ * contents of a strip that stays put keeps the offset, so the only thing that
+ * moves the view now is your own finger. */
+var seatNodes = [];
 
-    var top = document.createElement('div'); top.className = 'seat-top';
-    var nm = document.createElement('span'); nm.className = 'seat-name';
-    nm.textContent = s.name + (i === meSeat() && !view.solo ? ' (you)' : '');
-    var meta = document.createElement('span'); meta.className = 'seat-meta';
+/* What a seat's books look like, as a string. Same string, same books, so the
+ * strip is left completely alone — including the flash on a fresh play, which
+ * would otherwise rebuild it again a few seconds later when it faded. */
+function meldsSignature(s) {
+  var parts = [];
+  orderMelds(s.melds).forEach(function (m) {
+    var st = meldStatsOf(m);
+    parts.push(m.rank + ':' + st.wilds + (st.complete ? 'c' : '') + ':' +
+      orderCards(m.cards).map(function (c) {
+        return c + (isFreshPlay(c) ? '*' : '');
+      }).join(','));
+  });
+  return parts.join('|');
+}
+
+function fillMelds(ms, s) {
+  ms.innerHTML = '';
+  var fresh = false;
+  orderMelds(s.melds).forEach(function (m) {
+    var st = meldStatsOf(m);
+    var box = document.createElement('div');
+    box.className = 'meld ' + (st.wilds === 0 ? 'clean' : 'dirty') +
+      (st.complete ? ' done' : '');
+    var head = document.createElement('div'); head.className = 'meld-top';
+    head.textContent = E.rankName(m.rank) + 's · ' + m.cards.length;
+    var mini = document.createElement('div'); mini.className = 'meld-mini';
+    orderCards(m.cards).forEach(function (c) {
+      var sp = document.createElement('span');
+      sp.className = 'mini' + wildClass(c) + (isFreshPlay(c) ? ' just-played' : '');
+      if (isFreshPlay(c)) fresh = true;
+      sp.title = E.label(c) + ' · ' + E.cardValue(c) + ' points';
+      mini.appendChild(sp);
+    });
+    box.appendChild(head); box.appendChild(mini);
+    ms.appendChild(box);
+  });
+  return fresh;
+}
+
+function renderSeats() {
+  var wrap = $('seats');
+  // Seats only change in number between games, so that is the one time the
+  // whole thing starts over.
+  if (seatNodes.length !== view.seats.length) {
+    wrap.innerHTML = '';
+    seatNodes = view.seats.map(function () {
+      var d = document.createElement('div');
+      var top = document.createElement('div'); top.className = 'seat-top';
+      var nm = document.createElement('span'); nm.className = 'seat-name';
+      var meta = document.createElement('span'); meta.className = 'seat-meta';
+      top.appendChild(nm); top.appendChild(meta);
+      var chips = document.createElement('div'); chips.className = 'chips';
+      d.appendChild(top); d.appendChild(chips);
+      wrap.appendChild(d);
+      return { seat: d, name: nm, meta: meta, chips: chips, melds: null, sig: null };
+    });
+  }
+
+  view.seats.forEach(function (s, i) {
+    var n = seatNodes[i];
+
+    n.name.textContent = s.name + (i === meSeat() && !view.solo ? ' (you)' : '');
     // Short enough that a seat's badges still fit beside it on a phone.
-    meta.textContent = view.phase === 'lobby'
+    n.meta.textContent = view.phase === 'lobby'
       ? (s.seated ? 'seated' : 'empty')
       : s.handCount + ' hand · ' + (s.inFoot ? 'in foot' : s.footCount + ' foot');
-    meta.title = s.handCount + ' cards in hand, ' +
+    n.meta.title = s.handCount + ' cards in hand, ' +
       (s.inFoot ? 'already in their foot' : s.footCount + ' waiting in their foot');
-    top.appendChild(nm); top.appendChild(meta);
-    d.appendChild(top);
 
-    var chips = document.createElement('div'); chips.className = 'chips';
-    seatChips(s, i === meSeat()).forEach(function (c) { chips.appendChild(c); });
-    if (chips.children.length) d.appendChild(chips);
+    n.chips.innerHTML = '';
+    seatChips(s, i === meSeat()).forEach(function (c) { n.chips.appendChild(c); });
+    n.chips.hidden = !n.chips.children.length;
 
-    if (s.melds.length) {
-      var ms = document.createElement('div'); ms.className = 'melds';
-      var seatFresh = false;
-      orderMelds(s.melds).forEach(function (m) {
-        var st = meldStatsOf(m);
-        var box = document.createElement('div');
-        box.className = 'meld ' + (st.wilds === 0 ? 'clean' : 'dirty') +
-          (st.complete ? ' done' : '');
-        var head = document.createElement('div'); head.className = 'meld-top';
-        head.textContent = E.rankName(m.rank) + 's · ' + m.cards.length;
-        var mini = document.createElement('div'); mini.className = 'meld-mini';
-        orderCards(m.cards).forEach(function (c) {
-          var sp = document.createElement('span');
-          sp.className = 'mini' + wildClass(c) + (isFreshPlay(c) ? ' just-played' : '');
-          if (isFreshPlay(c)) seatFresh = true;
-          sp.title = E.label(c) + ' · ' + E.cardValue(c) + ' points';
-          mini.appendChild(sp);
-        });
-        box.appendChild(head); box.appendChild(mini);
-        ms.appendChild(box);
-      });
-      if (seatFresh) d.classList.add('just-played-seat');
-      d.appendChild(ms);
+    var fresh = false;
+    if (!s.melds.length) {
+      if (n.melds) { n.melds.remove(); n.melds = null; n.sig = null; }
+    } else {
+      var sig = meldsSignature(s);
+      if (!n.melds) {
+        n.melds = document.createElement('div');
+        n.melds.className = 'melds';
+        n.seat.appendChild(n.melds);
+        n.sig = null;
+      }
+      // Untouched when nothing about the books has changed, which is what
+      // keeps a swipe through them from being interrupted.
+      if (sig !== n.sig) {
+        fillMelds(n.melds, s);
+        n.sig = sig;
+      }
+      // The signature marks fresh cards, so it also answers whether this seat
+      // is mid-flash — no need to read that back off the element.
+      fresh = sig.indexOf('*') !== -1;
     }
-    wrap.appendChild(d);
+
+    n.seat.className = 'seat' +
+      (view.phase === 'playing' && view.turn === i ? ' active' : '') +
+      (i === meSeat() ? ' me' : '') +
+      (fresh ? ' just-played-seat' : '');
   });
 }
 
@@ -953,9 +1013,18 @@ function renderActions() {
       (view.turnState ? view.turnState.melded : 0) + '.');
   }
   if (view.you && view.you.inFoot) {
-    msgs.push(view.you.canGoOut.ok
-      ? 'You can go out — meld every card in your hand. No discard.'
-      : 'To go out: ' + String(view.you.canGoOut.reason || '').toLowerCase());
+    if (view.you.canGoOut.ok) {
+      msgs.push('You can go out — meld every card in your hand. No discard.');
+    } else {
+      msgs.push('To go out: ' + String(view.you.canGoOut.reason || '').toLowerCase());
+      /* The keep-two rule only ever bites at the bottom of a hand, so it is
+       * only worth a line when you are nearly there. */
+      if (view.you.hand.length <= 3) {
+        msgs.push(view.you.hand.length <= 2
+          ? 'Down to your last two — discard one and hold the other.'
+          : 'Keep two back: you cannot empty your hand without going out.');
+      }
+    }
   }
   hint.innerHTML = notice ? esc(notice) : esc(msgs.join(' '));
   bar.appendChild(hint);
@@ -1242,6 +1311,8 @@ function renderRules() {
         ' only if you are still holding one when the round ends'],
     ['Going out', 'in your foot, ' + S.requireRedBook + ' red book + ' + S.requireBlackBook +
       ' black book, then play every card left in your hand into melds — no discard. +' + S.goOutBonus],
+    ['In your foot', 'you can never be left holding nothing. Keep two cards back — one to ' +
+      'discard and one to hold on to — unless you are going out'],
   ];
   var tbl = document.createElement('table');
   var tb = document.createElement('tbody');
