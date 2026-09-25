@@ -43,18 +43,36 @@ function openMeld(view, rank) {
   })[0];
 }
 
-/* how many cards this player may lay before they no longer have a legal
- * discard; mirrors the engine's own keep-a-discard rule */
+/* how many cards this player may lay and still be able to finish the turn;
+ * mirrors the engine's own keep-two rule */
 function layBudget(view) {
   const me = view.you;
-  // A red three is a legal discard at this table, so it counts towards the card
+  // A red three is a legal discard at this table, so it counts towards the cards
   // you have to keep back. Under the lay-off rule it never reaches the hand
   // anyway, so filtering it out costs nothing there either.
   const live = me.hand.length;
   if (!me.inFoot) return live;                 // emptying the hand just picks up the foot
-  /* Going out means playing every card, so with the books in hand there is
-   * nothing to hold back. Without them, keep one card to discard. */
-  return me.canGoOut && me.canGoOut.ok ? live : live - 1;
+  /* Going out means playing every card, so with the books down there is nothing
+   * to hold back. Otherwise keep two: in your foot you may not be left holding
+   * nothing, so one card gets discarded and one has to survive the turn. */
+  return me.canGoOut && me.canGoOut.ok ? live : live - 2;
+}
+
+/* Whether laying `k` cards leaves the turn somewhere it can be finished.
+ *
+ * A budget alone is not enough once you are in your foot, because the sizes
+ * that are legal are not a range: you may come down to two cards or more, and
+ * you may come down to none at all if that is you going out, but never to one.
+ * A single card left in your foot can be neither discarded nor kept, so a bot
+ * that stepped onto it had no move left and the referee had to refuse it. */
+function mayLay(view, k) {
+  const me = view.you;
+  if (k <= 0 || k > me.hand.length) return false;
+  if (!me.inFoot) return true;             // emptying the hand just picks up the foot
+  const left = me.hand.length - k;
+  if (left >= 2) return true;
+  if (left > 0) return false;              // stopping on one card is the dead end
+  return !!(me.canGoOut && me.canGoOut.ok);
 }
 
 /* ---------------- opening ---------------- */
@@ -254,7 +272,6 @@ function decide(view) {
 
   // already down: feed open books first, biggest gain first
   const groups = byRank(me.hand);
-  let budget = layBudget(view);
 
   const adds = [];
   myMelds(view).forEach(function (m) {
@@ -266,7 +283,7 @@ function decide(view) {
   });
   adds.sort(function (a, b) { return b.value - a.value; });
   for (const a of adds) {
-    if (a.cards.length <= budget) {
+    if (mayLay(view, a.cards.length)) {
       return { action: 'meldAdd', meldId: a.meld.id, cards: a.cards };
     }
   }
@@ -278,7 +295,7 @@ function decide(view) {
       const st = E.meldStats(m, S);
       if (st.complete) continue;
       if (m.cards.length === S.bookSize - 1 && st.wilds < S.maxWildsInBook &&
-          st.naturals >= 2 && budget >= 1) {
+          st.naturals >= 2 && mayLay(view, 1)) {
         return { action: 'meldAdd', meldId: m.id, cards: [spare[0]] };
       }
     }
@@ -294,7 +311,7 @@ function decide(view) {
     .filter(function (c) { return c.cards.length >= 3; });
   fresh.sort(function (a, b) { return b.value - a.value; });
   for (const f of fresh) {
-    if (f.cards.length <= budget) {
+    if (mayLay(view, f.cards.length)) {
       return { action: 'meldNew', rank: f.rank, cards: f.cards };
     }
   }
@@ -315,7 +332,7 @@ function decide(view) {
       });
     pairs.sort(function (a, b) { return b.value - a.value; });
     for (const p of pairs) {
-      if (p.cards.length <= budget) {
+      if (mayLay(view, p.cards.length)) {
         return { action: 'meldNew', rank: p.rank, cards: p.cards };
       }
     }
@@ -336,7 +353,7 @@ function decide(view) {
   });
   closedAdds.sort(function (a, b) { return b.value - a.value; });
   for (const a of closedAdds) {
-    if (a.cards.length <= budget) {
+    if (mayLay(view, a.cards.length)) {
       return { action: 'meldAdd', meldId: a.meld.id, cards: a.cards };
     }
   }
@@ -345,4 +362,4 @@ function decide(view) {
   return card ? { action: 'discard', card: card } : null;
 }
 
-module.exports = { decide, planOpening, chooseDiscard, layBudget };
+module.exports = { decide, planOpening, chooseDiscard, layBudget, mayLay };
