@@ -533,16 +533,48 @@ t('a player in their foot may not meld their last card', () => {
   s.players[0].hand = ['AS0', 'AH0', 'AD0'];
   no(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']), 'melded the last card');
 });
-t('in your foot, melding down to one card is fine — you still have a discard', () => {
+t('in your foot, melding down to one card is refused without the books', () => {
   const s = rigged([['AS0', 'AH0', 'AD0', '9C0']]);
   const p = s.players[0];
   p.inFoot = true; p.hasInitialMeld = true; p.foot = [];
   G.drawStock(s, 0, [0, 1]);
   p.hand = ['AS0', 'AH0', 'AD0', '9C0'];
+  const r = G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']);
+  no(r, 'laid three and left itself one card');
+  eq(r.code, 'foot_keep_two', 'named reason, not prose: ' + r.reason);
+  eq(p.hand.length, 4, 'hand rolled back');
+  eq(p.melds.length, 0, 'meld rolled back');
+});
+t('in your foot, melding down to two is fine — one to discard, one to keep', () => {
+  const s = rigged([['AS0', 'AH0', 'AD0', '9C0', '9D0']]);
+  const p = s.players[0];
+  p.inFoot = true; p.hasInitialMeld = true; p.foot = [];
+  G.drawStock(s, 0, [0, 1]);
+  p.hand = ['AS0', 'AH0', 'AD0', '9C0', '9D0'];
   ok(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']).ok, 'three aces down');
-  eq(p.hand.length, 1, 'one card left to discard');
-  ok(G.discard(s, 0, '9C0').ok, 'and the turn ends on it');
+  eq(p.hand.length, 2, 'two cards left');
+  ok(G.discard(s, 0, '9C0').ok, 'one of them is discarded');
+  eq(p.hand.length, 1, 'and one is still in the foot');
   ok(!p.wentOut, 'a discard never goes out');
+});
+t('on the way out you may pass through one card, because the last one can be melded', () => {
+  const s = rigged([['QH1', 'QD1', 'QC1']]);
+  const p = s.players[0];
+  p.inFoot = true; p.hasInitialMeld = true; p.foot = [];
+  // Both books already closed, so going out is live the whole way down. A
+  // closed book still takes cards at this table, which is what the last three
+  // queens are for.
+  p.melds = [
+    { id: 'm1', rank: 'K', cards: ['KS0', 'KH0', 'KD0', 'KC0', 'KS1', 'KH1', 'KD1'] },
+    { id: 'm2', rank: 'Q', cards: ['QS0', 'QH0', 'QD0', 'QC0', 'QS1', '2H0', '2D0'] },
+  ];
+  G.drawStock(s, 0, [0, 1]);
+  p.hand = ['QH1', 'QD1', 'QC1'];
+  // Two of the three first, which would be a dead end for anyone not going out.
+  ok(G.meldAdd(s, 0, 'm2', ['QH1', 'QD1']).ok, 'two queens down, one card left');
+  eq(p.hand.length, 1, 'sitting on one card with both books');
+  ok(G.meldAdd(s, 0, 'm2', ['QC1']).ok, 'and the last one lands too');
+  ok(p.wentOut, 'which is going out');
 });
 t('in your foot without the books, you cannot meld your last card', () => {
   const s = rigged([['AS0', 'AH0', 'AD0']]);
@@ -584,17 +616,45 @@ t('going out needs one red book and one black book', () => {
   ok(/black book/.test(r.reason), 'reason: ' + r.reason);
   ok(!p.wentOut, 'and did not go out');
 });
-t('a discard can empty your hand without going out', () => {
+t('in your foot, a discard may never empty your hand', () => {
   const s = rigged([['9C0']]);
   const p = s.players[0];
   p.inFoot = true; p.hasInitialMeld = true; p.foot = [];
   p.melds = [{ id: 'm1', rank: 'K', cards: ['KS0', 'KH0', 'KD0', 'KC0', 'KS1', 'KH1', 'KD1'] }];
   G.drawStock(s, 0, [0, 1]);
   p.hand = ['9C0'];
-  ok(G.discard(s, 0, '9C0').ok, 'the last card is a legal discard');
-  eq(p.hand.length, 0, 'and the hand is empty');
-  ok(!p.wentOut, 'but that is not going out — you draw again next turn');
-  eq(s.phase, 'playing');
+  const pile = s.discard.length;          // a round starts with a card turned up
+  const r = G.discard(s, 0, '9C0');
+  no(r, 'threw its only card');
+  eq(r.code, 'foot_last_card', 'named reason, not prose: ' + r.reason);
+  eq(p.hand.length, 1, 'the card is still in hand');
+  eq(s.discard.length, pile, 'and nothing reached the pile');
+  eq(s.turn, 0, 'the turn did not pass');
+});
+t('the books make no difference — going out is melding, never discarding', () => {
+  const s = rigged([['9C0']]);
+  const p = s.players[0];
+  p.inFoot = true; p.hasInitialMeld = true; p.foot = [];
+  p.melds = [
+    { id: 'm1', rank: 'K', cards: ['KS0', 'KH0', 'KD0', 'KC0', 'KS1', 'KH1', 'KD1'] },
+    { id: 'm2', rank: 'Q', cards: ['QS0', 'QH0', 'QD0', 'QC0', 'QS1', '2H0', '2D0'] },
+  ];
+  G.drawStock(s, 0, [0, 1]);
+  p.hand = ['9C0'];
+  ok(G.canGoOut(s, 0).ok, 'both books are down');
+  no(G.discard(s, 0, '9C0'), 'still cannot discard the last card');
+  ok(!p.wentOut, 'and that did not go out');
+});
+t('still in your hand, discarding your last card just picks up the foot', () => {
+  const s = rigged([['9C0']]);
+  const p = s.players[0];
+  p.inFoot = false; p.hasInitialMeld = true;
+  p.foot = ['AS1', 'AH1', 'AD1'];
+  G.drawStock(s, 0, [0, 1]);
+  p.hand = ['9C0'];
+  ok(G.discard(s, 0, '9C0').ok, 'the keep-two rule is only for the foot');
+  ok(p.inFoot, 'and the foot comes up');
+  eq(p.hand.length, 3, 'with the foot as the new hand');
 });
 t('going out with both books ends the round and pays the bonus', () => {
   const s = rigged([['9C0', '9D0', '9H0']]);
