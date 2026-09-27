@@ -765,6 +765,35 @@ function renderMine() {
   $('clearSel').hidden = sel.length === 0;
 }
 
+/* Your books give up size before they give up showing everything.
+ *
+ * The shelf is a fixed share of the column — it grows into whatever the table
+ * and your hand leave behind, and no further — so with enough books down it
+ * used to scroll, and finding a book meant swiping up and down past the others.
+ * Shrinking is the better trade: at a glance you want to see every rank you
+ * have going, and a book you can count is small enough.
+ *
+ * So: step down the ladder in the stylesheet until the content fits the room,
+ * and stop at the first size that does. The shelf's own height does not depend
+ * on its contents, which is what makes this terminate — each step strictly
+ * shrinks the content while the box it has to fit stays where it is. */
+var BOOK_STEPS = 6;
+
+function fitMine() {
+  var wrap = $('myMelds');
+  if (!wrap) return;
+  /* Nothing to measure against while the table is hidden or the shelf has not
+     been laid out yet. Leaving the size alone beats guessing at it and getting
+     stuck small once it does appear. */
+  if (wrap.clientHeight < 8) return;
+  for (var step = 0; step < BOOK_STEPS; step++) {
+    if (step) wrap.dataset.fit = String(step);
+    else delete wrap.dataset.fit;
+    // Reading scrollHeight is what applies the step just set.
+    if (wrap.scrollHeight <= wrap.clientHeight + 1) return;
+  }
+}
+
 /* The hand, in whichever arrangement this player prefers.
  *
  * Cards picked up this turn are held back and shown last — their own row when
@@ -1422,6 +1451,10 @@ function sizeBoard() {
   // different height on a phone than on a laptop.
   var top = document.querySelector('.bar');
   if (top) document.documentElement.style.setProperty('--bar-h', top.offsetHeight + 'px');
+  /* Last, because the books are sized against the room left over and the two
+     lines above are what decide how much that is. This is also the hook that
+     re-fits them when the screen turns or the action bar changes height. */
+  fitMine();
 }
 if (window.ResizeObserver) {
   var ro = new ResizeObserver(sizeBoard);
