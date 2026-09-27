@@ -563,6 +563,10 @@ function fillMelds(ms, s) {
 
 function renderSeats() {
   var wrap = $('seats');
+  /* How many are playing decides whether an opponent's books wrap down the
+     screen or run off the side of it — at two or three there is height going
+     spare, at four and up there is not. The stylesheet reads it from here. */
+  wrap.dataset.seats = view.seats.length;
   // Seats only change in number between games, so that is the one time the
   // whole thing starts over.
   if (seatNodes.length !== view.seats.length) {
