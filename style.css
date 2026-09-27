@@ -654,6 +654,30 @@ tbody tr:last-child td{border-bottom:0}
   .seat .meld-top{font-size:9px;letter-spacing:.06em}
   .seat .meld-mini{gap:1.5px;max-width:96px}
 
+  /* Two- and three-handed there is only one opponent, or two, and the height
+     that would have gone to the other seats is going spare — so their books
+     wrap down the screen instead of running off the side of it, and you see a
+     whole lay at once without swiping. The piles below simply sit lower.
+     Nothing scrolls sideways any more, so the edge shadows come off with it:
+     they would be promising a swipe that does nothing. The cap is what stops a
+     long table of books pushing your own hand off the bottom — past it the
+     strip scrolls down, which is the rarer of the two annoyances. */
+  .seats[data-seats="2"],
+  .seats[data-seats="3"]{max-height:40dvh}
+  /* The seat clips its contents when it is meant to be one line — that is what
+     keeps a badge from being pushed off the edge. Wrapping down, the same clip
+     would quietly swallow the last row of books, so it comes off and the strip
+     above takes over as the backstop: too many to fit and it scrolls, rather
+     than hiding them with no sign that it has. */
+  .seats[data-seats="2"] .seat,
+  .seats[data-seats="3"] .seat{overflow:visible}
+  .seats[data-seats="2"] .seat .melds,
+  .seats[data-seats="3"] .seat .melds{
+    flex-wrap:wrap;overflow-x:visible;touch-action:auto;
+    row-gap:6px;column-gap:12px;background:none;
+    padding:5px 0 1px;margin:-2px 0 0;
+  }
+
   /* the piles */
   .center{padding:8px 6px;gap:7px;border-radius:10px}
   .center .card{--card-w:32px;--card-h:46px;width:32px;height:46px}
@@ -763,4 +787,6 @@ tbody tr:last-child td{border-bottom:0}
   .hand{min-height:56px;max-height:30dvh}
   #myMelds{min-height:40px}
   .seats{max-height:112px}
+  .seats[data-seats="2"],
+  .seats[data-seats="3"]{max-height:36dvh}
 }
