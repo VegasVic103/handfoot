@@ -379,6 +379,46 @@ input[type=text]::placeholder{color:var(--dim);opacity:.6}
 .mini{
   width:13px;height:18px;border-radius:2px;background:var(--bone-2);border:1px solid #b3a894;
 }
+/* ---------- your books shrink to fit ----------
+   With a lot down you would rather see every book at once, small, than swipe up
+   and down past them. So the shelf gives up size before it gives up showing
+   everything: fitMine steps down this ladder and stops at the first size that
+   holds. Everything scales together — card, label, padding, the overlap between
+   cards — so a shrunk book still reads as the same book rather than a different
+   layout. The bottom of the ladder is a floor, not a promise: a table with more
+   books than will fit at half size still scrolls, which beats illegible. */
+#myMelds{
+  --bk:1;
+  --bk-w:30px;--bk-h:43px;--bk-r:12px;--bk-s:10px;
+  --bk-label:10.5px;--bk-gap:8px;--bk-cgap:3px;--bk-pad:7px;--bk-lap:0px;
+  gap:calc(var(--bk-gap) * var(--bk));
+}
+#myMelds[data-fit="1"]{--bk:.88}
+#myMelds[data-fit="2"]{--bk:.78}
+#myMelds[data-fit="3"]{--bk:.68}
+#myMelds[data-fit="4"]{--bk:.59}
+#myMelds[data-fit="5"]{--bk:.5}
+#myMelds .meld{
+  padding:calc(var(--bk-pad) * var(--bk))
+          calc(var(--bk-pad) * var(--bk) * 1.15)
+          calc(var(--bk-pad) * var(--bk) * 1.15);
+  gap:calc(5px * var(--bk));
+}
+/* The caption shrinks more slowly than the cards it sits over. On a phone the
+   cards in a book are overlapped down to slivers, so the caption is the thing
+   you actually read to tell one book from another — scaled flat with everything
+   else it becomes the first thing to stop being legible, which is the opposite
+   of what shrinking was for. Blended, it is still readable at the floor. */
+#myMelds .meld-top{font-size:calc(var(--bk-label) * (.55 + .45 * var(--bk)))}
+#myMelds .meld-cards{gap:calc(var(--bk-cgap) * var(--bk))}
+#myMelds .card.tiny{
+  --card-w:calc(var(--bk-w) * var(--bk));
+  --card-h:calc(var(--bk-h) * var(--bk));
+  width:var(--card-w);height:var(--card-h);
+}
+#myMelds .card.tiny .r{font-size:calc(var(--bk-r) * var(--bk))}
+#myMelds .card.tiny .s{font-size:calc(var(--bk-s) * var(--bk))}
+
 .mini.joker{background:var(--brass)}
 .mini.deuce{background:var(--deuce)}
 .mini.dead{background:var(--rouge)}
@@ -706,7 +746,13 @@ tbody tr:last-child td{border-bottom:0}
   /* A hairline down the left edge of each card so an overlapped book can still
      be counted at a glance — without it seven kings read as one smear. */
   #myMelds .meld-cards .card.tiny{position:relative;box-shadow:-1px 0 0 rgba(0,0,0,.4)}
-  #myMelds .meld-cards .card.tiny + .card.tiny{margin-left:-9px}
+  /* The overlap shrinks with the card, or a smaller book would show a wider
+     sliver of each card than a big one and stop looking like the same pile. */
+  #myMelds .meld-cards .card.tiny + .card.tiny{margin-left:calc(var(--bk-lap) * var(--bk))}
+  #myMelds{
+    --bk-w:23px;--bk-h:33px;--bk-r:10px;--bk-s:8px;
+    --bk-label:9.5px;--bk-gap:5px;--bk-pad:5px;--bk-lap:-9px;
+  }
   .meld{padding:5px 6px 6px}
   .meld-top{font-size:9.5px}
   .melds .card.tiny{--card-w:23px;--card-h:33px;width:23px;height:33px}
@@ -776,6 +822,7 @@ tbody tr:last-child td{border-bottom:0}
   .melds .card.tiny{--card-w:20px;--card-h:28px;width:20px;height:28px}
   .melds .card.tiny .r{font-size:9px}
   .melds .card.tiny .s{font-size:7px}
+  #myMelds{--bk-w:20px;--bk-h:28px;--bk-r:9px;--bk-s:7px;--bk-lap:-8px}
   .center{padding:6px}
   .center .card{--card-w:29px;--card-h:41px;width:29px;height:41px}
   .center .card .r{font-size:12px}
