@@ -358,19 +358,38 @@ input[type=text]::placeholder{color:var(--txt-3)}
 .divider{width:1px;align-self:stretch;background:rgba(255,255,255,.1);margin-inline:4px}
 
 /* ---------- cards ---------- */
+/* A card is the one object here you look at constantly, so it is where the
+   drawing effort goes. Two things were holding it back: rank and pip were set
+   at nearly the same size, so a card read as two symbols rather than one thing
+   with a name; and the face was a flat two-stop wash, which reads as a swatch
+   rather than as stock.
+   Every highlight is a white overlay rather than a colour, because the same
+   rules have to hold on bone and on the saturated solid decks. */
 .card{
-  width:var(--card-w);height:var(--card-h);border-radius:6px;
+  width:var(--card-w);height:var(--card-h);border-radius:7px;
   --face:var(--f-s);
-  background:var(--face);
+  background:
+    linear-gradient(177deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,0) 38%),
+    var(--face);
   color:var(--tx-black);border:1px solid var(--f-edge);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
-  font-weight:700;line-height:1;position:relative;
-  box-shadow:0 1px 2px rgba(0,0,0,.45);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+  font-weight:700;line-height:1;position:relative;overflow:hidden;
+  /* Stock, not a swatch: a lit top edge, a shadowed foot, and the drop shadow
+     the card casts on the felt. */
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -1px 0 rgba(0,0,0,.14),
+    0 1px 2px rgba(0,0,0,.45);
   transition:transform .12s ease, box-shadow .12s ease;
   flex:0 0 auto;
 }
-.card .r{font-size:17px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.card .s{font-size:15px;line-height:1}
+/* The rank carries the card; the pip only says which suit. Sizing them apart
+   is what turns two symbols into one object with a name. */
+.card .r{
+  font-size:20px;letter-spacing:-.035em;font-variant-numeric:tabular-nums;
+  line-height:1;
+}
+.card .s{font-size:11px;line-height:1;opacity:.86;margin-top:1px}
 .card.red{color:var(--tx-red)}
 /* Each card takes its face from its own suit. In Classic all six resolve to
    the same bone, so this costs nothing there. */
@@ -386,23 +405,36 @@ input[type=text]::placeholder{color:var(--txt-3)}
   border-color:#5e211d;box-shadow:inset 0 0 0 3px var(--bone-2),0 1px 2px rgba(0,0,0,.45);
 }
 .card.empty{background:none;border:1px dashed var(--hair-2);box-shadow:none}
-.card.sel{transform:translateY(-10px);box-shadow:0 6px 14px rgba(0,0,0,.5),0 0 0 2px var(--brass)}
+/* Picked up off the table rather than ringed like a form control: it lifts,
+   throws a longer shadow, and takes a brass edge that sits on the card instead
+   of around it. */
+.card.sel{
+  transform:translateY(-10px);
+  box-shadow:
+    inset 0 0 0 1px var(--brass),
+    inset 0 1px 0 rgba(255,255,255,.4),
+    0 10px 18px -6px rgba(0,0,0,.72),
+    0 0 0 1px rgba(214,174,62,.55);
+}
 /* Wilds carry a band in their own colour along the top edge — brass for a
    joker at 50, blue for a deuce at 20 — so you can tell at a glance what is
    sitting in anybody's book. The top edge stays visible when a hand is
    layered, which the corners do not. */
 .card.wild::before{
-  content:'';position:absolute;left:0;right:0;top:0;height:4px;
-  border-radius:5px 5px 0 0;background:var(--wc);
+  content:'';position:absolute;left:0;right:0;top:0;height:5px;
+  /* Shaded rather than flat, so it reads as the head of the card rather than a
+     sticker laid on top of it. The card clips it, so no radius is needed. */
+  background:linear-gradient(180deg, color-mix(in srgb, var(--wc) 82%, white) 0%, var(--wc) 100%);
+  box-shadow:0 1px 0 rgba(0,0,0,.22);
 }
 .card.joker{--wc:var(--brass)}
 .card.deuce{--wc:var(--wc-deuce)}
 /* After the suit rules on purpose: a red three gives up its suit colour. */
 .card.dead{--wc:var(--rouge);--face:var(--f-dead)}
-.card.tiny{--card-w:30px;--card-h:43px;width:30px;height:43px;border-radius:4px}
-.card.tiny.wild::before{height:3px;border-radius:3px 3px 0 0}
-.card.tiny .r{font-size:12px}
-.card.tiny .s{font-size:10px}
+.card.tiny{--card-w:30px;--card-h:43px;width:30px;height:43px;border-radius:5px}
+.card.tiny.wild::before{height:3px}
+.card.tiny .r{font-size:13px;letter-spacing:-.03em}
+.card.tiny .s{font-size:8px;margin-top:0}
 .card[disabled]{cursor:default}
 
 /* ---------- the solid decks ----------
@@ -490,7 +522,7 @@ input[type=text]::placeholder{color:var(--txt-3)}
    books than will fit at half size still scrolls, which beats illegible. */
 #myMelds{
   --bk:1;
-  --bk-w:30px;--bk-h:43px;--bk-r:12px;--bk-s:10px;
+  --bk-w:30px;--bk-h:43px;--bk-r:13px;--bk-s:7px;
   --bk-label:10.5px;--bk-gap:8px;--bk-cgap:3px;--bk-pad:7px;--bk-lap:0px;
   gap:calc(var(--bk-gap) * var(--bk));
 }
@@ -523,6 +555,40 @@ input[type=text]::placeholder{color:var(--txt-3)}
 .mini.joker{background:var(--brass)}
 .mini.deuce{background:var(--deuce)}
 .mini.dead{background:var(--rouge)}
+
+/* ---------- the deal, and two answers to your own actions ----------
+   One orchestrated moment, not motion scattered over everything. The deal is
+   the moment worth having: eleven cards arriving at the start of a round used
+   to blink into existence. The other two answer something you just did — cards
+   you drew, and a book you laid — which is when movement is informative rather
+   than decorative. Nothing else on the table moves by itself.
+
+   Fill mode is backwards, never both: it holds a card hidden through its
+   stagger delay but lets go at the end, so the animation never pins a
+   transform over the lift a selected card is holding. */
+@keyframes dealIn{
+  from{opacity:0;transform:translateY(-20px) scale(.93)}
+  to{opacity:1;transform:none}
+}
+.hand .card.deal{
+  animation:dealIn .3s cubic-bezier(.2,.85,.3,1.04) backwards;
+  animation-delay:var(--d,0ms);
+}
+/* Shorter and shallower than the deal: two cards arriving mid-turn should
+   register without restaging the whole hand. */
+@keyframes drawIn{
+  from{opacity:0;transform:translateY(-11px) scale(.96)}
+  to{opacity:1;transform:none}
+}
+.hand .card.enter{animation:drawIn .24s cubic-bezier(.2,.85,.3,1.04) backwards}
+/* A book you lay arrives on the table and settles, rather than appearing
+   already there. */
+@keyframes bookLand{
+  0%{opacity:0;transform:translateY(-9px) scale(.92)}
+  62%{opacity:1;transform:translateY(0) scale(1.025)}
+  100%{transform:none}
+}
+#myMelds .meld.land{animation:bookLand .32s cubic-bezier(.2,.85,.3,1) backwards}
 
 /* Cards that landed on the table in the last few seconds. A bot's turn is over
    almost before you look up, so anything newly played glows until you have had
@@ -716,8 +782,8 @@ tbody tr:last-child td{border-bottom:0}
 .deck-sample .card{--card-w:22px;--card-h:32px;width:22px;height:32px;
   border-radius:3px;cursor:default}
 .deck-sample .card + .card{margin-left:-6px}
-.deck-sample .card .r{font-size:10px}
-.deck-sample .card .s{font-size:8px}
+.deck-sample .card .r{font-size:11px}
+.deck-sample .card .s{font-size:6px}
 .deck-sample .card.wild::before{height:3px;border-radius:2px 2px 0 0}
 .theme-sample{display:block;width:62px;height:32px;border-radius:5px;border:1px solid var(--hair-2)}
 
@@ -756,12 +822,14 @@ tbody tr:last-child td{border-bottom:0}
   .tag{font-size:9px;letter-spacing:.1em;white-space:nowrap}
   .bar-val{font-size:13px;white-space:nowrap}
   /* Whose turn it is can be a long name, and the bar is the one row that may
-     not wrap — so the pill gives up its width first and the buttons at the end
-     of the bar keep theirs. Without this, "Leave" falls off a 402px screen. */
-  .pill{padding:3px 8px;font-size:11px;white-space:nowrap}
+     not wrap. Dropping the round label's truncation and retiring the meld cell
+     once you are down buys back enough width that the pill rarely has to clip
+     at all — but it is still the thing that gives way first, because "Leave"
+     falling off the edge of a 402px screen is worse than a shortened name. */
+  .pill{padding:4px 9px;font-size:11.5px;white-space:nowrap}
   #turnPill{
     overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;
-    max-width:40vw;display:inline-block;
+    max-width:58vw;display:inline-block;
   }
   .seat-meta,.chip,.sect-head h3{white-space:nowrap}
   .btn.sm{padding:5px 9px;font-size:12px;flex:0 0 auto}
@@ -859,8 +927,8 @@ tbody tr:last-child td{border-bottom:0}
   /* the piles */
   .center{padding:8px 6px;gap:7px;border-radius:10px}
   .center .card{--card-w:32px;--card-h:46px;width:32px;height:46px}
-  .center .card .r{font-size:13px}
-  .center .card .s{font-size:11px}
+  .center .card .r{font-size:15px}
+  .center .card .s{font-size:8px}
   .stackbox{min-width:0;gap:3px}
   .stackbox .tag{font-size:8.5px;letter-spacing:.06em}
   .pilecount{font-size:9.5px}
@@ -888,14 +956,14 @@ tbody tr:last-child td{border-bottom:0}
      sliver of each card than a big one and stop looking like the same pile. */
   #myMelds .meld-cards .card.tiny + .card.tiny{margin-left:calc(var(--bk-lap) * var(--bk))}
   #myMelds{
-    --bk-w:23px;--bk-h:33px;--bk-r:10px;--bk-s:8px;
+    --bk-w:23px;--bk-h:33px;--bk-r:11px;--bk-s:6px;
     --bk-label:9.5px;--bk-gap:5px;--bk-pad:5px;--bk-lap:-9px;
   }
   .meld{padding:5px 6px 6px}
   .meld-top{font-size:9.5px}
   .melds .card.tiny{--card-w:23px;--card-h:33px;width:23px;height:33px}
-  .melds .card.tiny .r{font-size:10px}
-  .melds .card.tiny .s{font-size:8px}
+  .melds .card.tiny .r{font-size:11px}
+  .melds .card.tiny .s{font-size:6px}
 
   /* your hand — the cap only bites once you are holding far more than a
      dealt hand, which happens after you pick up your foot */
@@ -920,14 +988,14 @@ tbody tr:last-child td{border-bottom:0}
      what is left shrinks and scrolls instead of pushing the table off-screen. */
   #myMelds{flex:1 1 0;min-height:52px}
   .hand .card{--card-w:41px;--card-h:58px;width:41px;height:58px}
-  .hand .card .r{font-size:15px}
-  .hand .card .s{font-size:13px}
+  .hand .card .r{font-size:18px}
+  .hand .card .s{font-size:10px}
   .hand-row .card + .card{margin-left:-24px}
   .hand.layered{gap:7px}
-  .hand.layered .card .r{font-size:13px}
-  .hand.layered .card .s{font-size:11px}
-  .hand.layered .hand-row .card:last-child .r{font-size:15px}
-  .hand.layered .hand-row .card:last-child .s{font-size:13px}
+  .hand.layered .card .r{font-size:15px}
+  .hand.layered .card .s{font-size:8px}
+  .hand.layered .hand-row .card:last-child .r{font-size:18px}
+  .hand.layered .hand-row .card:last-child .s{font-size:10px}
   .card.fresh::after{width:5px;height:5px;left:3px;bottom:3px}
   .card.fresh-first{margin-left:12px}
 
@@ -958,16 +1026,16 @@ tbody tr:last-child td{border-bottom:0}
   .log{display:none}
   .board{padding-block:6px 100px;gap:6px}
   .melds .card.tiny{--card-w:20px;--card-h:28px;width:20px;height:28px}
-  .melds .card.tiny .r{font-size:9px}
-  .melds .card.tiny .s{font-size:7px}
-  #myMelds{--bk-w:20px;--bk-h:28px;--bk-r:9px;--bk-s:7px;--bk-lap:-8px}
+  .melds .card.tiny .r{font-size:10px}
+  .melds .card.tiny .s{font-size:5.5px}
+  #myMelds{--bk-w:20px;--bk-h:28px;--bk-r:10px;--bk-s:5.5px;--bk-lap:-8px}
   .center{padding:6px}
   .center .card{--card-w:29px;--card-h:41px;width:29px;height:41px}
-  .center .card .r{font-size:12px}
-  .center .card .s{font-size:10px}
+  .center .card .r{font-size:14px}
+  .center .card .s{font-size:7.5px}
   .hand .card{--card-w:37px;--card-h:52px;width:37px;height:52px}
-  .hand .card .r{font-size:14px}
-  .hand .card .s{font-size:12px}
+  .hand .card .r{font-size:16px}
+  .hand .card .s{font-size:9px}
   .hand-row .card + .card{margin-left:-21px}
   .hand{min-height:56px;max-height:30dvh}
   #myMelds{min-height:40px}
