@@ -738,6 +738,100 @@ tbody tr:last-child td{border-bottom:0}
 .lead td{background:rgba(214,174,62,.08)}
 .scroll{overflow-x:auto}
 
+/* ---------- the scorepad ----------
+   The one screen the whole table leans over, so it is laid out in the order the
+   questions actually get asked: who is ahead, what this round was worth, and
+   only then the round-by-round arithmetic for whoever wants to check it. It was
+   three tables of identical grey figures, which answered all three at once and
+   so answered none of them. */
+.pad-h{
+  display:flex;align-items:center;gap:10px;
+  font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--txt-3);margin:22px 0 10px;
+}
+.pad-h::after{content:"";flex:1;height:1px;background:var(--hair)}
+.pad-h:first-child{margin-top:0}
+
+/* Standings. A total on its own is a number; a total beside the leader's is a
+   position, and a position is the thing anyone came here to find out. */
+.stand{display:flex;flex-direction:column;gap:3px}
+.stand-row{
+  display:grid;grid-template-columns:20px minmax(0,1fr) auto;
+  align-items:baseline;column-gap:10px;
+  padding:9px 11px 12px;border-radius:11px;
+}
+.stand-row .rank{
+  font-size:12px;font-weight:700;color:var(--txt-3);
+  font-variant-numeric:tabular-nums;text-align:center;
+}
+.stand-row .who{
+  font-size:15px;color:var(--txt);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.stand-row .amt{
+  font-size:21px;font-weight:700;letter-spacing:-.025em;color:var(--txt);
+  font-variant-numeric:tabular-nums;
+}
+.stand-row .gap{
+  grid-column:2/4;padding-top:3px;
+  font-size:11.5px;color:var(--txt-3);font-variant-numeric:tabular-nums;
+}
+/* The bar spans the whole row, so three of them stacked read as one chart
+   rather than as three unrelated numbers. */
+.stand-row .sbar{
+  grid-column:1/4;height:3px;margin-top:8px;border-radius:2px;
+  background:var(--hair);overflow:hidden;
+}
+.stand-row .sbar i{display:block;height:100%;border-radius:2px;background:var(--txt-3)}
+.stand-row.lead{background:rgba(214,174,62,.085);box-shadow:inset 0 0 0 1px rgba(214,174,62,.2)}
+.stand-row.lead .rank,.stand-row.lead .amt,.stand-row.lead .gap{color:var(--brass-lt)}
+.stand-row.lead .sbar i{background:var(--brass)}
+/* Won, not merely ahead — the only place in the app that gets to glow. */
+.stand-row.champ{
+  background:rgba(214,174,62,.13);
+  box-shadow:inset 0 0 0 1px rgba(214,174,62,.45), 0 0 26px -8px rgba(214,174,62,.55);
+}
+
+/* This round, as the four things a round score is actually made of. A total is
+   exactly red books + black books + table count + going out, so the pad shows
+   the terms instead of making you work backwards from one figure. */
+.rd{display:flex;flex-direction:column;gap:8px}
+.rd-row{background:var(--app-2);border-radius:12px;padding:11px 12px;box-shadow:var(--lift),var(--sh-1)}
+.rd-top{display:flex;align-items:baseline;gap:10px}
+.rd-top .who{
+  flex:1;min-width:0;font-size:14px;color:var(--txt);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rd-top .amt{
+  font-size:19px;font-weight:700;letter-spacing:-.025em;color:var(--txt);
+  font-variant-numeric:tabular-nums;
+}
+.rd-top .amt.neg{color:var(--rouge-lt)}
+/* The seat strips already say "2 red" in these colours, so the pad says it the
+   same way rather than inventing a second vocabulary for the same fact. */
+.rd .chips{margin-top:9px;gap:5px;flex:none;justify-content:flex-start}
+.rd .chip{font-size:11.5px;font-weight:500;padding:3.5px 9px;font-variant-numeric:tabular-nums}
+/* What it was and what it was worth, told apart by weight and a separator
+   rather than by colour — the chip's colour is already saying which book it
+   was, and a second meaning on the same channel would cost the first one. */
+.rd .chip .lbl::after{content:" · ";font-weight:500}
+.rd .chip b{font-weight:700;color:inherit}
+.rd .chip.out{
+  background:rgba(214,174,62,.15);color:var(--brass-lt);
+  box-shadow:inset 0 0 0 1px rgba(214,174,62,.36);
+}
+/* Only the figure takes the colour: red and black are reserved for books, so a
+   count that went the wrong way says so without competing with them. */
+.rd .chip b.up{color:var(--good)}
+.rd .chip b.down{color:var(--rouge-lt)}
+
+/* Round by round: the receipt. Quiet on purpose — it is here to be checked
+   rather than read — with each round's best marked so it still tells a story. */
+.hist{font-size:12.5px}
+.hist th,.hist td{padding:6px 7px}
+.hist tbody td:first-child{color:var(--txt-2)}
+.hist tbody td.best{color:var(--brass-lt);font-weight:700}
+
 .log{margin-top:8px;font-size:12px;color:var(--txt-3);line-height:1.6;max-height:110px;overflow:auto}
 .note{font-size:12px;color:var(--txt-2)}
 .err{color:var(--rouge-lt);font-size:13px}
