@@ -446,11 +446,44 @@ function sortHand(cards) {
   return out;
 }
 
+/* What has already been shown arriving.
+ *
+ * Every one of these exists because the hand and the books are rebuilt from
+ * scratch on each message from the server, and a CSS animation on a brand new
+ * node plays every single time. Without a record of what has already arrived,
+ * your whole hand would re-deal itself every time a bot discarded. So arrival
+ * is tracked per card and per book, and the record is cleared when a round
+ * ends — which is the only time everything genuinely is new again. */
+var dealPending = false;   // the next hand paint is a fresh deal
+var lastRound = null;      // the round the records below belong to
+var minePainted = false;   // your books have been drawn at least once this round
+var enteredCards = Object.create(null);
+var seenMelds = Object.create(null);
+
 function render() {
   if (!view) return;
+
+  if (view.phase === 'playing') {
+    if (lastRound !== view.round) {
+      lastRound = view.round;
+      dealPending = true;
+      minePainted = false;
+      enteredCards = Object.create(null);
+      seenMelds = Object.create(null);
+    }
+  } else {
+    lastRound = null;
+  }
+
   $('tableCode').textContent = view.code || '—';
-  $('roundLabel').textContent = (view.round + 1) + ' of ' + view.roundsTotal;
+  $('roundLabel').textContent = (view.round + 1) + '/' + view.roundsTotal;
   $('minLabel').textContent = view.minMeld;
+  /* The requirement leaves the bar once you have met it. Carrying it all round
+     costs width on a phone that the turn pill needs more, and a number you can
+     no longer act on is just noise beside one you check every few seconds. */
+  var meSeatNow = meSeat() >= 0 ? view.seats[meSeat()] : null;
+  $('meldCell').hidden = !!(meSeatNow && meSeatNow.hasInitialMeld) ||
+    view.phase === 'lobby';
 
   var pill = $('turnPill');
   if (view.phase === 'lobby') {
@@ -745,6 +778,11 @@ function renderMine() {
      * if you finish it, which is the thing you are deciding about. */
     box.className = 'meld ' + (st.wilds === 0 ? 'clean' : 'dirty') +
       (st.complete ? ' done' : '') + (open ? ' target' : '');
+    /* A book lands only the first time it appears, and never on the first paint
+       of a round — otherwise reconnecting to a table mid-game would drop every
+       book you already had onto the felt at once. */
+    if (minePainted && !seenMelds[m.id]) box.classList.add('land');
+    seenMelds[m.id] = 1;
     var head = document.createElement('div'); head.className = 'meld-top';
     // Seven is when a pile becomes a book, not a ceiling, so a closed one counts
     // up rather than showing a fraction it has already passed.
@@ -782,6 +820,7 @@ function renderMine() {
 
   renderHand();
   $('clearSel').hidden = sel.length === 0;
+  minePainted = true;
 }
 
 /* Your books give up size before they give up showing everything.
@@ -826,6 +865,9 @@ function renderHand() {
   var fresh = justPicked();
   var settled = myHand().filter(function (c) { return fresh.indexOf(c) === -1; });
 
+  var dealing = dealPending;
+  var dealt = 0;
+
   var make = function (c, isFresh, firstFresh) {
     var el = cardEl(c, {
       click: function () {
@@ -840,6 +882,16 @@ function renderHand() {
     });
     if (isFresh) el.classList.add('fresh');
     if (firstFresh) el.classList.add('fresh-first');
+    /* Dealt: the whole hand arrives, staggered in the order it is laid out.
+       Otherwise only a card you have not been shown before slides in, which is
+       what makes the two you just drew move while the rest sit still. */
+    if (dealing) {
+      el.classList.add('deal');
+      el.style.setProperty('--d', (dealt++ * 32) + 'ms');
+    } else if (!enteredCards[c]) {
+      el.classList.add('enter');
+    }
+    enteredCards[c] = 1;
     return el;
   };
 
@@ -863,6 +915,9 @@ function renderHand() {
     sortHand(settled).forEach(function (c) { wrap.appendChild(make(c, false, false)); });
     fresh.forEach(function (c, i) { wrap.appendChild(make(c, true, i === 0)); });
   }
+
+  // A deal is spent once it has been drawn; the next paint is an ordinary one.
+  dealPending = false;
 
   /* The hand builds upwards from the bottom edge, so when it is deep enough to
    * scroll the rows worth seeing are the last ones — the cards nearest your
