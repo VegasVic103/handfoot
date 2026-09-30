@@ -330,6 +330,15 @@ function rankIndex(r) {
   var i = E.RANKS.indexOf(r);
   return i === -1 ? 99 : i;
 }
+
+/* A book's caption starts a line, so its rank is capitalised; rankName itself
+ * stays lower case because everywhere else it sits mid-sentence — "laid three
+ * jacks", "select 2 aces". The captions used to be typeset in capitals, which
+ * hid the difference; in sentence case it shows. */
+function capRank(r) {
+  var n = E.rankName(r);
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
 function orderMelds(melds) {
   return melds.slice().sort(function (a, b) {
     return rankIndex(a.rank) - rankIndex(b.rank) ||
@@ -546,7 +555,7 @@ function fillMelds(ms, s) {
     box.className = 'meld ' + (st.wilds === 0 ? 'clean' : 'dirty') +
       (st.complete ? ' done' : '');
     var head = document.createElement('div'); head.className = 'meld-top';
-    head.textContent = E.rankName(m.rank) + 's · ' + m.cards.length;
+    head.textContent = capRank(m.rank) + 's · ' + m.cards.length;
     var mini = document.createElement('div'); mini.className = 'meld-mini';
     orderCards(m.cards).forEach(function (c) {
       var sp = document.createElement('span');
@@ -706,10 +715,20 @@ function renderMine() {
     wrap.appendChild(tb);
   }
 
+  /* Empty is a state worth designing, not a sentence dropped at the top of a
+     tall blank band. The class centres it and draws the outline of the books
+     that will land there; the second line says what has to happen first. */
+  wrap.classList.toggle('empty', !melds.length && !threes.length);
   if (!melds.length && !threes.length) {
     var empty = document.createElement('p');
     empty.className = 'note';
-    empty.textContent = 'Nothing down yet.';
+    var lead = document.createElement('b');
+    lead.textContent = 'Nothing down yet';
+    empty.appendChild(lead);
+    empty.appendChild(document.createTextNode(
+      view.phase === 'playing'
+        ? 'Books you lay will show up here.'
+        : 'Books will show up here once the round starts.'));
     wrap.appendChild(empty);
   }
 
@@ -729,7 +748,7 @@ function renderMine() {
     var head = document.createElement('div'); head.className = 'meld-top';
     // Seven is when a pile becomes a book, not a ceiling, so a closed one counts
     // up rather than showing a fraction it has already passed.
-    head.textContent = E.rankName(m.rank) + 's · ' +
+    head.textContent = capRank(m.rank) + 's · ' +
       (st.complete ? m.cards.length + (st.isRedBook ? ' · red book' : ' · black book')
                    : m.cards.length + '/' + view.settings.bookSize);
     if (spoilsRed) box.title = 'A wild would turn this red book black. Start another book of that rank.';
