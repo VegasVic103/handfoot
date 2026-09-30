@@ -674,12 +674,34 @@ function stackbox(tag, cardNode, count, opts) {
   opts = opts || {};
   var box = document.createElement(opts.click ? 'button' : 'div');
   box.className = 'stackbox' + (opts.click ? ' pick' : '') + (opts.on ? ' on' : '') +
-    (opts.out ? ' out' : '');
+    (opts.out ? ' out' : '') + (opts.cls ? ' ' + opts.cls : '');
   var t = document.createElement('div'); t.className = 'tag'; t.textContent = tag;
   var c = document.createElement('div'); c.className = 'pilecount'; c.textContent = count;
   box.appendChild(t); box.appendChild(cardNode); box.appendChild(c);
+  if (opts.title) box.title = opts.title;
   if (opts.click) box.onclick = opts.click;
   return box;
+}
+
+/* The discard pile, with its depth showing.
+ *
+ * How many cards are in there is the whole reason to want it, and it used to be
+ * a number you had to read. Cards stack up behind the top one instead, so the
+ * pile grows on screen the way it grows on the table. The steps are powers of
+ * two because that is roughly how the difference feels: eight cards and nine
+ * are the same pile, eight and sixteen are not. */
+function discardPile(topNode, count) {
+  var wrap = document.createElement('div');
+  wrap.className = 'pile';
+  var layers = count > 1 ? Math.min(4, Math.floor(Math.log(count) / Math.log(2))) : 0;
+  for (var i = layers; i >= 1; i--) {
+    var l = document.createElement('div');
+    l.className = 'pile-layer';
+    l.style.setProperty('--n', i);
+    wrap.appendChild(l);
+  }
+  wrap.appendChild(topNode);
+  return wrap;
 }
 
 function livePiles() {
@@ -722,9 +744,29 @@ function renderCenter() {
    * take would bring — tap it and see the seven. Nothing here decides anything;
    * it only shows what the server already sent. */
   var peek = view.discardPeek && view.discardPeek.length;
-  row.appendChild(stackbox('Discard', top,
-    view.discardCount + ' card' + (view.discardCount === 1 ? '' : 's') + (frozen ? ' · frozen' : ''),
-    peek ? { click: showPeek } : null));
+
+  /* Three things the pile has to say, and it used to say none of them where you
+   * look. Frozen was a word tacked onto the count; whether you can take it lived
+   * only in the sentence at the bottom of the screen. Now the heading carries
+   * the state, the stack carries the size, and the rim says whether it is yours
+   * to take — so the decision is made at the object you are deciding about. */
+  var chance = isMyTurn() && view.turnPhase === 'draw' ? pileChance() : null;
+  var cls = frozen ? 'frozen' : (chance ? 'takeable' : '');
+  var heading = frozen ? 'Frozen' : 'Discard';
+  var why = frozen
+    ? E.label(view.discardTop) + ' on top freezes the pile — nobody can take it until it is covered.'
+    : chance
+      ? 'Select ' + chance.need + ' ' + E.rankName(chance.rank) + 's to take ' + chance.take +
+        ' card' + (chance.take === 1 ? '' : 's') + '.'
+      : '';
+
+  row.appendChild(stackbox(heading, discardPile(top, view.discardCount),
+    view.discardCount + ' card' + (view.discardCount === 1 ? '' : 's'),
+    {
+      cls: cls + (peek ? ' peekable' : ''),
+      title: why,
+      click: peek ? showPeek : null,
+    }));
 }
 
 function renderMine() {
