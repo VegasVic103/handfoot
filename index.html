@@ -149,10 +149,13 @@
         <div class="code" id="tableCode">&mdash;</div>
       </div>
       <div class="bar-cell">
-        <div class="tag"><span class="only-wide">Round</span><span class="only-narrow">R</span></div>
-        <div class="bar-val" id="roundLabel">1 of 4</div>
+        <div class="tag">Round</div>
+        <div class="bar-val" id="roundLabel">1/4</div>
       </div>
-      <div class="bar-cell">
+      <!-- Leaves the bar the moment you are down. Until then it is the number
+           you are chasing; after that it is a number you cannot use, and the
+           width is worth more to the turn pill beside it. -->
+      <div class="bar-cell" id="meldCell">
         <div class="tag"><span class="only-wide">Initial meld</span><span class="only-narrow">Meld</span></div>
         <div class="bar-val" id="minLabel">50</div>
       </div>
