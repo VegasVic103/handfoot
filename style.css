@@ -65,6 +65,9 @@
      surface and has to clear 4.5:1 there. #68717d came in at 4.24. */
   --txt-3:#818b98;
   --brass-lt:#eccb6a;
+  /* Cold, not blue: a frozen pile reads as drained rather than as a new colour,
+     which keeps the deuce's blue meaning only "deuce". */
+  --ice:#9db0c0;
 
   /* Faces for the solid card styles. Chosen by measured contrast, not by eye:
      each carries at least 5.8:1 against the card's own lettering, and the three
@@ -345,6 +348,47 @@ input[type=text]::placeholder{color:var(--txt-3)}
     inset 0 22px 44px -26px rgba(0,0,0,.9),
     var(--sh-1);
 }
+/* ---------- the discard pile ----------
+   Cards squared up under the top one, so the pile's size is something you see
+   rather than a number you read. They are card edges, not backs: the pile is
+   face up, you just cannot see past the top card. */
+.pile{position:relative;display:flex;align-items:flex-start;justify-content:center}
+/* inset, not the card tokens: the piles in the middle use a smaller card than
+   the hand does, and the token is set on the card element rather than here. */
+.pile-layer{
+  position:absolute;inset:0;
+  border-radius:7px;
+  background:linear-gradient(170deg,#e7dfd0 0%,#cfc6b4 100%);
+  /* The ring is what separates them: without a dark hairline the offsets blur
+     into one drop shadow instead of reading as a stack of cards. The offset
+     runs wider than it does deep so a growing pile does not crowd the count
+     sitting underneath it. */
+  box-shadow:0 0 0 1px rgba(0,0,0,.34), 0 1px 2px rgba(0,0,0,.4);
+  transform:translate(calc(var(--n) * 2.2px), calc(var(--n) * 1.3px));
+}
+/* Frozen goes cold rather than taking a new colour: the palette already carries
+   brass, rouge, deuce blue and green, and a fifth hue for a fifth meaning is
+   how a palette stops meaning anything. A locked pile loses its warmth, and the
+   heading says the word. */
+.stackbox.frozen .pile-layer{filter:grayscale(.85) brightness(.72)}
+.stackbox.frozen .card{filter:grayscale(.55) brightness(.86)}
+.stackbox.frozen .tag{color:var(--ice);font-weight:650}
+.stackbox.frozen .pilecount{color:var(--ice);opacity:.75}
+/* Yours to take, said in the same brass that says whose turn it is. */
+.stackbox.takeable .card{
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    0 0 0 2px var(--brass),
+    0 6px 16px -6px rgba(0,0,0,.7);
+}
+.stackbox.takeable .tag,.stackbox.takeable .pilecount{color:var(--brass-lt)}
+/* A phone has no hover, so "you can look inside this" needed saying some other
+   way: the count line carries a hairline underline, the way a link would. */
+.stackbox.peekable .pilecount{
+  text-decoration:underline;text-decoration-color:var(--hair-2);
+  text-underline-offset:3px;text-decoration-thickness:1px;
+}
+
 .stackbox{display:flex;flex-direction:column;align-items:center;gap:7px;min-width:68px}
 .stackbox .tag{text-align:center;color:rgba(255,255,255,.66)}
 .pilecount{font-size:11.5px;color:rgba(255,255,255,.6);font-variant-numeric:tabular-nums}
