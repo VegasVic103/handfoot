@@ -1480,76 +1480,183 @@ function renderRules() {
   body.appendChild(note);
 }
 
+/* ---------------- the scorepad ----------------
+ *
+ * Scores run into the thousands and get read across a table, so they are
+ * grouped. The minus is the real one rather than a hyphen, to match the rest of
+ * the interface, and every figure sits in tabular numerals so a column of them
+ * lines up on the decimal the way a written pad does. */
+function num(n) {
+  var s = String(Math.abs(n)), out = '', c = 0;
+  for (var i = s.length - 1; i >= 0; i--) {
+    out = s.charAt(i) + out;
+    if (++c % 3 === 0 && i > 0) out = ',' + out;
+  }
+  return (n < 0 ? '−' : '') + out;
+}
+/* For the terms of a round rather than a total: a contribution of +265 and one
+ * of 265 are different claims, and the sign is the whole point of the column. */
+function plus(n) { return (n > 0 ? '+' : '') + num(n); }
+
+function padHead(text) {
+  var h = document.createElement('h3');
+  h.className = 'pad-h';
+  h.textContent = text;
+  return h;
+}
+
+function padChip(kind, label, value, tone, title) {
+  var s = document.createElement('span');
+  s.className = 'chip' + (kind ? ' ' + kind : '');
+  var l = document.createElement('span');
+  l.className = 'lbl'; l.textContent = label;
+  s.appendChild(l);
+  var b = document.createElement('b');
+  if (tone) b.className = tone;
+  b.textContent = value;
+  s.appendChild(b);
+  if (title) s.title = title;
+  return s;
+}
+
+/* Where everyone stands. Sorted, ranked, and drawn against the leader, because
+ * the question at a card table is never "what is my score" on its own — it is
+ * how far back you are and whether that is catchable in one round. */
+function standings(totals, best, ended) {
+  var wrap = document.createElement('div');
+  wrap.className = 'stand';
+  var order = view.seats.map(function (_, i) { return i; });
+  order.sort(function (a, b) { return totals[b] - totals[a]; });
+  var tied = totals.filter(function (t) { return t === best; }).length > 1;
+  /* Bars are drawn against the leader's total. A table where nobody is yet
+   * above zero has no scale to draw against, so they all stay empty. */
+  var span = best > 0 ? best : 0;
+
+  order.forEach(function (idx, pos) {
+    var t = totals[idx];
+    var lead = t === best;
+    var row = document.createElement('div');
+    row.className = 'stand-row' + (lead ? ' lead' : '') + (lead && ended && !tied ? ' champ' : '');
+
+    var rank = document.createElement('div');
+    rank.className = 'rank'; rank.textContent = String(pos + 1);
+    var who = document.createElement('div');
+    who.className = 'who'; who.textContent = view.seats[idx].name;
+    var amt = document.createElement('div');
+    amt.className = 'amt'; amt.textContent = num(t);
+
+    var gap = document.createElement('div');
+    gap.className = 'gap';
+    gap.textContent = lead
+      ? (tied ? 'Tied for the lead' : ended ? 'Winner' : 'Leading')
+      : num(best - t) + ' behind';
+
+    var bar = document.createElement('div'); bar.className = 'sbar';
+    var fill = document.createElement('i');
+    fill.style.width = (span > 0 ? Math.max(0, Math.min(100, (t / span) * 100)) : 0) + '%';
+    bar.appendChild(fill);
+
+    row.appendChild(rank); row.appendChild(who); row.appendChild(amt);
+    row.appendChild(gap); row.appendChild(bar);
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
+/* What the round was made of. A round total is exactly red books + black books
+ * + table count + going out, so the pad lays out those four terms rather than
+ * printing the sum and leaving you to reconstruct it from six grey columns. */
+function roundCards() {
+  var wrap = document.createElement('div');
+  wrap.className = 'rd';
+  view.roundDetail.forEach(function (r, i) {
+    if (!view.seats[i]) return;
+    var row = document.createElement('div'); row.className = 'rd-row';
+
+    var top = document.createElement('div'); top.className = 'rd-top';
+    var who = document.createElement('div');
+    who.className = 'who'; who.textContent = view.seats[i].name;
+    var amt = document.createElement('div');
+    amt.className = 'amt' + (r.total < 0 ? ' neg' : '');
+    amt.textContent = num(r.total);
+    top.appendChild(who); top.appendChild(amt);
+
+    var chips = document.createElement('div'); chips.className = 'chips';
+    if (r.redBooks) chips.appendChild(padChip('red', r.redBooks + ' red', num(r.redPts)));
+    if (r.blackBooks) chips.appendChild(padChip('black', r.blackBooks + ' black', num(r.blackPts)));
+    chips.appendChild(padChip('', 'count', plus(r.tableCount),
+      r.tableCount < 0 ? 'down' : 'up',
+      'Melded ' + num(r.meldPts) + ', caught holding ' + num(r.handCount) + '.'));
+    if (r.out) chips.appendChild(padChip('out', 'went out', plus(r.out)));
+
+    row.appendChild(top); row.appendChild(chips);
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
+/* The receipt. No total column — the standings above already answer that, and
+ * repeating it here only invited the eye to check the same figure twice.
+ * Not named "history": a top-level function by that name shadows window.history
+ * for the whole script, which is a trap to leave lying around. */
+function roundGrid() {
+  var t = document.createElement('table');
+  t.className = 'hist';
+  var head = '<thead><tr><th>Player</th>';
+  for (var i = 0; i < view.scores.length; i++) head += '<th>R' + (i + 1) + '</th>';
+  head += '</tr></thead>';
+  t.innerHTML = head;
+  var bestOf = view.scores.map(function (r) {
+    return view.seats.reduce(function (m, _, i) { return Math.max(m, r[i] || 0); }, -Infinity);
+  });
+  var tb = document.createElement('tbody');
+  view.seats.forEach(function (s, idx) {
+    var tr = document.createElement('tr');
+    var row = '<td>' + esc(s.name) + '</td>';
+    view.scores.forEach(function (r, ri) {
+      var v = r[idx] || 0;
+      row += '<td' + (v === bestOf[ri] ? ' class="best"' : '') + '>' + num(v) + '</td>';
+    });
+    tr.innerHTML = row;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  var sc = document.createElement('div'); sc.className = 'scroll'; sc.appendChild(t);
+  return sc;
+}
+
 function renderScores() {
   var body = $('scoreBody'); body.innerHTML = '';
   var totals = view.seats.map(function (_, i) {
     return view.scores.reduce(function (s, r) { return s + (r[i] || 0); }, 0);
   });
   var best = totals.length ? Math.max.apply(null, totals) : 0;
+  var ended = view.phase === 'gameEnd';
 
-  $('scoreTitle').textContent = view.phase === 'gameEnd' ? 'Final scores'
+  $('scoreTitle').textContent = ended ? 'Final scores'
     : view.phase === 'roundEnd' ? 'Round ' + (view.round + 1) + ' scored' : 'Scores';
 
-  if (view.roundDetail) {
-    var h = document.createElement('h3');
-    h.style.cssText = 'font-size:14px;margin-bottom:8px';
-    h.textContent = 'This round';
-    body.appendChild(h);
-    var t1 = document.createElement('table');
-    t1.innerHTML = '<thead><tr><th>Player</th><th>Black books</th><th>Red books</th>' +
-      '<th>Table count</th><th>Out</th><th>Round</th></tr></thead>';
-    var tb = document.createElement('tbody');
-    /* The columns the table keeps by hand. A books cell carries how many as well
-     * as what they were worth, because "600" on its own makes you do the division
-     * yourself. Table count is melded minus what you were caught holding, so it
-     * goes negative often enough to need its sign spelled out. */
-    var bookCell = function (n, pts) {
-      return n ? '<td>' + pts + '<span class="sub"> ×' + n + '</span></td>' : '<td>—</td>';
-    };
-    var signed = function (n) { return n < 0 ? '−' + Math.abs(n) : String(n); };
-    view.roundDetail.forEach(function (r, i) {
-      var tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + esc(view.seats[i].name) + '</td>' +
-        bookCell(r.blackBooks, r.blackPts) + bookCell(r.redBooks, r.redPts) +
-        '<td>' + signed(r.tableCount) + '</td>' +
-        '<td>' + (r.out || '—') + '</td>' +
-        '<td class="total">' + signed(r.total) + '</td>';
-      tb.appendChild(tr);
-    });
-    t1.appendChild(tb);
-    var sc = document.createElement('div'); sc.className = 'scroll'; sc.appendChild(t1);
-    body.appendChild(sc);
+  if (!view.scores.length && !view.roundDetail) {
+    var p = document.createElement('p');
+    p.className = 'note';
+    p.textContent = 'No rounds scored yet — the pad fills in as each one is counted.';
+    body.appendChild(p);
+    return;
   }
 
-  var h2 = document.createElement('h3');
-  h2.style.cssText = 'font-size:14px;margin:18px 0 8px';
-  h2.textContent = 'Running total';
-  body.appendChild(h2);
-
-  var t = document.createElement('table');
-  var head = '<thead><tr><th>Player</th>';
-  for (var i = 0; i < view.scores.length; i++) head += '<th>R' + (i + 1) + '</th>';
-  head += '<th>Total</th></tr></thead>';
-  t.innerHTML = head;
-  var tbody = document.createElement('tbody');
-  view.seats.forEach(function (s, idx) {
-    var tr = document.createElement('tr');
-    if (view.scores.length && totals[idx] === best) tr.className = 'lead';
-    var row = '<td>' + esc(s.name) + '</td>';
-    view.scores.forEach(function (r) { row += '<td>' + (r[idx] || 0) + '</td>'; });
-    row += '<td class="total">' + totals[idx] + '</td>';
-    tr.innerHTML = row;
-    tbody.appendChild(tr);
-  });
-  t.appendChild(tbody);
-  var sc2 = document.createElement('div'); sc2.className = 'scroll'; sc2.appendChild(t);
-  body.appendChild(sc2);
-
-  if (!view.scores.length) {
-    var p = document.createElement('p');
-    p.className = 'note'; p.style.marginTop = '10px';
-    p.textContent = 'No rounds scored yet.';
-    body.appendChild(p);
+  if (view.scores.length) {
+    body.appendChild(padHead('Standings'));
+    body.appendChild(standings(totals, best, ended));
+  }
+  if (view.roundDetail) {
+    body.appendChild(padHead('This round'));
+    body.appendChild(roundCards());
+  }
+  /* One round of history is the standings written out again, so it waits until
+   * there is a second round to compare it with. */
+  if (view.scores.length > 1) {
+    body.appendChild(padHead('Round by round'));
+    body.appendChild(roundGrid());
   }
 }
 
