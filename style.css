@@ -25,6 +25,47 @@
   --card-h:66px;
   color-scheme:dark;
 
+  /* ---------- app surfaces ----------
+     The chrome is neutral charcoal and the felt is demoted to one surface: the
+     table in the middle. Painting the whole page green left every element
+     within a few percent of every other, so nothing receded and nothing lifted
+     and the eye had nowhere to land. A near-black base gives the cards, the
+     brass and the cloth something to sit on — and it lets the cloth actually
+     mean something, because now it is the one green thing on screen.
+     Four steps, each a clear jump: page, panel, raised, hover. */
+  /* Not pure neutral: a few percent of the cloth is mixed into every surface,
+     so a claret table and a midnight one feel like different rooms rather than
+     the same grey box with a different rectangle in the middle. Too little to
+     read as colour, enough that the page does not feel dead. */
+  /* Plain values first, tinted second: a browser without color-mix keeps the
+     neutral charcoal and loses only the tint, rather than dropping the token
+     altogether and rendering an untinted mess. */
+  --app-0:#07090c;
+  --app-1:#111419;
+  --app-2:#171b21;
+  --app-3:#212630;
+  --app-0:color-mix(in srgb, var(--felt-deep) 22%, #07090c);
+  --app-1:color-mix(in srgb, var(--felt) 14%, #111419);
+  --app-2:color-mix(in srgb, var(--felt) 16%, #171b21);
+  --app-3:color-mix(in srgb, var(--felt) 18%, #212630);
+  /* Edges are light, not dark. A hairline border on every box is what made the
+     old chrome read as a wireframe; a top-edge highlight plus a shadow does the
+     same separating work the way a real raised surface does. */
+  --hair:rgba(255,255,255,.07);
+  --hair-2:rgba(255,255,255,.12);
+  --lift:inset 0 1px 0 rgba(255,255,255,.055);
+  --sh-1:0 1px 2px rgba(0,0,0,.45);
+  --sh-2:0 2px 6px rgba(0,0,0,.4), 0 10px 28px -10px rgba(0,0,0,.65);
+  --sh-3:0 20px 55px -14px rgba(0,0,0,.82);
+  /* Text ramp. Three steps is enough and keeps the hierarchy honest: what you
+     read, what labels it, and what is merely present. */
+  --txt:#e9edf2;
+  --txt-2:#a2acb9;
+  /* Measured, not eyeballed: the seat's hand/foot count sits on the panel
+     surface and has to clear 4.5:1 there. #68717d came in at 4.24. */
+  --txt-3:#818b98;
+  --brass-lt:#eccb6a;
+
   /* Faces for the solid card styles. Chosen by measured contrast, not by eye:
      each carries at least 5.8:1 against the card's own lettering, and the three
      coloured ones sit within 0.002 of each other in luminance so they read as
@@ -82,15 +123,30 @@
 button,.card,.stackbox,.meld,.chip,.pill,label{touch-action:manipulation}
 img{max-width:100%}
 html,body{height:100%}
+/* Charcoal, with the cloth showing only as an ambient wash at the top of the
+   screen — enough that midnight and claret still feel like different rooms,
+   not so much that the chrome turns into a colour field again. */
 body{
   margin:0;
+  background:var(--app-0);
   background:
-    radial-gradient(120% 90% at 50% 0%, var(--felt-hi) 0%, var(--felt) 45%, var(--felt-deep) 100%);
-  color:var(--bone);
+    radial-gradient(120% 60% at 50% -8%, color-mix(in srgb, var(--felt-hi) 72%, transparent) 0%,
+                                         color-mix(in srgb, var(--felt) 30%, transparent) 38%,
+                                         transparent 70%),
+    radial-gradient(90% 55% at 50% 108%, color-mix(in srgb, var(--felt) 26%, transparent) 0%,
+                                         transparent 65%),
+    var(--app-0);
+  background-attachment:fixed;
+  color:var(--txt);
   font:400 14px/1.45 Archivo, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
 }
-h1,h2,h3{font-family:"Bodoni Moda", "Times New Roman", serif;font-weight:700;margin:0;text-wrap:balance}
+/* The serif is the wordmark, not the interface. It stays on the brand title and
+   the table code — the two things that are meant to feel like a card room — and
+   everything else is the app's own grotesque, tightened up. */
+h1,h2,h3{font-weight:700;margin:0;text-wrap:balance;letter-spacing:-.015em}
+.brand h1{font-family:"Bodoni Moda","Times New Roman",serif}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 :focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:4px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -112,36 +168,54 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 /* ---------- lobby ---------- */
 #lobby{justify-content:center;padding-block:40px}
 .brand{text-align:center;margin-bottom:28px}
+/* A quiet kicker, not a tracked-out all-caps banner. The wide uppercase
+   micro-label was the loudest dated tic in the whole design and it was on
+   every section; it is gone everywhere. */
 .brand .sub{
-  font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--brass);
-  margin-bottom:10px;font-weight:600;
+  font-size:12.5px;color:var(--brass);letter-spacing:.01em;
+  margin-bottom:12px;font-weight:600;
 }
-.brand h1{font-size:clamp(34px,8vw,52px);line-height:1;letter-spacing:-.01em}
-.brand p{color:var(--dim);margin:12px auto 0;max-width:46ch;font-size:14px}
+.brand h1{font-size:clamp(36px,8.5vw,56px);line-height:1;letter-spacing:-.02em}
+.brand p{color:var(--txt-2);margin:14px auto 0;max-width:46ch;font-size:14.5px;line-height:1.55}
 .panels{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:26px}
 .panel{
-  background:linear-gradient(180deg,var(--rail) 0%,var(--rail-lo) 100%);
-  border:1px solid var(--line);border-radius:14px;padding:18px;
-  display:flex;flex-direction:column;gap:10px;
+  background:var(--app-1);
+  border-radius:16px;padding:20px;
+  box-shadow:var(--lift),var(--sh-2);
+  display:flex;flex-direction:column;gap:11px;
 }
 .panel h2{font-size:19px}
-.panel p{margin:0;color:var(--dim);font-size:13px}
-label.field{display:flex;flex-direction:column;gap:5px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.panel p{margin:0;color:var(--txt-2);font-size:13px}
+label.field{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--txt-2);font-weight:500}
 input[type=text],select{
-  background:var(--felt-deep);border:1px solid var(--line);color:var(--bone);
-  border-radius:8px;padding:9px 11px;font:500 15px Archivo,sans-serif;width:100%;
+  background:var(--app-2);border:1px solid var(--hair);color:var(--txt);
+  border-radius:10px;padding:11px 12px;font:500 15px Archivo,sans-serif;width:100%;
+  transition:border-color .14s,box-shadow .14s,background .14s;
 }
-input[type=text]::placeholder{color:var(--dim);opacity:.6}
+input[type=text]:focus,select:focus{
+  outline:none;border-color:var(--brass-dim);background:var(--app-3);
+  box-shadow:0 0 0 3px rgba(214,174,62,.16);
+}
+input[type=text]::placeholder{color:var(--txt-3)}
 #joinCode{text-transform:uppercase;letter-spacing:.3em;font-weight:700;font-family:"Bodoni Moda",serif;font-size:19px}
+/* Buttons get a real surface and a real press. The old flat fill with a hard
+   edge was the other thing that read as a template. */
 .btn{
-  background:var(--brass);color:#22190a;border-radius:8px;padding:10px 16px;
-  font-weight:700;letter-spacing:.02em;text-align:center;transition:filter .15s;
+  background:linear-gradient(180deg,#e2ba49 0%,var(--brass) 55%,#c39c2f 100%);
+  color:#211806;border-radius:11px;padding:11px 17px;
+  font-weight:650;letter-spacing:.005em;text-align:center;
+  box-shadow:var(--sh-1),inset 0 1px 0 rgba(255,255,255,.25);
+  transition:filter .14s,transform .08s,box-shadow .14s;
 }
-.btn:hover{filter:brightness(1.08)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--bone);font-weight:600}
-.btn.ghost:hover{background:var(--rail-hi);filter:none}
-.btn.sm{padding:6px 11px;font-size:13px;border-radius:7px}
+.btn:hover{filter:brightness(1.06)}
+.btn:active{transform:translateY(1px);box-shadow:var(--sh-1)}
+.btn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none;transform:none;filter:none}
+.btn.ghost{
+  background:var(--app-2);border:1px solid var(--hair);color:var(--txt);font-weight:600;
+  box-shadow:var(--lift);
+}
+.btn.ghost:hover{background:var(--app-3);border-color:var(--hair-2);filter:none}
+.btn.sm{padding:7px 12px;font-size:13px;border-radius:9px}
 .rules-note{margin-top:22px;color:var(--dim);font-size:12.5px;line-height:1.7}
 .rules-note b{color:var(--bone-2);font-weight:600}
 
@@ -164,8 +238,8 @@ input[type=text]::placeholder{color:var(--dim);opacity:.6}
 /* ---------- table chrome ---------- */
 .bar{
   position:sticky;top:0;z-index:20;
-  background:var(--bar-bg);backdrop-filter:blur(8px);
-  border-bottom:1px solid var(--line);
+  background:rgba(10,12,15,.72);backdrop-filter:blur(18px) saturate(1.3);
+  box-shadow:0 1px 0 var(--hair);
   /* Run the bar's own background up behind the notch and push its contents
      clear of it. In Safari this inset is zero and nothing moves; added to the
      Home Screen the page owns the whole screen and this is what keeps the
@@ -173,15 +247,16 @@ input[type=text]::placeholder{color:var(--dim);opacity:.6}
      element, so everything hung below the bar follows it down. */
   padding-top:env(safe-area-inset-top,0px);
 }
-.bar-in{display:flex;align-items:center;gap:12px;padding-block:9px;flex-wrap:wrap}
-.tag{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.bar-in{display:flex;align-items:center;gap:12px;padding-block:10px;flex-wrap:wrap}
+.tag{font-size:11.5px;color:var(--txt-3);font-weight:500;letter-spacing:0}
 .code{font-family:"Bodoni Moda",serif;font-weight:700;font-size:17px;letter-spacing:.2em;color:var(--brass)}
 .bar .spacer{flex:1}
 .pill{
-  display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
-  border:1px solid var(--line);font-size:12px;font-weight:600;background:var(--felt-deep);
+  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--hair);font-size:12px;font-weight:600;background:var(--app-2);
+  color:var(--txt-2);box-shadow:var(--lift);
 }
-.pill.you{border-color:var(--brass);color:var(--brass);background:rgba(214,174,62,.1)}
+.pill.you{border-color:rgba(214,174,62,.5);color:var(--brass-lt);background:rgba(214,174,62,.12)}
 /* A slow breath rather than a blink: it runs for the whole of your turn, which
    could be a minute of thinking, and anything sharper would be unbearable. */
 @keyframes waitingOnYou{
@@ -222,35 +297,57 @@ input[type=text]::placeholder{color:var(--dim);opacity:.6}
 /* ---------- seats ---------- */
 .seats{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
 .seat{
-  background:var(--rail);border:1px solid var(--line);border-radius:12px;padding:11px 12px;
+  background:var(--app-1);border-radius:14px;padding:12px 13px;
+  box-shadow:var(--lift),var(--sh-1);
   display:flex;flex-direction:column;gap:8px;
+  transition:box-shadow .16s,background .16s;
 }
-.seat.active{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass-dim) inset}
+/* Whose turn it is, said with light rather than a border: the seat lifts off
+   the page and picks up a brass rim. */
+.seat.active{
+  background:var(--app-2);
+  box-shadow:inset 0 0 0 1px rgba(214,174,62,.45),
+             0 0 0 3px rgba(214,174,62,.09),
+             var(--sh-2);
+}
+/* On a wide screen a seat had no ceiling, so late in a round — six books each
+   — the seats grew into columns that pushed the hand off the bottom of a
+   fixed-height board, where it was simply clipped. The books scroll inside the
+   seat instead, the way they already do on a phone. */
+.seat .melds{max-height:190px;overflow-y:auto;overscroll-behavior:contain}
 .seat-top{display:flex;align-items:baseline;gap:8px}
-.seat-name{font-weight:700;font-size:14.5px}
-.seat.active .seat-name{color:var(--brass)}
-.seat-meta{margin-left:auto;font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+.seat-name{font-weight:650;font-size:14.5px;letter-spacing:-.01em}
+.seat.active .seat-name{color:var(--brass-lt)}
+.seat-meta{margin-left:auto;font-size:11.5px;color:var(--txt-3);font-variant-numeric:tabular-nums}
 .chips{display:flex;flex-wrap:wrap;gap:4px}
 .chip{
-  font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;
-  border:1px solid var(--line);color:var(--dim);letter-spacing:.04em;
+  font-size:10.5px;font-weight:600;padding:2.5px 8px;border-radius:999px;
+  background:var(--app-3);color:var(--txt-2);letter-spacing:0;
 }
-.chip.red{background:rgba(184,52,44,.18);border-color:var(--rouge);color:var(--rouge-lt)}
-.chip.black{background:rgba(0,0,0,.35);border-color:#5d6b64;color:#c3cfc9}
-.chip.foot{border-color:var(--good);color:var(--good)}
+.chip.red{background:rgba(184,52,44,.2);color:#e8837c;box-shadow:inset 0 0 0 1px rgba(184,52,44,.5)}
+.chip.black{background:rgba(255,255,255,.06);color:#c6d0d8;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+.chip.foot{background:rgba(99,180,140,.16);color:#7fcaa3;box-shadow:inset 0 0 0 1px rgba(99,180,140,.42)}
 
 /* ---------- center ---------- */
+/* The table itself — the one green thing left, and now the only one, which is
+   what makes it read as a table rather than as more background. Recessed into
+   the page: a dark rim and an inner shadow at the edges, with the cloth lit
+   from above. This is where a cloth theme actually shows. */
 .center{
   display:flex;gap:18px;align-items:flex-start;justify-content:center;flex-wrap:wrap;
-  padding:16px;border-radius:14px;
+  padding:18px 16px;border-radius:16px;position:relative;
   background:
-    repeating-linear-gradient(45deg,rgba(255,255,255,.012) 0 3px,transparent 3px 6px),
-    var(--felt-deep);
-  border:1px solid var(--line);
+    repeating-linear-gradient(45deg,rgba(255,255,255,.015) 0 3px,transparent 3px 6px),
+    radial-gradient(120% 140% at 50% -20%, var(--felt-hi) 0%, var(--felt) 55%, var(--felt-deep) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,.45),
+    inset 0 1px 0 rgba(255,255,255,.07),
+    inset 0 22px 44px -26px rgba(0,0,0,.9),
+    var(--sh-1);
 }
 .stackbox{display:flex;flex-direction:column;align-items:center;gap:7px;min-width:68px}
-.stackbox .tag{text-align:center}
-.pilecount{font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+.stackbox .tag{text-align:center;color:rgba(255,255,255,.66)}
+.pilecount{font-size:11.5px;color:rgba(255,255,255,.6);font-variant-numeric:tabular-nums}
 .stackbox.pick{cursor:pointer}
 .stackbox.pick .card{transition:transform .12s, box-shadow .12s}
 .stackbox.pick:hover .card{transform:translateY(-4px)}
@@ -258,7 +355,7 @@ input[type=text]::placeholder{color:var(--dim);opacity:.6}
 .stackbox.on .tag,.stackbox.on .pilecount{color:var(--brass)}
 .stackbox.out .card{opacity:.28}
 .stackbox.out .tag,.stackbox.out .pilecount{opacity:.5}
-.divider{width:1px;align-self:stretch;background:var(--line);margin-inline:4px}
+.divider{width:1px;align-self:stretch;background:rgba(255,255,255,.1);margin-inline:4px}
 
 /* ---------- cards ---------- */
 .card{
@@ -288,7 +385,7 @@ input[type=text]::placeholder{color:var(--dim);opacity:.6}
     repeating-linear-gradient(45deg,#7c2a25 0 4px,#8f312b 4px 8px);
   border-color:#5e211d;box-shadow:inset 0 0 0 3px var(--bone-2),0 1px 2px rgba(0,0,0,.45);
 }
-.card.empty{background:none;border:1px dashed var(--line);box-shadow:none}
+.card.empty{background:none;border:1px dashed var(--hair-2);box-shadow:none}
 .card.sel{transform:translateY(-10px);box-shadow:0 6px 14px rgba(0,0,0,.5),0 0 0 2px var(--brass)}
 /* Wilds carry a band in their own colour along the top edge — brass for a
    joker at 50, blue for a deuce at 20 — so you can tell at a glance what is
@@ -353,27 +450,31 @@ input[type=text]::placeholder{color:var(--dim);opacity:.6}
 /* ---------- melds ---------- */
 .melds{display:flex;flex-wrap:wrap;gap:8px}
 .meld{
-  border:1px solid var(--line);border-radius:10px;padding:7px 8px 8px;
-  background:rgba(0,0,0,.18);display:flex;flex-direction:column;gap:5px;
-  transition:border-color .12s, background .12s;
+  border:1px solid var(--hair);border-radius:12px;padding:7px 8px 8px;
+  background:var(--app-1);display:flex;flex-direction:column;gap:5px;
+  box-shadow:var(--lift);
+  transition:border-color .12s, background .12s, box-shadow .12s, transform .08s;
 }
 .meld.target{cursor:pointer}
-.meld.target:hover{border-color:var(--brass);background:rgba(214,174,62,.1)}
+.meld.target:hover{border-color:var(--brass);background:rgba(214,174,62,.12);box-shadow:var(--lift),var(--sh-1)}
+.meld.target:active{transform:translateY(1px)}
 /* Clean or dirty, from the first three cards rather than only once the book
    closes: a pile with no wilds in it is on its way to 500 and is ringed in red,
    one with a wild in it is on its way to 300 and is ringed in black. Knowing
    which is which at a glance is the whole point — it decides where your next
    natural goes. The black is lifted off pure black so the box still reads as a
    box against the felt. */
-.meld.clean{border-color:var(--rouge);background:rgba(184,52,44,.1)}
-.meld.dirty{border-color:#11161a;background:rgba(0,0,0,.34)}
+.meld.clean{border-color:rgba(184,52,44,.75);background:rgba(184,52,44,.12)}
+.meld.dirty{border-color:rgba(255,255,255,.16);background:rgba(0,0,0,.4)}
 .meld.clean .meld-top{color:var(--rouge-lt)}
-.meld.dirty .meld-top{color:#b9c6be}
+.meld.dirty .meld-top{color:#c2ccd6}
 /* Closed books say so more loudly — the ring thickens rather than changing hue,
    so a closed red book still reads as the same red as the open one. */
 .meld.clean.done{box-shadow:inset 0 0 0 1px var(--rouge)}
 .meld.dirty.done{box-shadow:inset 0 0 0 1px #2b3640}
-.meld-top{display:flex;align-items:center;gap:6px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700}
+/* Sentence case, not tracked-out capitals: "Kings · 7 · red book" reads at a
+   glance where "K I N G S · 7 · R E D  B O O K" had to be decoded. */
+.meld-top{display:flex;align-items:center;gap:6px;font-size:11px;letter-spacing:0;color:var(--txt-2);font-weight:600}
 .meld-cards{display:flex;gap:3px;flex-wrap:wrap}
 .meld-mini{display:flex;gap:2px;flex-wrap:wrap;max-width:132px}
 .mini{
@@ -497,28 +598,29 @@ input[type=text]::placeholder{color:var(--dim);opacity:.6}
    anything that looks like a rule. */
 .actions{
   position:fixed;left:0;right:0;bottom:0;z-index:30;
-  background:var(--felt-deep);
-  box-shadow:0 -14px 22px -12px rgba(0,0,0,.75);
-  padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));padding-top:10px;
+  background:rgba(10,12,15,.9);backdrop-filter:blur(18px) saturate(1.3);
+  box-shadow:0 -1px 0 var(--hair), 0 -18px 30px -14px rgba(0,0,0,.8);
+  padding-bottom:calc(11px + env(safe-area-inset-bottom,0px));padding-top:11px;
 }
 .actions-in{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.hint{font-size:12.5px;color:var(--dim);flex:1;min-width:160px}
+.hint{font-size:12.5px;color:var(--txt-2);flex:1;min-width:160px}
 .hint.warn{color:var(--rouge-lt)}
 .hint b{color:var(--brass);font-weight:700}
 
 /* ---------- scores ---------- */
 .sheet{
-  position:fixed;inset:0;z-index:50;background:rgba(6,16,13,.88);
+  position:fixed;inset:0;z-index:50;background:rgba(4,6,9,.74);backdrop-filter:blur(10px);
   display:flex;align-items:center;justify-content:center;padding:16px;
 }
 .sheet-in{
   width:100%;max-width:620px;max-height:86vh;overflow:auto;
-  background:var(--rail);border:1px solid var(--line);border-radius:14px;padding:20px;
+  background:var(--app-1);border-radius:18px;padding:22px;
+  box-shadow:var(--lift),var(--sh-3);
 }
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13.5px}
-th,td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line)}
+th,td{padding:8px;text-align:right;border-bottom:1px solid var(--hair)}
 th:first-child,td:first-child{text-align:left}
-thead th{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700}
+thead th{font-size:11.5px;letter-spacing:0;color:var(--txt-3);font-weight:600}
 tbody tr:last-child td{border-bottom:0}
 .total{color:var(--brass);font-weight:700}
 /* How many books that figure was, sitting quietly beside what they were worth. */
@@ -526,10 +628,30 @@ tbody tr:last-child td{border-bottom:0}
 .lead td{background:rgba(214,174,62,.08)}
 .scroll{overflow-x:auto}
 
-.log{margin-top:8px;font-size:12px;color:var(--dim);line-height:1.6;max-height:110px;overflow:auto}
-.note{font-size:12px;color:var(--dim)}
+.log{margin-top:8px;font-size:12px;color:var(--txt-3);line-height:1.6;max-height:110px;overflow:auto}
+.note{font-size:12px;color:var(--txt-2)}
 .err{color:var(--rouge-lt);font-size:13px}
-.center-msg{text-align:center;padding:40px 16px;color:var(--dim)}
+.center-msg{text-align:center;padding:40px 16px;color:var(--txt-2)}
+
+/* ---------- nothing down yet ----------
+   The shelf is a fixed share of the column, so before you lay anything it was
+   a line of grey text at the top of a tall band of empty page — the screen
+   read as unfinished rather than as empty. Centred, with a dashed outline
+   standing in for the books that will land there, the same space reads as a
+   place waiting to be filled. */
+/* While the shelf is empty the table gets a little more room to breathe — but
+   only a little. Letting it take all the slack turned it into a slab with the
+   piles marooned in the middle and pushed the hand into a scroll; the space
+   has to go somewhere, and a centred empty state holds it better than a
+   stretched table does. */
+.board:has(#myMelds.empty) .center{padding-block:30px}
+#myMelds.empty{align-content:center;justify-content:center;padding-block:4px}
+#myMelds.empty .note{
+  text-align:center;color:var(--txt-3);font-size:13px;line-height:1.7;
+  border:1px dashed var(--hair-2);border-radius:14px;
+  padding:22px 26px;max-width:320px;
+}
+#myMelds.empty .note b{display:block;color:var(--txt-2);font-weight:600;font-size:14px;margin-bottom:3px}
 
 /* ---------- connection banner (server build only) ---------- */
 .conn{
@@ -540,8 +662,8 @@ tbody tr:last-child td{border-bottom:0}
 }
 .share{
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  background:var(--felt-deep);border:1px solid var(--line);border-radius:10px;
-  padding:10px 12px;margin-top:4px;
+  background:var(--app-2);border:1px solid var(--hair);border-radius:12px;
+  padding:11px 13px;margin-top:4px;box-shadow:var(--lift);
 }
 .share code{
   font-family:"Bodoni Moda",serif;font-weight:700;font-size:22px;
@@ -552,11 +674,12 @@ tbody tr:last-child td{border-bottom:0}
 /* ---------- rules sheet and pile peek ---------- */
 .rule-toggle{
   display:flex;gap:11px;align-items:flex-start;
-  background:var(--felt-deep);border:1px solid var(--line);border-radius:10px;padding:13px 14px;
+  background:var(--app-2);border:1px solid var(--hair);border-radius:12px;padding:14px;
+  box-shadow:var(--lift);
 }
 .rule-toggle input{
   appearance:none;flex:0 0 auto;width:44px;height:25px;border-radius:999px;margin:1px 0 0;
-  background:var(--rail-hi);border:1px solid var(--line);cursor:pointer;position:relative;
+  background:var(--app-3);border:1px solid var(--hair-2);cursor:pointer;position:relative;
   transition:background .15s, border-color .15s;
 }
 .rule-toggle input::after{
@@ -567,24 +690,24 @@ tbody tr:last-child td{border-bottom:0}
 .rule-toggle input:checked::after{transform:translateX(19px);background:var(--bone)}
 .rule-toggle label{cursor:pointer;display:block}
 .rule-title{font-weight:700;font-size:14px;margin-bottom:3px}
-.rule-head{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
-  font-family:Archivo,sans-serif;font-weight:700;margin:22px 0 9px}
+.rule-head{font-size:13px;letter-spacing:-.01em;color:var(--txt-2);
+  font-family:Archivo,sans-serif;font-weight:600;margin:22px 0 9px}
 .rule-head:first-child{margin-top:0}
 
 /* ---------- picking a deck and a cloth ---------- */
 .look-row{
-  background:var(--felt-deep);border:1px solid var(--line);border-radius:10px;
-  padding:13px 14px;margin-bottom:10px;
+  background:var(--app-2);border:1px solid var(--hair);border-radius:12px;
+  padding:14px;margin-bottom:10px;box-shadow:var(--lift);
 }
 .look-opts{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .look-opt{
   display:flex;flex-direction:column;align-items:center;gap:7px;
-  border:1px solid var(--line);border-radius:9px;padding:8px 9px;
-  background:rgba(0,0,0,.2);transition:border-color .12s, background .12s;
+  border:1px solid var(--hair);border-radius:10px;padding:9px 10px;
+  background:rgba(0,0,0,.28);transition:border-color .12s, background .12s;
 }
-.look-opt:hover{border-color:var(--rail-hi)}
+.look-opt:hover{border-color:var(--hair-2);background:rgba(0,0,0,.14)}
 .look-opt.on{border-color:var(--brass);background:rgba(214,174,62,.12)}
-.look-name{font-size:12px;font-weight:600;color:var(--dim)}
+.look-name{font-size:12px;font-weight:600;color:var(--txt-2)}
 .look-opt.on .look-name{color:var(--brass)}
 .look-note{margin-top:9px}
 /* The deck sample is built from real cards, so it comes with their sizing.
@@ -596,7 +719,7 @@ tbody tr:last-child td{border-bottom:0}
 .deck-sample .card .r{font-size:10px}
 .deck-sample .card .s{font-size:8px}
 .deck-sample .card.wild::before{height:3px;border-radius:2px 2px 0 0}
-.theme-sample{display:block;width:62px;height:32px;border-radius:4px;border:1px solid var(--line)}
+.theme-sample{display:block;width:62px;height:32px;border-radius:5px;border:1px solid var(--hair-2)}
 
 .peek-cards{display:flex;flex-wrap:wrap;gap:9px}
 .peek-card{display:flex;flex-direction:column;align-items:center;gap:4px}
@@ -681,16 +804,31 @@ tbody tr:last-child td{border-bottom:0}
        cover panels that ride with the content; the `scroll` pair are shadows
        pinned to the box. They cancel out exactly when there is nothing more that
        way, so the cue appears only when a swipe would actually do something. */
+    /* The cover panels have to be the seat's own colour or they show as a
+       smudge at the edge — they were still painted in felt green from when the
+       whole page was green. */
     background:
-      linear-gradient(to right, var(--rail), rgba(29,63,52,0)) left/18px 100% no-repeat local,
-      linear-gradient(to left, var(--rail), rgba(29,63,52,0)) right/18px 100% no-repeat local,
+      linear-gradient(to right, var(--app-1), transparent) left/18px 100% no-repeat local,
+      linear-gradient(to left, var(--app-1), transparent) right/18px 100% no-repeat local,
       radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.4), rgba(0,0,0,0)) left/9px 100% no-repeat scroll,
       radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.4), rgba(0,0,0,0)) right/9px 100% no-repeat scroll;
   }
   .seat .meld{flex:0 0 auto}
   .seat .meld-mini{flex-wrap:nowrap;max-width:none;gap:2px}
   .seat .mini{width:11px;height:16px}
-  .seat .meld{border:0;background:none;padding:0;gap:2px;flex-direction:row;align-items:center}
+  /* In a seat a book is a bare caption and a strip of minis, so it drops the
+     box entirely — including the ring a closed book wears in your own shelf,
+     which with no box around it hung off the caption like a stray pill. The
+     red or black of the caption still says clean or dirty. */
+  .seat .meld,
+  .seat .meld.clean,.seat .meld.dirty,
+  .seat .meld.clean.done,.seat .meld.dirty.done{
+    border:0;background:none;padding:0;gap:2px;flex-direction:row;align-items:center;
+    box-shadow:none;
+  }
+  /* A darker edge so a run of minis reads as separate cards rather than one
+     bright bar — on charcoal the old edge was too close to the fill to show. */
+  .seat .mini{border-color:#8d8472}
   .seat .meld-top{font-size:9px;letter-spacing:.06em}
   .seat .meld-mini{gap:1.5px;max-width:96px}
 
