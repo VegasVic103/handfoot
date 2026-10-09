@@ -26,9 +26,9 @@ All application files belong in one directory. This is plain Node HTTP and WebSo
 - **Play → Vs computer** is the practice table: choose 1–3 computer opponents, defaulting to 2, and deal immediately. Each bot receives one of four hidden play styles. Styles are stable during a game and rerolled for a rematch.
 - Both creation screens include editable rules before the first deal: decks, required red/black books, and discard pickup total are visible, with the remaining controls under **More rules**. **Settings → Rules** lets the host adjust rules during play for the next round. Personal card style, table color, shared meld presentation, hand arrangement, sorting, and turn reminders remain separate browser preferences.
 
-Christine’s Rules is selected for every fresh setup. Selecting **Real Rules** replaces all rule values; later edits show **Customized rules**. The expandable **Different from Christine’s** list flags changed mechanics and values. Both modes use individual scoring. See [RULESETS.md](RULESETS.md) for the published reference and app conventions.
+House Rules is selected for every fresh setup. Selecting **Real Rules** replaces all rule values; later edits show **Customized rules**. The expandable **Different from House Rules** list flags changed mechanics and values. Both modes use individual scoring. See [RULESETS.md](RULESETS.md) for the published reference and app conventions.
 
-Under Christine’s Rules, select two different stock piles and press **Draw 2**. Real Rules draws both cards from one stock. Alternatively, open the discard pile and confirm **Take pile**; matching natural cards are chosen from your hand automatically. Opening the window never commits a pickup.
+Under House Rules, select two different stock piles and press **Draw 2**. Real Rules draws both cards from one stock. Alternatively, open the discard pile and confirm **Take pile**; matching natural cards are chosen from your hand automatically. Opening the window never commits a pickup.
 
 Select cards to play a new meld. For an existing book, one tap chooses the destination for the Add action; a second tap within 400ms adds the same selected cards directly. The turn, selection, target, and legality are rechecked. Finish a normal turn by selecting a card and discarding it. The footer shows actions that apply to the current play.
 
@@ -70,7 +70,7 @@ The server validates each configuration together, including enough cards for eve
 
 Stock arrangement is one stock or four piles. Two-card draws, two matching naturals for discard pickup, and no all-wild books remain fixed. Additional adjustable mechanics include locked completed books, minimum naturals with wilds (2–4), eights/nines worth 10 points, laid red-three bonuses, and a required final discard. Rule controls never change individual scoring into partnerships.
 
-## Christine’s Rules (default)
+## House Rules (default)
 
 | Rule | Setting |
 |---|---|
