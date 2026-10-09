@@ -74,13 +74,13 @@
     var presetLabel = document.createElement('label'); presetLabel.className = 'field'; presetLabel.setAttribute('for', prefix + 'RulePreset');
     var presetCaption = document.createElement('span'); presetCaption.textContent = 'Rule set'; presetLabel.appendChild(presetCaption);
     var preset = document.createElement('select'); preset.id = prefix + 'RulePreset';
-    [['christine', 'Christine’s Rules'], ['real', 'Real Rules'], ['custom', 'Customized rules']].forEach(function (entry) {
+    [['christine', 'House Rules'], ['real', 'Real Rules'], ['custom', 'Customized rules']].forEach(function (entry) {
       var option = document.createElement('option'); option.value = entry[0]; option.textContent = entry[1]; option.disabled = entry[0] === 'custom'; preset.appendChild(option);
     });
     preset.value = 'christine'; presetLabel.appendChild(preset); area.appendChild(presetLabel);
     var presetNote = document.createElement('p'); presetNote.className = 'setup-rules-note'; presetNote.id = prefix + 'PresetNote'; area.appendChild(presetNote);
     var differences = document.createElement('details'); differences.className = 'menu-rules';
-    var diffSummary = document.createElement('summary'); diffSummary.textContent = 'Different from Christine’s'; differences.appendChild(diffSummary);
+    var diffSummary = document.createElement('summary'); diffSummary.textContent = 'Different from House Rules'; differences.appendChild(diffSummary);
     var diffBody = document.createElement('div'); diffBody.id = prefix + 'PresetDifferences'; differences.appendChild(diffBody); area.appendChild(differences);
     preset.addEventListener('change', function () { applySetupPreset(prefix, preset.value); });
     var note = document.createElement('p'); note.className = 'setup-rules-note';
