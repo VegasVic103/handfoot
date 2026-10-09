@@ -6,7 +6,7 @@ Updated October 9, 2026. This is the complete Hand & Foot 2.0 application source
 
 This package contains the latest accepted version of the separate optimization copy. Use Vic’s current repository as the integration baseline, preserving any newer unrelated work. Keep the established table structure and meld presentation. The five dark themes have refreshed colors, and Ivory provides a light option. `style.css` remains byte-identical to the archive; `enhancements.css` adds support for the new controls and table features. The separate Emerald/casino redesign and its earlier handoff are not the design instructions for this package.
 
-The engine includes validated rule configuration and two complete presets: Christine’s Rules (default) and Real Rules (Bicycle-based, adapted to individual scoring). See RULESETS.md for exact behavior, differences and app conventions. The original scoring and deal defaults are retained, with one explicit new default: when a stock pile first empties after a draw, recycle the remaining stocks and discard cards except the visible top card into four piles. This can happen once per round; the next exhaustion ends and scores the round. Never replace the new engine with the earlier archive’s engine while keeping these server/client changes.
+The engine includes validated rule configuration and two complete presets: House Rules (default) and Real Rules (Bicycle-based, adapted to individual scoring). See RULESETS.md for exact behavior, differences and app conventions. The original scoring and deal defaults are retained, with one explicit new default: when a stock pile first empties after a draw, recycle the remaining stocks and discard cards except the visible top card into four piles. This can happen once per round; the next exhaustion ends and scores the round. Never replace the new engine with the earlier archive’s engine while keeping these server/client changes.
 
 This integration keeps the new Play/Friends/Computer setup, four-player cap, hidden randomized bot styles, live chat, reconnect and undo fixes, public opponent inspection, book colors, card-count and point summaries, selection controls, Auto, confirmed discard pickup, guarded double-tap adds, and once-per-round score presentation. The server still owns the cards and legal moves.
 
@@ -19,7 +19,7 @@ Latest interaction details: **Settings → Meld display** applies Cards/Tiles to
 - Accepted own-card draw, meld, discard and pickup animations. Device Reduce Motion is respected; Settings has an Off option.
 - Random Auto draws from two distinct nonempty piles and pauses for legal pickup. One-stock Real Rules uses Auto On/Off.
 - Chat is immediately left of Sort during play and remains reachable in the waiting-room header.
-- Named presets replace all values before a deal; later edits appear as Customized rules. Differences from Christine’s are expandable, and supported gameplay capabilities are adjustable.
+- Named presets replace all values before a deal; later edits appear as Customized rules. Differences from House Rules are expandable, and supported gameplay capabilities are adjustable.
 
 ## Host rule configuration
 
