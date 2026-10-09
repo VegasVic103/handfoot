@@ -33,7 +33,7 @@ Desktop in-app browser with local disposable fixtures, rendered at phone sizes:
 
 - Card room, Midnight and Ivory inspected on real rendered tables. Midnight/Ivory measured identical board, opponent, pile, meld, hand and action rectangles. Ivory meld-count, discard-caption and switch contrast exceptions corrected.
 - Real UI actions produced two stock-to-hand flights, one hand-to-meld flight, one hand-to-discard flight, and a bounded eight-flight pickup. Layers ignore pointer events, disappear afterward, and log no runtime errors. Device Reduce Motion and the Off preference are guarded in code; physical device motion settings were not exercised.
-- A Real Rules practice table was created through setup, showed one stock and Auto On/Off, automatically drew two cards, and displayed a nine as ten points. A subsequent fresh setup restored Christine’s Rules.
+- A Real Rules practice table was created through setup, showed one stock and Auto On/Off, automatically drew two cards, and displayed a nine as ten points. A subsequent fresh setup restored House Rules.
 - At 320 × 700 with three bots, Random stayed paused for an available legal discard pickup. On the next turn it drew two cards from distinct piles 2 and 4. Chat sat immediately before Sort with a 44px target and opened its dialog correctly; toolbar counts and buttons did not overlap.
 - Midgame preset editor also retains Real Rules after the native input/change event sequence; one stock, three wilds and 100-point going-out bonus update together.
 - New vector cover reviewed at 390 × 844 and 320 × 700, including Ivory. All three menu actions fit without scrolling; no horizontal overflow.
