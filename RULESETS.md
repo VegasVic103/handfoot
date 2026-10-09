@@ -1,10 +1,10 @@
 # Rule presets
 
-Christine’s Rules is the default for every new friends or practice setup. Both presets use individual scoring for 2–4 players; partnerships are not implemented.
+House Rules is the default for every new friends or practice setup. Both presets use individual scoring for 2–4 players; partnerships are not implemented.
 
-Choosing a preset replaces all values, including gameplay options. Editing a value afterward shows **Customized rules**. Expand **Different from Christine’s** to inspect differences. The same options can be added to a custom version of Christine’s without changing her defaults. Changes made after dealing apply next round, never to the current hand.
+Choosing a preset replaces all values, including gameplay options. Editing a value afterward shows **Customized rules**. Expand **Different from House Rules** to inspect differences. The same options can be added to a custom version of House Rules without changing her defaults. Changes made after dealing apply next round, never to the current hand.
 
-## Christine’s Rules
+## House Rules
 
 These preserve the supplied game’s defaults and the requested one-time stock recycle. A second meld of the same rank is legal only after the previous one reaches the book size. For example, a completed red sevens book can be followed by a new black sevens book. An unfinished sevens meld blocks starting another. Completed books may still accept legal additions; a completed red book cannot accept a wild.
 
@@ -12,7 +12,7 @@ These preserve the supplied game’s defaults and the requested one-time stock r
 
 Hand & Foot has no single universal rulebook; [Pagat describes its variations](https://www.pagat.com/rummy/handfoot.html). This preset uses [Bicycle’s published Hand and Foot rules](https://bicyclecards.com/how-to-play/hand-and-foot) as its baseline, adapted for individual play.
 
-| Mechanic | Christine’s default | Real Rules default |
+| Mechanic | House Rules default | Real Rules default |
 |---|---|---|
 | Decks | Players + 2 | 5 |
 | Hand / foot | 11 / 11 | 11 / 11 |
@@ -30,7 +30,7 @@ Hand & Foot has no single universal rulebook; [Pagat describes its variations](h
 
 Both have natural melds starting at three cards, seven-card books, 500/300 red/black book bonuses, one red and one black book required, four rounds, and opening minimums of 50/90/120/150. No all-wild books.
 
-Bicycle does not specify every scoring/exhaustion detail. This app explicitly uses +100 for a laid red three, −100 for a held red three, and +100 for going out in Real Rules. It keeps individual ownership/scoring and the existing stock-exhaustion procedure: the final successful draw gets its play/discard turn, then the round scores. These are documented app conventions, not a claim of a universal official ruleset. Christine’s going-out bonus remains +500.
+Bicycle does not specify every scoring/exhaustion detail. This app explicitly uses +100 for a laid red three, −100 for a held red three, and +100 for going out in Real Rules. It keeps individual ownership/scoring and the existing stock-exhaustion procedure: the final successful draw gets its play/discard turn, then the round scores. These are documented app conventions, not a claim of a universal official ruleset. The House Rules going-out bonus remains +500.
 
 ## Controls shared by both presets
 
