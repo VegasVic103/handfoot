@@ -1,0 +1,564 @@
+/* Behavior adapters for Vic's original stylesheet. Keep its cloth, typography,
+   card artwork and controls; this file connects the new interaction hooks. */
+.board{position:relative}
+.mine{gap:8px}
+.board[data-phase="playing"] .seat.me,.board[data-phase="roundEnd"] .seat.me,.board[data-phase="gameEnd"] .seat.me{display:none}
+.seat{position:relative;min-width:0;flex-wrap:nowrap}
+.seat-top,.seat-subtop{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.seat-identity{min-width:0;flex:1;display:flex;align-items:center;gap:6px;overflow:hidden;padding:3px;margin:-3px}
+.seat-identity::after{content:'⌄';color:var(--txt-3);font-size:12px}
+.seat:has(.seat-expand[aria-expanded="true"]) .seat-identity::after{content:'⌃'}
+.seat.me .seat-identity::after{content:none}
+.seat-name{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.seat-top .chips{flex:0 1 auto;margin-left:auto}
+.seat-subtop{font-size:11px;color:var(--txt-2);line-height:1.2}
+.seat-subtop .seat-meta{margin-left:auto;color:var(--txt-2)}
+.seat-expand{position:absolute;inset:0 0 auto;height:38px;z-index:2;border-radius:inherit}
+.seat-expand::after{content:none}
+.seat.active:not(.me){background:var(--app-1);box-shadow:inset 0 0 0 1px rgba(214,174,62,.75),var(--sh-1)}
+.seat.active:not(.me) .seat-name{color:inherit}
+.books-head{justify-content:space-between;flex-wrap:nowrap;padding-inline:8px}
+.books-head .chips{margin-left:auto}
+.book-stats{display:flex;justify-content:space-between;gap:10px;padding-inline:8px;font-size:11px;color:var(--txt-2);font-variant-numeric:tabular-nums}
+
+/* Public melds share card faces and captions with the player's shelf. */
+.seat .melds,.seats[data-seats] .seat .melds{display:flex;flex:none;width:100%;min-width:0;flex-wrap:wrap;gap:5px 8px;overflow:visible;max-height:none;padding:2px 0;margin:0;background:none;touch-action:manipulation}
+.seat .meld,.seat .meld.clean,.seat .meld.dirty,.seat .meld.clean.done,.seat .meld.dirty.done{
+  position:relative;z-index:3;display:flex;flex-direction:column;align-items:flex-start;flex:0 0 auto;width:calc(22px + (min(var(--meld-count,3),6) - 1)*10px + 16px);height:32px;min-width:0;max-width:100%;gap:0;padding:2px 3px;border:0;border-radius:4px;background:none;box-shadow:none;overflow:hidden;text-align:left;cursor:pointer;
+}
+.seat .meld .meld-top{display:flex;align-items:center;gap:3px;flex:none;line-height:12px;font-size:10px;letter-spacing:0;padding:0;background:none;color:var(--txt-2)}
+.meld-rank{font-size:inherit;font-weight:700}
+.meld-count{font-size:inherit;line-height:inherit;font-variant-numeric:tabular-nums}
+.meld-count::before{content:' · ';color:var(--txt-3);font-weight:400}
+.seat .meld.clean .meld-top{color:var(--rouge-lt)}
+.seat .meld .meld-cards{display:grid;grid-template-columns:repeat(var(--meld-count,1),minmax(0,1fr));gap:0;width:100%;padding-right:12px;max-width:100%;height:26px;flex:none;overflow:visible}
+.seat .meld .card.tiny{--card-w:20px;--card-h:26px;width:20px;height:26px;padding:1px;margin:0;border-radius:3px;align-items:flex-end;justify-content:center}
+.seat .meld .card.tiny:first-child{align-items:center}
+.seat .meld .card.tiny .r{font-size:10px}.seat .meld .card.tiny .s{font-size:6px}
+.seat .meld[data-presentation="stack"],.seat .meld.done[data-presentation="stack"]{width:34px}
+.seat .meld .meld-cards.closed-book-stack{display:block;width:20px;padding:0;margin-inline:auto}
+.seat .meld.nearly-book .meld-count{min-width:12px;height:12px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;line-height:1;background:var(--rouge)}
+.seat .meld.nearly-book .meld-count::before{content:none}
+.seat .meld.nearly-book.dirty .meld-count{background:#171d24;box-shadow:0 0 0 1px #6b747b}
+.seat .meld:focus-visible,#myMelds .meld:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+.opponent-detail{position:absolute;left:10px;right:10px;z-index:40;padding:14px;border:1px solid var(--hair-2);border-radius:12px;background:var(--app-1);box-shadow:var(--sh-3);overflow:auto;overscroll-behavior:contain}
+.opponent-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:-14px;padding-block:5px;background:var(--app-1);z-index:1}
+.opponent-detail-head h3{font-size:14px}
+.opponent-melds{display:flex;flex-wrap:wrap;gap:10px}
+.opponent-melds .meld{max-width:100%}
+.opponent-melds .meld-cards{flex-wrap:wrap}
+.opponent-melds .meld.nearly-book{outline:none}
+
+/* Same original tray and card backs, with aligned, separately tappable piles. */
+.center.pickup-zone,.board:has(#myMelds.empty) .center.pickup-zone{
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:stretch;gap:8px;padding:10px 12px;flex:none;margin:0;
+}
+.stock-choice,.discard-choice{display:grid;grid-template-rows:14px 46px 14px;justify-items:center;align-items:center;gap:4px;min-width:0;padding:3px;border:1px solid transparent;border-radius:7px;color:var(--bone);background:none;text-align:center}
+.stock-choice:not(:disabled):hover{background:rgba(255,255,255,.05)}
+.stock-choice.selected{border-color:var(--brass);background:rgba(214,174,62,.12)}
+.stock-choice.empty-stock{opacity:.4}
+.stock-choice:disabled{cursor:default}
+.pickup-zone .card{width:32px;height:46px;--card-w:32px;--card-h:46px;transform:none}
+.pickup-zone .card .r{font-size:16px}.pickup-zone .card .s{font-size:8px}
+.pickup-label{font-size:10px;line-height:14px;color:var(--bone-2);white-space:nowrap}
+.pickup-count,.discard-count{font-size:10px;line-height:14px;color:var(--dim);font-variant-numeric:tabular-nums}
+.pile-index,.discard-status{display:none}
+.discard-summary{height:14px;line-height:14px}
+.discard-choice{border-left-color:var(--hair-2);border-radius:0;cursor:default}
+.discard-choice.inspectable{cursor:pointer}
+.discard-choice.inspectable .discard-count{text-decoration:underline;text-underline-offset:3px}
+.discard-choice .pile-layer{transform:translate(calc(var(--n)*.7px),calc(var(--n)*.7px))}
+.discard-choice.frozen .card{filter:grayscale(.55) brightness(.86)}
+.discard-choice.frozen .pickup-label{color:var(--ice)}
+.discard-choice.takeable .card{outline:2px solid var(--brass);outline-offset:1px}
+
+/* Natural-width fans fill each row without empty grid cells or resizing cards. */
+#myMelds{display:flex;flex-wrap:wrap;gap:9px 10px;align-items:flex-start;align-content:flex-start;min-height:48px;padding:3px 8px;--bk-w:21px;--bk-h:29px;--bk-r:11px;--bk-s:6px}
+#myMelds .meld{flex:0 0 auto;min-width:0;max-width:100%;width:calc(var(--bk-w) + (var(--meld-count,3) - 1)*13px + 20px);align-self:start;overflow:hidden;padding:4px;gap:3px;border-radius:11px;text-align:left}
+#myMelds .meld-top{display:flex;align-items:center;gap:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:14px;padding:0;border-radius:0;background:none}
+#myMelds .meld-top::after{content:none}
+#myMelds .threes .meld-top{font-size:11px}
+#myMelds .threes .meld-top::after{content:none}
+#myMelds .meld.clean .meld-top{color:var(--rouge-lt)}
+#myMelds .meld.dirty .meld-top{color:var(--txt-2)}
+.opponent-melds .meld.clean .meld-top{color:var(--rouge)}
+.opponent-melds .meld.dirty .meld-top{color:var(--ink)}
+.opponent-melds .meld-top{width:fit-content;padding:0 3px;background:var(--bone);border-radius:3px}
+#myMelds .meld-cards{display:grid;grid-template-columns:repeat(var(--meld-count,1),minmax(0,1fr));gap:0;width:100%;max-width:calc(var(--bk-w) + (var(--meld-count,1) - 1)*13px);padding-right:calc(var(--bk-w) - 13px);height:var(--bk-h);flex:none;overflow:visible}
+#myMelds .meld-cards .card.tiny{width:var(--bk-w);height:var(--bk-h);margin:0;justify-content:center;align-items:flex-end;padding:2px;border-radius:5px}
+#myMelds .meld-cards .card.tiny+.card.tiny{margin:0}
+#myMelds .meld-cards .card.tiny:first-child{align-items:center}
+#myMelds .card.tiny .r{font-size:var(--bk-r)}
+#myMelds .card.tiny .s{font-size:var(--bk-s)}
+#myMelds.empty{display:flex;align-items:flex-start;min-height:30px}
+#myMelds .meld.chosen-target{outline:2px solid var(--brass);outline-offset:-2px;background:rgba(214,174,62,.12)}
+#myMelds .meld.nearly-book{outline:none}
+#myMelds .meld.nearly-book.chosen-target{outline:2px solid var(--brass)}
+.card.book-red:not(.wild),.mini.book-red{--face:var(--suit-red);background:var(--suit-red);color:var(--bone);border-color:var(--rouge-lt)}
+.card.book-black:not(.wild),.mini.book-black{--face:var(--suit-black);background:var(--suit-black);color:var(--bone);border-color:#535c65}
+.card.joker{--wc:var(--brass)}
+.card.deuce{--wc:var(--deuce)}
+.card.joker,.card.deuce{
+  --face:var(--f-bone);--wild-trim:5px;color:var(--ink);border-color:#c9bfad;
+  background:linear-gradient(to bottom,var(--wc) 0 var(--wild-trim),transparent var(--wild-trim) calc(100% - var(--wild-trim)),var(--wc) calc(100% - var(--wild-trim)) 100%),var(--f-bone);
+}
+.card.deuce.red{color:var(--rouge)}
+/* Public meld cards use their full wild color; cards in hand use edge bands. */
+.meld .card.joker{--face:var(--brass);background:var(--brass);color:#392b08;border-color:#e7c96b}
+.meld .card.deuce{--face:#2165a5;background:#2165a5;color:#fff;border-color:#71a8dc}
+.mini.joker{background:var(--brass)}
+.mini.deuce{background:var(--deuce)}
+.card.wild::before{display:none}
+
+/* Fresh outlines stay visible within the card edge when cards overlap. */
+.hand .card.fresh{outline:2px solid #74e7c2;outline-offset:-2px;box-shadow:inset 0 0 0 3px #175246,0 0 0 1px #74e7c2}
+.hand .card.fresh::after{background:#74e7c2;width:5px;height:5px;left:3px;bottom:3px}
+.hand .card.sel{outline:2px solid var(--brass);outline-offset:-2px}
+.hand .card.fresh.sel{box-shadow:inset 0 -5px 0 #74e7c2,0 0 0 1px var(--brass)}
+.hand .card.fresh-first{margin-left:0}
+
+.hand-head{position:relative;flex-wrap:nowrap;min-height:36px;gap:6px}
+.hand-head #handPill{margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hand-head #sortBtn,.hand-head #autoDrawBtn,.hand-head #clearSel{min-height:36px;padding:6px 9px;flex:none}
+#clearSel[hidden]{display:block!important;visibility:hidden;pointer-events:none}
+.hand-head #autoDrawBtn[data-mode]:not([data-mode="off"]){border-color:var(--brass-dim);color:var(--brass-lt);background:rgba(214,174,62,.1)}
+.sort-popover{position:absolute;right:0;bottom:calc(100% + 7px);z-index:42;width:min(320px,100%);max-height:calc(100dvh - 140px);overflow:auto;overscroll-behavior:contain;padding:14px;background:var(--app-1);border:1px solid var(--hair-2);border-radius:12px;box-shadow:var(--sh-3);text-align:left}
+.sort-popover-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.sort-popover-head h3{font-size:15px}
+.sort-popover-head .btn{min-height:36px;padding:6px 10px}
+.sort-option-group,.auto-draw-modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.sort-option-label{display:block;grid-column:1/-1;font-size:11px;color:var(--txt-2);font-weight:600}
+.sort-option{min-height:44px;padding:6px;border:1px solid var(--hair-2);border-radius:7px;background:var(--app-2);font-size:12px;text-align:center}
+.sort-option[aria-pressed="true"]{border-color:var(--brass);color:var(--brass-lt);background:rgba(214,174,62,.1)}
+.auto-draw-help,.auto-draw-status{font-size:11px;line-height:1.45;color:var(--txt-2);margin:8px 0}
+.auto-draw-status{color:var(--brass-lt)}
+.auto-draw-fixed{margin-top:12px}
+.auto-draw-piles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
+.auto-match-row{border-top:1px solid var(--hair-2);margin-top:14px;padding-top:12px}
+#selectMatching{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;padding:7px 0;border:0;background:none;box-shadow:none;font-size:12px;text-align:left}
+#selectMatching::after{content:'';width:34px;height:20px;flex:none;border-radius:12px;background:radial-gradient(circle at 10px 10px,var(--txt-2) 0 7px,transparent 8px),var(--app-3);border:1px solid var(--hair-2)}
+#selectMatching[aria-checked="true"]::after{background:radial-gradient(circle at 23px 9px,var(--bone) 0 7px,transparent 8px),var(--brass-dim);border-color:var(--brass)}
+.peek-explanation{margin:12px 0;line-height:1.5}
+.peek-actions{display:flex;gap:8px;margin-top:15px}
+.peek-actions .btn{min-height:44px;flex:1}
+
+/* Host rule fields use the same original control surfaces as table setup. */
+#rulesEditor .rules-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0}
+#rulesEditor .rule-head,#rulesEditor .rule-toggle{grid-column:1/-1;margin:0}
+#rulesEditor .field{min-width:0}
+#rulesEditor input[type=number]{width:100%;min-height:46px;padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--app-2);color:var(--txt);font:500 16px Archivo,sans-serif}
+#rulesEditor input[type=number]:focus{outline:none;border-color:var(--brass-dim);background:var(--app-3);box-shadow:0 0 0 3px rgba(214,174,62,.16)}
+#rulesEditor input:disabled,#rulesEditor select:disabled{opacity:.55}
+#rulesConfigStatus:empty{display:none}
+
+/* Stable lanes prevent a disappearing Meld button moving Discard under a tap. */
+.actions-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:32px 44px;gap:6px}
+.actions .hint{grid-column:1/-1;grid-row:1;padding-right:75px;min-width:0;min-height:0;max-height:32px;overflow-y:auto;overscroll-behavior:contain;align-self:stretch;margin:0;font-size:12px;line-height:1.4}
+.actions .action-primary{grid-column:1;grid-row:2}
+.actions .action-secondary,.actions .action-discard{grid-column:2;grid-row:2}
+.actions .action-undo{grid-column:2;grid-row:1;justify-self:end;align-self:start;min-height:28px;max-width:70px;padding:3px 6px;font-size:11px}
+.actions .btn:not(.action-undo){min-height:44px}
+.actions-in[data-own-turn="false"]{grid-template-rows:auto}
+.actions-in[data-own-turn="false"] .hint{padding-right:0}
+
+@media(max-width:600px){
+  .board{gap:6px}
+  .bar-in{gap:5px}.bar .btn.sm{padding:6px 8px;min-height:34px}
+  #turnPill{flex:1;font-size:10px;padding-inline:6px}.bar .spacer{display:none}
+  .bar-cell .tag{letter-spacing:0;font-size:9px}.bar-val{font-size:12px}
+  .seats,.seats[data-seats="2"],.seats[data-seats="3"]{grid-template-columns:1fr;max-height:none;overflow:visible;gap:5px;flex:none}
+  .seat{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:2px;padding:4px 8px;overflow:visible}
+  .seat-top{flex:none;gap:4px;line-height:16px}
+  .seat-name{font-size:12px}.seat-subtop,.seat-subtop .seat-meta{font-size:10px;line-height:12px}
+  .seat-top .chips{gap:3px}.chip{font-size:9px;padding:1px 5px}
+  .seat .melds,.seats[data-seats] .seat .melds{gap:5px 10px;padding:1px 0}
+  .seat .meld .meld-top{font-size:9px;gap:2px}
+  .mine{gap:4px}.book-stats{font-size:10px}
+  .center.pickup-zone,.board:has(#myMelds.empty) .center.pickup-zone{padding:6px;gap:4px}
+  .stock-choice,.discard-choice{grid-template-rows:12px 42px 12px;gap:3px;padding:2px}
+  .pickup-zone .card{width:30px;height:42px;--card-w:30px;--card-h:42px}
+  .pickup-label,.pickup-count,.discard-count{line-height:12px}
+  .discard-summary{height:12px}
+  .hand{max-height:none;min-height:47px;flex:0 1 auto;padding:10px 2px 2px;overflow-y:auto}
+  .hand:not(.layered){display:grid;grid-template-columns:repeat(var(--hand-cols,8),minmax(0,1fr));gap:5px 4px;align-content:start}
+  .hand:not(.layered) .card{width:100%;max-width:44px;height:47px;min-width:0}
+  .hand[data-dense="true"]:not(.layered) .card{height:44px}
+  .hand[data-dense="true"] .card .r{font-size:16px}.hand[data-dense="true"] .card .s{font-size:9px}
+  .hand .card.joker .r{font-size:11px}
+  .hand-head #handPill{font-size:10px;padding-inline:6px}
+  .hand-head #sortBtn,.hand-head #autoDrawBtn,.hand-head #clearSel{font-size:11px;padding-inline:8px}
+  .actions .hint{font-size:11px}
+}
+@media(max-width:600px) and (max-height:700px){
+  .board{gap:5px;padding-top:5px}.mine{gap:4px}.seats{gap:3px}
+  .seat{padding-block:3px;gap:2px}
+  .center.pickup-zone,.board:has(#myMelds.empty) .center.pickup-zone{padding:3px 5px;gap:3px}
+  .stock-choice,.discard-choice{grid-template-rows:12px 38px 12px;gap:2px;padding:2px}
+  .pickup-zone .card{width:27px;height:38px;--card-w:27px;--card-h:38px}
+  .pickup-label,.pickup-count,.discard-count{font-size:9px;line-height:12px}
+  .discard-summary{height:12px}
+  .hand-head{min-height:32px}.hand-head #sortBtn,.hand-head #autoDrawBtn,.hand-head #clearSel{min-height:32px}
+  .hand[data-dense="true"]:not(.layered) .card{height:39px}
+  .sort-popover{max-height:calc(100dvh - 105px)}
+}
+@media(min-width:601px){
+  .seats{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));flex:none}
+  .hand:not(.layered) .card{--card-w:44px;--card-h:62px}
+  .hand{min-height:70px;max-height:32dvh;overflow:auto;padding-top:10px}
+}
+
+/* On a crowded phone, keep the player's shelf and hand above the actions.
+   Extra public meld rows scroll inside their seat, with every name still shown. */
+.board[data-overflow="true"]{overflow:hidden}
+.board[data-overflow="true"] .seats{flex:none}
+.board[data-overflow="true"] .seat .melds{max-height:38px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.board[data-overflow="true"] .mine{flex:1;min-height:0;max-height:none}
+.board[data-overflow="true"] #myMelds{min-height:48px}
+.board[data-overflow="true"] .hand{flex:none;max-height:32dvh}
+
+/* Finished books close into one colored stack; fans use their actual width. */
+#myMelds .meld[data-presentation="stack"],#myMelds .meld[data-presentation="tile"]{width:44px;max-width:44px}
+#myMelds .meld-cards.closed-book-stack{display:block;width:var(--bk-w);padding:0;margin:0 auto 2px;max-width:none}
+:is(#myMelds,.seat) .closed-book-face{position:relative;overflow:hidden;box-shadow:1px 1px 0 #827e71,2px 2px 0 #353a39}
+:is(#myMelds,.seat) .closed-book-face[data-wild-top]::before,:is(#myMelds,.seat) .closed-book-face[data-wild-bottom]::after{content:'';position:absolute;left:0;right:0;height:3px;pointer-events:none}
+:is(#myMelds,.seat) .closed-book-face[data-wild-top]::before{top:0;background:var(--wild-top-color,var(--brass))}
+:is(#myMelds,.seat) .closed-book-face[data-wild-bottom]::after{bottom:0;background:var(--wild-bottom-color,var(--brass))}
+:is(#myMelds,.seat) .closed-book-face[data-wild-top="deuce"]{--wild-top-color:var(--deuce)}
+:is(#myMelds,.seat) .closed-book-face[data-wild-bottom="deuce"]{--wild-bottom-color:var(--deuce)}
+:is(#myMelds,.seat) .closed-book-face[data-wild-top-extra="deuce"]{--wild-top-extra-color:var(--deuce)}
+:is(#myMelds,.seat) .closed-book-face[data-wild-bottom-extra="deuce"]{--wild-bottom-extra-color:var(--deuce)}
+:is(#myMelds,.seat) .closed-book-face[data-wild-top-extra]::before{background:linear-gradient(90deg,var(--wild-top-color,var(--brass)) 0 calc(50% - 1px),transparent calc(50% - 1px) calc(50% + 1px),var(--wild-top-extra-color,var(--brass)) calc(50% + 1px) 100%)}
+:is(#myMelds,.seat) .closed-book-face[data-wild-bottom-extra]::after{background:linear-gradient(90deg,var(--wild-bottom-color,var(--brass)) 0 calc(50% - 1px),transparent calc(50% - 1px) calc(50% + 1px),var(--wild-bottom-extra-color,var(--brass)) calc(50% + 1px) 100%)}
+
+/* The header carries navigation and round progress, not duplicate turn badges. */
+.bar .round-cell{display:flex;flex-direction:row;align-items:baseline;gap:5px;white-space:nowrap}
+.bar .round-cell .tag{font-size:11px;letter-spacing:0;text-transform:none;color:var(--txt-3)}
+.bar .round-cell .bar-val{font-size:12px;font-weight:500;color:var(--txt-2)}
+.bar .spacer{display:block;flex:1;min-width:0}
+.books-identity{display:flex;align-items:center;gap:8px;min-width:0}
+.books-identity h3{flex:none}
+#turnPill{flex:none;max-width:none;min-width:0;font-size:9px;font-weight:600;line-height:14px;padding:1px 6px;border:0;border-radius:4px;background:rgba(214,174,62,.1);color:var(--brass-lt);box-shadow:none;animation:none}
+#turnPill[hidden]{display:none}
+#myMelds .meld{cursor:pointer}
+/* Tiles use the same rank/count language at both sizes. Expanding one reveals
+   the real cards inline, without changing the preference for other melds. */
+:is(.seat,#myMelds) .meld[data-presentation="tile"]{position:relative;display:block;width:32px;max-width:32px;height:44px;padding:4px;border:1px solid var(--f-edge);border-radius:5px;background:var(--f-bone);box-shadow:var(--sh-1);overflow:hidden}
+#myMelds .meld[data-presentation="tile"]{width:38px;max-width:38px;height:52px}
+:is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-top{display:block;line-height:16px;font-size:14px;padding:0;background:none;color:var(--ink)}
+:is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-top::after{content:none}
+:is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-count{position:absolute;right:4px;bottom:3px;font-size:10px;line-height:12px}
+:is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-count::before{content:none}
+:is(.seat,#myMelds) .meld[data-presentation="tile"].clean .meld-top{color:var(--rouge)}
+:is(.seat,#myMelds) .meld[data-presentation="tile"].done.clean{background:var(--suit-red);border-color:var(--rouge-lt)}
+:is(.seat,#myMelds) .meld[data-presentation="tile"].done.dirty{background:var(--suit-black);border-color:#535c65}
+:is(.seat,#myMelds) .meld[data-presentation="tile"].done .meld-top{color:var(--bone)}
+:is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-cards{display:none}
+:is(.seat,#myMelds) .meld[data-presentation="tile"][data-wild-top]::before,:is(.seat,#myMelds) .meld[data-presentation="tile"][data-wild-bottom]::after{content:'';position:absolute;left:0;right:0;height:3px;pointer-events:none}
+:is(.seat,#myMelds) .meld[data-presentation="tile"][data-wild-top]::before{top:0;background:var(--wild-top-color,var(--brass))}
+:is(.seat,#myMelds) .meld[data-presentation="tile"][data-wild-bottom]::after{bottom:0;background:var(--wild-bottom-color,var(--brass))}
+:is(.seat,#myMelds) .meld[data-wild-top="deuce"]{--wild-top-color:var(--deuce)}
+:is(.seat,#myMelds) .meld[data-wild-bottom="deuce"]{--wild-bottom-color:var(--deuce)}
+:is(.seat,#myMelds) .meld[data-wild-top-extra="deuce"]{--wild-top-extra-color:var(--deuce)}
+:is(.seat,#myMelds) .meld[data-wild-bottom-extra="deuce"]{--wild-bottom-extra-color:var(--deuce)}
+:is(.seat,#myMelds) .meld[data-presentation="tile"][data-wild-top-extra]::before{background:linear-gradient(90deg,var(--wild-top-color,var(--brass)) 0 calc(50% - 1px),transparent calc(50% - 1px) calc(50% + 1px),var(--wild-top-extra-color,var(--brass)) calc(50% + 1px) 100%)}
+:is(.seat,#myMelds) .meld[data-presentation="tile"][data-wild-bottom-extra]::after{background:linear-gradient(90deg,var(--wild-bottom-color,var(--brass)) 0 calc(50% - 1px),transparent calc(50% - 1px) calc(50% + 1px),var(--wild-bottom-extra-color,var(--brass)) calc(50% + 1px) 100%)}
+
+/* Opponent fans keep their compact footprint: the visible card carries rank,
+   and the small count sits beside the fan instead of adding a caption row. */
+.seat .meld:not([data-presentation="tile"]) .meld-top{position:absolute;right:0;bottom:1px;z-index:20;line-height:12px}
+.seat .meld:not([data-presentation="tile"]) .meld-rank{display:none}
+.seat .meld:not([data-presentation="tile"]) .meld-count{font-size:10px;padding:1px 2px;border-radius:3px;background:var(--app-1);color:var(--txt-2)}
+.seat .meld:not([data-presentation="tile"]) .meld-count::before{content:none}
+.seat .meld:not([data-presentation="tile"]).nearly-book .meld-count{background:var(--rouge);color:white;border-radius:50%;padding:0}
+.seat .meld:not([data-presentation="tile"]).nearly-book.dirty .meld-count{background:#171d24}
+.seat .meld .meld-cards{padding-right:16px}
+.seat .meld .meld-cards.closed-book-stack{margin-left:0}
+/* One quiet arrival ring. Selection remains gold with a small mint underline. */
+.hand .card.fresh{outline:2px solid #74bba7;outline-offset:-2px;box-shadow:var(--sh-1)}
+.hand .card.fresh::after{display:none}
+.hand .card.fresh.sel{outline-color:var(--brass);box-shadow:inset 0 -3px 0 #74bba7,var(--sh-1)}
+
+/* Rules and personal settings share one quiet, scrollable dialog. */
+#rulesSheet{
+  --dialog-top:max(12px,env(safe-area-inset-top,0px));
+  --dialog-bottom:max(12px,env(safe-area-inset-bottom,0px));
+  padding:var(--dialog-top) max(12px,env(safe-area-inset-right,0px)) var(--dialog-bottom) max(12px,env(safe-area-inset-left,0px));
+  background:rgba(4,6,9,.8);
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+#rulesSheet > .sheet-in{
+  width:100%;max-width:640px;
+  max-height:calc(100vh - var(--dialog-top) - var(--dialog-bottom));
+  max-height:calc(100dvh - var(--dialog-top) - var(--dialog-bottom));
+  padding:0;border:1px solid var(--hair-2);border-radius:14px;
+  background:var(--app-1);box-shadow:var(--sh-3);
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  scroll-padding-top:84px;
+}
+/* The header remains in normal flow and is the only sticky layer. */
+#rulesSheet > .sheet-in > .sect-head:first-child{
+  position:sticky;top:0;z-index:3;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;gap:12px;
+  margin:0!important;padding:12px 20px;
+  border-bottom:1px solid var(--hair);background:var(--app-1);
+}
+#rulesSheet > .sheet-in > .sect-head:first-child > .spacer{display:none}
+#rulesSheet #rulesTitle{min-width:0;line-height:1.2;text-wrap:wrap}
+#rulesSheet #closeRules{
+  min-width:60px;min-height:44px;padding:8px 12px;
+  border-color:var(--hair-2);background:var(--app-2);
+  box-shadow:none;font-size:12px;font-weight:500;
+}
+#rulesBody{min-width:0;padding:0 20px 18px}
+#rulesSheet .rules-tabs{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;
+  padding:14px 0 16px;margin:0;
+}
+#rulesSheet .rules-tabs .btn{
+  min-width:0;min-height:40px;padding:8px 12px;
+  border:1px solid transparent;border-radius:8px;
+  background:transparent;color:var(--txt-2);box-shadow:none;
+  font-size:13px;font-weight:500;letter-spacing:0;
+}
+#rulesSheet .rules-tabs .btn[aria-pressed="true"]{
+  border-color:var(--hair-2);background:var(--app-2);color:var(--brass-lt);
+}
+#rulesSheet .rules-tabs .btn:hover{background:var(--app-2);filter:none}
+#rulesSheet .rule-head{
+  margin:22px 0 10px;font-size:14px;font-weight:650;
+  line-height:1.35;letter-spacing:0;color:var(--txt);
+}
+#rulesSheet .rules-tabs + .rule-head{margin-top:2px}
+#rulesSheet .rule-title{
+  margin:0;font-size:13px;font-weight:600;line-height:1.4;color:var(--txt);
+}
+#rulesSheet .note{
+  font-size:12px;line-height:1.55;overflow-wrap:anywhere;
+}
+#rulesSheet .rule-title + .note{margin-top:5px}
+
+/* Preference rows use dividers; only the selectable options have surfaces. */
+#rulesSheet .look-row{
+  margin:0;padding:16px 0;border:0;border-bottom:1px solid var(--hair);
+  border-radius:0;background:none;box-shadow:none;
+}
+#rulesSheet .rules-tabs + .look-row{padding-top:2px}
+#rulesSheet .look-opts{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:stretch;gap:8px;margin-top:10px;
+}
+#rulesSheet .look-opts:has(> .look-opt:nth-child(3)){
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+#rulesSheet .look-opts:has(.theme-sample){
+  grid-template-columns:repeat(auto-fit,minmax(84px,1fr));
+}
+#rulesSheet .look-opt{
+  min-width:0;min-height:44px;padding:9px 8px;gap:7px;
+  justify-content:center;border:1px solid var(--hair-2);border-radius:8px;
+  background:var(--app-2);box-shadow:none;
+}
+#rulesSheet .look-opt:hover{background:var(--app-3);border-color:var(--txt-3)}
+#rulesSheet .look-opt.on,#rulesSheet .look-opt[aria-pressed="true"]{
+  border-color:var(--brass-dim);background:rgba(214,174,62,.08);
+}
+#rulesSheet .look-name{
+  max-width:100%;font-size:12px;font-weight:500;line-height:1.3;
+  color:var(--txt-2);text-align:center;overflow-wrap:anywhere;
+}
+#rulesSheet .look-opt.on .look-name,
+#rulesSheet .look-opt[aria-pressed="true"] .look-name{color:var(--brass-lt)}
+#rulesSheet .look-note{margin-top:9px}
+#rulesSheet .deck-sample{padding-block:1px}
+#rulesSheet .deck-sample .card{
+  --card-w:20px;--card-h:29px;width:20px;height:29px;flex:none;
+}
+#rulesSheet .deck-sample .card .r{font-size:10px}
+#rulesSheet .deck-sample .card .s{font-size:6px}
+#rulesSheet .theme-sample{width:100%;max-width:66px;height:27px;border-radius:4px}
+
+/* Labels and descriptions stay together; switches align in the right column. */
+#rulesSheet .rule-toggle{
+  display:grid;grid-template-columns:minmax(0,1fr) 44px;
+  align-items:start;column-gap:14px;row-gap:0;
+  padding:14px 0;border:0;border-bottom:1px solid var(--hair);
+  border-radius:0;background:none;box-shadow:none;
+}
+#rulesSheet .rule-toggle > label{grid-column:1;grid-row:1;min-width:0}
+#rulesSheet .rule-toggle > input{grid-column:2;grid-row:1;margin-top:1px}
+#rulesSheet .rule-toggle .note{margin-top:4px}
+
+/* Public rules read as a definition list while retaining the existing table. */
+#rulesBody .rules-detail table{table-layout:fixed;font-size:13px;line-height:1.55}
+#rulesBody .rules-detail table td{padding:11px 0;vertical-align:top;overflow-wrap:anywhere}
+#rulesBody .rules-detail table td:first-child{
+  width:126px;padding-right:18px;color:var(--txt-2);font-weight:500;
+}
+#rulesBody .rules-detail table td:last-child{color:var(--txt)}
+#rulesSheet #rulesPendingSummary{
+  margin-top:20px;padding:12px 14px;
+  border:0;border-left:2px solid var(--brass-dim);border-radius:0 6px 6px 0;
+  background:rgba(214,174,62,.06);
+}
+#rulesSheet #rulesPendingSummary .note{margin:6px 0 0}
+#rulesSheet #rulesOwnerNote{margin:20px 0 0;padding-top:16px;border-top:1px solid var(--hair)}
+
+/* Grouped form fields align their controls even when a label takes two lines. */
+#rulesSheet #rulesEditor{
+  display:grid;gap:18px;margin:22px 0 0;padding-top:18px;
+  border-top:1px solid var(--hair);
+}
+#rulesSheet #rulesEditor > .note{margin:0}
+#rulesSheet #rulesEditor .rules-fields{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;
+  margin:0;padding:0 0 18px;align-items:stretch;
+}
+#rulesSheet #rulesEditor .rule-head{grid-column:1/-1;margin:0 0 2px;font-size:13px}
+#rulesSheet #rulesEditor .field{
+  display:flex;flex-direction:column;align-self:stretch;gap:6px;
+  min-width:0;font-size:12px;font-weight:500;line-height:1.4;
+}
+#rulesSheet #rulesEditor .field > span{overflow-wrap:anywhere}
+#rulesSheet #rulesEditor .field:has(#ruleDeckCount){grid-column:1/-1}
+#rulesSheet #rulesEditor input[type="number"],#rulesSheet #rulesEditor select{
+  width:100%;min-width:0;min-height:44px;margin-top:auto;
+  padding:9px 10px;border:1px solid var(--hair-2);border-radius:8px;
+  background:var(--app-2);color:var(--txt);font:500 16px Archivo,sans-serif;
+  font-variant-numeric:tabular-nums;
+}
+#rulesSheet #rulesEditor input[type="number"]:focus,#rulesSheet #rulesEditor select:focus{
+  border-color:var(--brass-dim);box-shadow:0 0 0 2px rgba(214,174,62,.15);outline:none;
+}
+#rulesSheet #rulesEditor .rules-fields:has(#ruleOpening0){
+  grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;
+}
+#rulesSheet #rulesEditor .rule-toggle{grid-column:1/-1;padding:10px 0}
+#rulesSheet #rulesEditor .rule-toggle:last-child{border-bottom:0;padding-bottom:0}
+#rulesSheet #rulesEditor #saveRulesConfig{
+  justify-self:start;min-height:44px;padding:10px 16px;font-size:13px;
+}
+#rulesSheet #rulesConfigStatus.warn{color:var(--rouge-lt)}
+#rulesSheet .settings-footer:has(#leaveBtn:not([hidden])){
+  margin:0;padding:16px 20px 20px;border-top:1px solid var(--hair);
+}
+#rulesSheet .settings-footer:not(:has(#leaveBtn:not([hidden]))){display:none}
+#rulesSheet #leaveBtn{min-height:44px;padding:9px 12px;font-size:12px;box-shadow:none}
+
+@media(max-width:600px){
+  #rulesSheet > .sheet-in{border-radius:12px}
+  #rulesSheet > .sheet-in > .sect-head:first-child{padding:10px 16px}
+  #rulesBody{padding-inline:16px}
+  #rulesBody .rules-detail table{font-size:12px}
+  #rulesBody .rules-detail table td:first-child{width:92px;padding-right:12px}
+  #rulesSheet .settings-footer:has(#leaveBtn:not([hidden])){padding:14px 16px 16px}
+  #rulesSheet #rulesEditor #saveRulesConfig{justify-self:stretch}
+}
+@media(max-width:360px){
+  #rulesSheet #rulesEditor .rules-fields:has(#ruleOpening0){grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+#rulesSheet .rules-overview{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;margin:14px 0 18px;padding-bottom:18px;border-bottom:1px solid var(--hair)}
+#rulesSheet .rules-overview > div{display:flex;flex-direction:column;gap:4px;font-size:12px}
+#rulesSheet .rules-overview span{color:var(--txt-3);font-size:11px}
+#rulesSheet .rules-overview b{font-weight:500;color:var(--txt)}
+#rulesSheet .rules-detail{border-bottom:1px solid var(--hair)}
+#rulesSheet .rules-detail summary{min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;list-style:none;font-size:12px;font-weight:500;cursor:pointer}
+#rulesSheet .rules-detail summary::-webkit-details-marker{display:none}
+#rulesSheet .rules-detail summary::after{content:'+';color:var(--txt-3);font-size:16px}
+#rulesSheet .rules-detail[open] summary::after{content:'−'}
+#rulesSheet #rulesEditor > .rule-head{margin:0;font-size:14px}
+
+/* The compact player row has just identity, private-card counts and badges.
+   Melded points remain available in that player's expanded details. */
+.seat-subtop[hidden]{display:none}
+.seat-identity{gap:6px;overflow:hidden}
+.seat-identity .seat-name{flex:0 1 auto;min-width:0}
+.seat-identity .seat-meta{flex:none;font-size:10px;line-height:14px;color:var(--txt-3);white-space:nowrap}
+.seat-identity::after{flex:none}
+.seat-expand{height:26px}
+@media(max-width:360px){.seat-top .chips{gap:2px}.seat-top .chip{font-size:8px;padding-inline:3px}.seat-identity{gap:4px}.seat-identity .seat-meta{font-size:9px}}
+
+/* One card from a book: turn the leading face sideways, as at a real table.
+   Keep its rank upright and leave the count in the ordinary quiet style. */
+.seat .meld.nearly-book .meld-count,
+.seat .meld.nearly-book.dirty .meld-count,
+.seat .meld:not([data-presentation="tile"]).nearly-book .meld-count,
+.seat .meld:not([data-presentation="tile"]).nearly-book.dirty .meld-count{
+  display:inline;min-width:0;width:auto;height:auto;padding:1px 2px;border:0;border-radius:3px;
+  background:var(--app-1);color:var(--txt-2);box-shadow:none;font-size:9px;line-height:12px;
+}
+.seat .meld.nearly-book:not([data-presentation="tile"]) .meld-cards .card.tiny:first-child{
+  width:26px;height:20px;margin-top:3px;flex-direction:row;align-items:center;justify-content:center;gap:2px;
+}
+:is(.seat,#myMelds) .meld.nearly-book[data-presentation="tile"]{
+  width:44px;max-width:44px;height:32px;align-self:center;margin-block:6px;
+}
+.seat .meld.nearly-book[data-presentation="tile"] .meld-count{background:none;color:var(--ink)}
+
+/* Own melds use the same card-rank + quiet side-count notation as opponents. */
+#myMelds .meld:not(.threes):not([data-presentation="tile"]){position:relative;padding-right:14px}
+#myMelds .meld:not(.threes):not([data-presentation="tile"]) .meld-top{position:absolute;right:2px;bottom:3px;z-index:20;line-height:12px}
+#myMelds .meld:not(.threes):not([data-presentation="tile"]) .meld-rank{display:none}
+#myMelds .meld:not(.threes):not([data-presentation="tile"]) .meld-count{font-size:9px;line-height:12px;color:var(--txt-2);font-weight:500}
+#myMelds .meld:not(.threes):not([data-presentation="tile"]) .meld-count::before{content:none}
+#myMelds .meld.nearly-book:not([data-presentation="tile"]) .meld-cards .card.tiny:first-child{
+  width:var(--bk-h);height:var(--bk-w);margin-top:calc((var(--bk-h) - var(--bk-w))/2);flex-direction:row;align-items:center;justify-content:center;gap:2px;
+}
+#myMelds .meld.nearly-book[data-presentation="tile"]{width:48px;max-width:100%;height:36px;align-self:start;margin-block:8px}
+
+/* One personal header for the books and hand, below the shared draw tray. */
+.mine > .books-head{margin:2px 0 0;min-height:24px}
+.mine > .hand-head{padding-inline:8px;gap:8px;min-height:44px;margin:0;flex:none}
+.hand-head .book-stats{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1px;padding:0;line-height:15px;white-space:nowrap;font-size:11px}
+.hand-head .melded-points{color:var(--txt-3);font-size:10px}
+.hand-tools{display:flex;align-items:center;gap:0;flex:none}
+.hand-head .hand-tools .btn{position:relative;min-height:44px;min-width:44px;padding:9px 10px;border:0;border-radius:7px;background:none;box-shadow:none;font-size:12px;font-weight:500;color:var(--txt-2)}
+.hand-head .hand-tools .btn:hover{background:var(--app-2);color:var(--txt)}
+.hand-head .hand-tools #sortBtn::after{content:'';position:absolute;right:0;top:14px;height:16px;border-right:1px solid var(--hair-2)}
+.hand-head .hand-tools #autoDrawBtn[data-mode]:not([data-mode="off"]){color:var(--brass-lt);background:none}
+.hand-head .hand-tools #clearSel{font-size:10px;padding-inline:5px;color:var(--txt-3)}
+.hand-head .sort-popover{position:fixed;inset:auto 12px 12px auto;width:320px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}
+.mine > .hand{border-top:1px solid var(--hair);margin-top:2px;padding-top:10px}
+
+/* Give public books a little more air while keeping our own shelf modest. */
+#logBox{display:none}
+.bar #meldCell{display:flex;flex-direction:row;align-items:baseline;gap:3px;white-space:nowrap;padding:0;border:0}
+.bar #meldCell .tag,.bar #meldCell .bar-val{font-size:10px;font-weight:400;color:var(--txt-3);letter-spacing:0;text-transform:none}
+.bar #meldCell .bar-val{color:var(--txt-2)}
+.bar .round-cell{margin-right:5px}
+.seat .meld:not([data-presentation="tile"]){height:36px}
+.seat .meld .meld-cards{height:30px}
+.seat .meld .card.tiny{--card-w:22px;--card-h:30px;width:22px;height:30px}
+.seat .meld .card.tiny .r{font-size:11px}
+.seat .meld.nearly-book:not([data-presentation="tile"]) .meld-cards .card.tiny:first-child{width:30px;height:22px;margin-top:4px}
+.seat .meld .meld-cards.closed-book-stack{width:22px}
+@media(max-width:600px){.seat{padding-block:6px}.bar-in{gap:4px}.bar .round-cell{gap:3px;margin-right:2px}}
+@media(max-width:360px){.bar-in{gap:3px}.bar .round-cell .tag,.bar .round-cell .bar-val{font-size:10px}.bar #meldCell .tag,.bar #meldCell .bar-val{font-size:9px}.bar .btn.sm{padding-inline:6px;font-size:11px}}
+
+/* Comfortable hit areas and a little vertical air on roomy portrait screens. */
+.hand-head #sortBtn,.hand-head #autoDrawBtn,.hand-head #clearSel{min-height:44px}
+@media(max-width:600px) and (min-height:760px){
+  .board{gap:8px}
+  .seat{gap:4px}
+  .bar .btn.sm{min-height:40px}
+}
+/* Preserve two readable own-book rows before yielding extra public detail. */
+.board[data-overflow="true"]{gap:4px}
+.board[data-overflow="true"] .seat{padding-block:3px;gap:2px}
+.board[data-overflow="true"] .mine{gap:3px}
+.board[data-overflow="true"] .books-head{min-height:20px;margin:0}
+.board[data-overflow="true"] #myMelds{min-height:96px}
+.board[data-overflow="true"] .hand{padding-top:8px}
+
+.board[data-overflow="true"][data-large-hand="true"] #myMelds{min-height:48px}
+
+/* Flights are paint-only and cannot move the table or catch a tap. */
+.card-motion-layer{position:fixed;inset:0;z-index:45;pointer-events:none;overflow:hidden;contain:layout style paint}
+.card-motion-layer .card-flight{pointer-events:none!important;animation:none!important;transition:none!important;opacity:1!important;min-width:0;min-height:0;max-width:none;max-height:none;box-sizing:border-box;will-change:transform}
+.card-motion-layer .card-flight::before,.card-motion-layer .card-flight::after{display:none!important}
+@media(prefers-reduced-motion:reduce){.card-motion-layer{display:none!important}}
+
+html[data-card-motion="off"] .hand .card.enter,html[data-card-motion="off"] .hand .card.deal,html[data-card-motion="off"] #myMelds .meld.land,html[data-card-motion="off"] .card.just-played{animation:none!important}

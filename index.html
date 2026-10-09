@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="room">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Hand &amp; Foot</title>
 <meta name="description" content="Online Hand and Foot for a small group — solo scoring, house rules refereed.">
 <meta name="theme-color" content="#16332b">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2316332b'/%3E%3Crect x='7' y='6' width='13' height='19' rx='2' fill='%23f2ece0'/%3E%3Cpath d='M22 9h4v17h-11' stroke='%23d6ae3e' stroke-width='2' fill='none'/%3E%3Cpath d='M13.5 11.5l3 4.5-3 4.5-3-4.5z' fill='%23b8342c'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="/handfoot-mark.svg">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <!-- Added to the Home Screen, the game runs without Safari's address bar and
@@ -18,6 +18,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Archivo:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="enhancements.css">
+<link rel="stylesheet" href="menu.css">
 <!-- Your deck and cloth, set before anything is drawn. app.js runs at the end
      of the body, which is one paint too late: without this the table appears
      in the default green and then changes under you. -->
@@ -29,7 +31,7 @@
     var t = localStorage.getItem('hf_theme');
     d.setAttribute('data-cards', /^(classic|two|four)$/.test(c || '') ? c : 'classic');
     d.setAttribute('data-theme',
-      /^(room|midnight|claret|graphite|mahogany)$/.test(t || '') ? t : 'room');
+      /^(room|midnight|claret|graphite|mahogany|ivory)$/.test(t || '') ? t : 'room');
   } catch (e) { /* private window: the defaults in the stylesheet stand */ }
 })();
 </script>
@@ -40,105 +42,102 @@
 
 <div id="app">
 
-<section class="screen" id="lobby">
-  <div class="wrap">
-    <div class="brand">
-      <div class="sub">Hand &amp; Foot &middot; Solo</div>
-      <h1>Hand &amp; Foot</h1>
-      <p>Your table's rules, refereed. Decks scale with the players, eleven and eleven,
-         four draw piles, and you need a red book and a black book to go out.</p>
+<section class="screen" id="lobby" data-menu-page="home" aria-label="Game menu">
+  <main class="menu-shell">
+    <div class="menu-brand">
+      <svg class="menu-logo" viewBox="0 0 212 180" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="#ad915e" stroke-width="1.2" opacity=".85"><path d="M26 99C18 84 17 66 22 51M190 51c5 15 4 33-4 48"/><path d="m20 40 3-5 3 5-3 5Z"/><path d="m186 112 3-5 3 5-3 5Z"/></g>
+        <g transform="rotate(-10 78 82)">
+          <rect x="34" y="24" width="82" height="120" rx="8" fill="#721e20" stroke="#b89760" stroke-width="1.5"/>
+          <path d="M41 138h65M41 141h65" stroke="#cdb684" stroke-width="1" opacity=".7"/>
+          <rect x="34" y="19" width="82" height="120" rx="8" fill="#a33332" stroke="#d0b17d" stroke-width="1.5"/>
+          <rect x="40" y="25" width="70" height="108" rx="4" fill="none" stroke="#e9d2a2" stroke-width=".8" opacity=".65"/>
+          <path d="M50 49c-11-8-9-15-4-15 2 0 4 2 4 4 2-4 4-5 7-3 5 4 1 9-7 14Z" fill="#f4ecd7"/>
+          <path d="M49 62h20v3h-5v19h23V65h-5v-3h20v3h-5v45h5v3H82v-3h5V88H64v22h5v3H49v-3h5V65h-5Z" fill="#f5ecd7"/>
+        </g>
+        <g transform="rotate(9 133 85)">
+          <rect x="96" y="33" width="82" height="120" rx="8" fill="#151a19" stroke="#b89760" stroke-width="1.5"/>
+          <path d="M105 147h64M105 150h64" stroke="#cdb684" stroke-width="1" opacity=".7"/>
+          <rect x="96" y="28" width="82" height="120" rx="8" fill="#222b29" stroke="#d0b17d" stroke-width="1.5"/>
+          <rect x="102" y="34" width="70" height="108" rx="4" fill="none" stroke="#e9d2a2" stroke-width=".8" opacity=".65"/>
+          <path d="M153 48c-3 5-7 7-7 11 0 4 5 5 7 1l-2 7h5l-2-7c2 4 7 3 7-1 0-4-5-6-8-11Z" fill="#f5ecd7"/>
+          <path d="M110 70h45l1 15h-3c-2-9-5-12-14-12h-14v21h10c6 0 8-2 9-8h3v20h-3c-1-6-3-8-9-8h-10v23h7v3h-22v-3h5V73h-5Z" fill="#f5ecd7"/>
+        </g>
+        <path d="M83 169h39m7 0h15" stroke="#ad915e" stroke-width="1" stroke-linecap="round"/>
+        <path d="m123 169 2-3 2 3-2 3Z" fill="#c7ad75"/>
+      </svg>
+      <h1>Hand <span class="menu-amp">&amp;</span> Foot</h1>
+      <p class="menu-tagline">A card table for good company.</p>
     </div>
 
-    <div class="panels">
-      <div class="panel">
-        <h2>Start a table</h2>
-        <p>You'll get a four-letter code. Send it to everyone else.</p>
-        <label class="field" for="hostName">Your name
-          <input type="text" id="hostName" maxlength="14" placeholder="Vic" autocomplete="off">
-        </label>
-        <label class="field" for="seatCount">Seats
-          <select id="seatCount">
-            <option value="2">2 players &middot; 4 decks</option>
-            <option value="3" selected>3 players &middot; 5 decks</option>
-            <option value="4">4 players &middot; 6 decks</option>
-            <option value="5">5 players &middot; 7 decks</option>
-            <option value="6">6 players &middot; 8 decks</option>
-          </select>
-        </label>
-        <button class="btn" id="createBtn">Create table</button>
+    <section class="menu-page" id="menu-home" aria-label="Main menu">
+      <nav class="menu-choices" aria-label="Main menu">
+        <button class="menu-choice primary" id="homePlay" type="button" data-menu-to="play"><span>Play</span><span aria-hidden="true">→</span></button>
+        <div class="menu-home-secondary"><button class="menu-choice" id="homeSettings" type="button">Settings</button><button class="menu-choice" id="homeRules" type="button">Rules</button></div>
+      </nav>
+    </section>
+
+    <section class="menu-page" id="menu-play" hidden aria-labelledby="playTitle">
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="home" aria-label="Back to main menu">←</button><h2 id="playTitle" tabindex="-1">Play</h2></div>
+      <div class="menu-choices">
+        <button class="menu-choice" type="button" data-menu-to="friends"><span>Vs friends<small>Start a table or join with a code.</small></span><span aria-hidden="true">→</span></button>
+        <button class="menu-choice" type="button" data-menu-to="computer"><span>Vs computer<small>Your practice table. Play at your pace.</small></span><span aria-hidden="true">→</span></button>
       </div>
+    </section>
 
-      <div class="panel">
-        <h2>Join a table</h2>
-        <p>Enter the code from whoever started it.</p>
-        <label class="field" for="joinCode">Table code
-          <input type="text" id="joinCode" maxlength="4" placeholder="ABCD" autocomplete="off"
-                 autocapitalize="characters" spellcheck="false">
-        </label>
-        <label class="field" for="joinName">Your name
-          <input type="text" id="joinName" maxlength="14" placeholder="Dan" autocomplete="off">
-        </label>
-        <button class="btn" id="joinBtn">Sit down</button>
+    <section class="menu-page" id="menu-friends" hidden aria-labelledby="friendsTitle">
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="play" aria-label="Back to play options">←</button><h2 id="friendsTitle" tabindex="-1">Vs friends</h2></div>
+      <div class="menu-choices">
+        <button class="menu-choice" type="button" data-menu-to="host"><span>Start a game<small>Create a table and share its code.</small></span><span aria-hidden="true">→</span></button>
+        <button class="menu-choice" type="button" data-menu-to="join"><span>Join a table<small>Pull up a chair with a table code.</small></span><span aria-hidden="true">→</span></button>
       </div>
+    </section>
 
-      <div class="panel">
-        <h2>Play the computer</h2>
-        <p>Deals straight away against bots. The bots go through the same referee
-           you do, so anything they get away with is a rule worth reporting.</p>
-        <label class="field" for="botName">Your name
-          <input type="text" id="botName" maxlength="14" placeholder="Vic" autocomplete="off">
-        </label>
-        <label class="field" for="botCount">Opponents
-          <select id="botCount">
-            <option value="1">1 bot &middot; 4 decks</option>
-            <option value="2" selected>2 bots &middot; 5 decks</option>
-            <option value="3">3 bots &middot; 6 decks</option>
-          </select>
-        </label>
-        <button class="btn" id="vsBotBtn">Deal against the computer</button>
-      </div>
+    <section class="menu-page" id="menu-host" hidden aria-labelledby="hostTitle">
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="friends" aria-label="Back to friends options">←</button><h2 id="hostTitle" tabindex="-1">Start a game</h2></div>
+      <p class="menu-intro">Choose your table rules, then invite your friends.</p>
+      <form class="menu-form" id="hostForm">
+        <div class="setup-players">
+        <label class="field" for="hostName">Your name<input type="text" id="hostName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name"></label>
+        <label class="field" for="seatCount">Total players<select id="seatCount" name="players" required><option value="2">2 players</option><option value="3" selected>3 players</option><option value="4">4 players</option></select></label>
+        </div>
+        <div class="setup-rules" id="hostSetupRules"></div>
+        <label class="menu-toggle" for="hostReveal"><span>Preview discard pickup<small>Everyone can see the cards they would pick up.</small></span><input type="checkbox" id="hostReveal" name="revealDiscard" checked></label>
+        <p class="err setup-rule-error" id="hostRulesError" role="alert" tabindex="-1" hidden></p>
+        <button class="btn menu-submit" id="createBtn" type="submit">Create table</button>
+      </form>
+    </section>
 
-      <div class="panel">
-        <h2>Practice table</h2>
-        <p>Three seats on this device, one at a time. Good for checking the rules
-           match your group's before you invite anyone.</p>
-        <button class="btn ghost" id="practiceBtn">Deal a practice hand</button>
-      </div>
-    </div>
+    <section class="menu-page" id="menu-join" hidden aria-labelledby="joinTitle">
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="friends" aria-label="Back to friends options">←</button><h2 id="joinTitle" tabindex="-1">Join a table</h2></div>
+      <p class="menu-intro">Enter your host’s code and take a seat.</p>
+      <form class="menu-form" id="joinForm">
+        <label class="field" for="joinCode">Table code<input type="text" id="joinCode" name="code" maxlength="4" minlength="4" pattern="[A-Za-z]{4}" required placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="joinCodeHint"></label>
+        <p class="menu-field-note" id="joinCodeHint">Four letters from your host.</p>
+        <label class="field" for="joinName">Your name<input type="text" id="joinName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name"></label>
+        <button class="btn menu-submit" id="joinBtn" type="submit">Join table</button>
+      </form>
+    </section>
 
-    <p class="err" id="lobbyErr" hidden></p>
-
-    <!-- Shown only on an iPhone or iPad that is still in Safari. app.js hides it
-         once the game is running from the Home Screen, where it is just noise. -->
-    <div class="install" id="installTip" hidden>
-      <span class="install-ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/>
-        </svg>
-      </span>
-      <span><b>Add it to your Home Screen.</b> Tap Share, then <b>Add to Home Screen</b>.
-        It opens full screen with no address bar, which gives you back a good inch of table.</span>
-      <button class="install-x" id="installDismiss" type="button" aria-label="Dismiss">&times;</button>
-    </div>
-
-    <div class="rules-note">
-      <b>House rules in force.</b>
-      Decks: players + 2. Deal 11 to the hand, 11 to the foot. The stock is split into
-      <b>four draw piles</b> &mdash; drawing two means one card from each of two different piles.
-      Or take the discard pile with two naturals matching the top card, and you get that card
-      plus the six behind it. To go down the first time you need <b>at least</b> 50 / 90 / 120 / 150 across the four rounds &mdash; totalled over every meld you lay in that one turn, not a single meld and not an exact figure. A pile take counts towards that
-      total like anything else, and if you cannot reach it you hand the pile back. Books of seven:
-      <b>red book</b> all naturals, 500; <b>black book</b> with wilds, 300. Seven <i>closes</i> a book
-      rather than capping it &mdash; keep adding to the pile, or start a second book of that rank. Threes never meld
-      &mdash; a black three on top freezes the pile, and a <b>red three</b> is dead weight you
-      discard like any other card: it costs you <b>100</b> only if you are still holding one when
-      the round ends. To <b>go out</b> you must be in your foot with a red book and a black book, and
-      then play <b>every card left in your hand</b> into melds &mdash; there is no final discard. <b>+500</b> for going out.
-      Short of that, once you are in your foot you can <b>never be left holding nothing</b>: keep two cards back,
-      one to discard and one to hold on to.
-    </div>
-  </div>
+    <section class="menu-page" id="menu-computer" hidden aria-labelledby="computerTitle">
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="play" aria-label="Back to play options">←</button><h2 id="computerTitle" tabindex="-1">Vs computer</h2></div>
+      <p class="menu-intro">Practice with 1–3 opponents. The same game, your rules.</p>
+      <form class="menu-form" id="computerForm">
+        <div class="setup-players">
+        <label class="field" for="botName">Your name<input type="text" id="botName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name"></label>
+        <label class="field" for="botCount">Computer players<select id="botCount" name="bots" required><option value="1">1 opponent</option><option value="2" selected>2 opponents</option><option value="3">3 opponents</option></select></label>
+        </div>
+        <div class="setup-rules" id="botSetupRules"></div>
+        <label class="menu-toggle" for="botReveal"><span>Preview discard pickup<small>Everyone can see the cards they would pick up.</small></span><input type="checkbox" id="botReveal" name="revealDiscard" checked></label>
+        <p class="err setup-rule-error" id="botRulesError" role="alert" tabindex="-1" hidden></p>
+        <button class="btn menu-submit" id="vsBotBtn" type="submit">Start practice game</button>
+      </form>
+    </section>
+    <p class="err menu-error" id="lobbyErr" role="alert" hidden></p>
+    <p class="menu-status" id="menuStatus" role="status" aria-live="polite" hidden></p>
+  </main>
+  <!-- Compatibility hooks for the original client and test fixtures. -->
+  <div hidden><button id="practiceBtn" type="button" hidden>Practice</button><div id="installTip" hidden><button id="installDismiss" type="button">Dismiss</button></div></div>
 </section>
 
 <section class="screen" id="table" hidden>
@@ -148,55 +147,71 @@
         <div class="tag">Table</div>
         <div class="code" id="tableCode">&mdash;</div>
       </div>
-      <div class="bar-cell">
+      <div class="bar-cell round-cell">
         <div class="tag">Round</div>
-        <div class="bar-val" id="roundLabel">1/4</div>
+        <div class="bar-val" id="roundLabel">1 of 4</div>
       </div>
-      <!-- Leaves the bar the moment you are down. Until then it is the number
-           you are chasing; after that it is a number you cannot use, and the
-           width is worth more to the turn pill beside it. -->
-      <div class="bar-cell" id="meldCell">
-        <div class="tag"><span class="only-wide">Initial meld</span><span class="only-narrow">Meld</span></div>
-        <div class="bar-val" id="minLabel">50</div>
+      <div class="bar-cell" id="meldCell" title="Opening meld minimum for this round">
+        <span class="tag">Meld:</span><span class="bar-val" id="minLabel">50</span><span class="tag">min.</span>
       </div>
       <div class="spacer"></div>
-      <span class="pill" id="turnPill">&mdash;</span>
       <button class="btn ghost sm" id="scoresBtn">Scores</button>
-      <button class="btn ghost sm" id="rulesBtn" title="The house rules in force, the ones this table can change, and your own choice of cards and cloth">
-        <span class="only-wide">Rules</span><span class="only-narrow">&#9881;</span>
-      </button>
-      <button class="btn ghost sm" id="leaveBtn">Leave</button>
+      <button class="btn ghost sm" id="rulesBtn" type="button" title="Table settings and rules" aria-label="Table settings" aria-haspopup="dialog"><span aria-hidden="true">&#9881;</span></button>
     </div>
   </div>
 
   <div class="wrap board">
     <div class="share" id="shareBox" hidden>
-      <span class="note">Send this code to the others:</span>
+      <div class="share-heading"><span class="share-kicker">Hand &amp; Foot</span><h2>Your table is ready</h2><p>Share the invite or send your friends this code.</p></div>
+      <p class="note" id="lobbyRuleSummary"></p>
+      <span class="sr-only">Table code:</span>
       <code id="shareCode">&mdash;</code>
       <button class="btn ghost sm" id="copyLink">Copy invite</button>
-      <span class="note" id="copyNote"></span>
+      <span class="note" id="copyNote" role="status" aria-live="polite"></span>
     </div>
 
     <div class="seats" id="seats"></div>
-
-    <div class="center" id="centerRow"></div>
+    <div class="center" id="centerRow" aria-label="Draw and discard piles"></div>
 
     <div class="mine">
-      <div class="sect-head">
-        <h3>Your books</h3>
+      <div class="sect-head books-head">
+        <div class="books-identity"><h3>Your cards</h3><span class="pill" id="turnPill" role="status">&mdash;</span></div>
         <div class="chips" id="myChips"></div>
-        <span class="note" id="meldHint"></span>
+        <span class="sr-only" id="meldHint" aria-live="polite"></span>
       </div>
-      <div class="melds" id="myMelds"></div>
-
       <div class="sect-head hand-head">
-        <h3 class="only-wide">Your hand</h3>
-        <span class="pill" id="handPill">0 cards</span>
-        <button class="btn ghost sm" id="sortBtn">Sort by rank</button>
-        <button class="btn ghost sm" id="layoutBtn">Side by side</button>
+        <div class="book-stats" id="myBookStats"><span class="book-counts" id="myBookCounts">0 hand · 0 foot</span><span class="melded-points" id="myMeldedPoints">0 melded</span></div>
+        <span class="sr-only" id="handPill">Your hand</span>
+        <div class="hand-tools" role="group" aria-label="Card controls">
         <button class="btn ghost sm" id="clearSel" hidden>Clear</button>
+        <button class="btn ghost sm" id="chatBtn" type="button" aria-label="Table chat" aria-haspopup="dialog">Chat<span id="chatUnread" class="chat-unread" hidden>0</span></button>
+        <button class="btn ghost sm" id="sortBtn" type="button" aria-expanded="false" aria-controls="sortPopover" aria-haspopup="dialog">Sort</button>
+        <button class="btn ghost sm" id="autoDrawBtn" type="button" aria-label="Auto draw" title="Auto draw is off" aria-expanded="false" aria-controls="autoDrawPopover" aria-haspopup="dialog">Auto</button>
+        <button class="btn ghost sm" id="layoutBtn" hidden>Side by side</button>
+        </div>
+        <div class="sort-popover" id="sortPopover" role="dialog" aria-modal="false" aria-labelledby="sortPopoverTitle" hidden>
+          <div class="sort-popover-head"><h3 id="sortPopoverTitle">Arrange cards</h3><button class="btn ghost sm" id="closeSortPopover" type="button">Done</button></div>
+          <div class="sort-option-group" role="group" aria-label="Card order"><span class="sort-option-label">Sort</span><button class="sort-option" id="sortRank" type="button" aria-pressed="true">By rank</button><button class="sort-option" id="sortCount" type="button" aria-pressed="false">By count</button></div>
+          <div class="sort-option-group" role="group" aria-label="Card layout"><span class="sort-option-label">Layout</span><button class="sort-option" id="sortSpread" type="button" aria-pressed="true">Spread</button><button class="sort-option" id="sortLayered" type="button" aria-pressed="false">Layered</button></div>
+        </div>
+        <div class="sort-popover auto-draw-popover" id="autoDrawPopover" role="dialog" aria-modal="false" aria-labelledby="autoDrawTitle" hidden>
+          <div class="sort-popover-head"><h3 id="autoDrawTitle">Auto</h3><button class="btn ghost sm" id="closeAutoDraw" type="button">Done</button></div>
+          <div class="auto-draw-section" role="group" aria-labelledby="automaticDrawLabel">
+            <div class="sort-option-label" id="automaticDrawLabel">Automatic draw</div>
+            <p class="auto-draw-help" id="autoDrawHelp">Draw two when your turn starts; pause when you can take the discard pile. Highest and lowest mean cards remaining, not card values.</p>
+            <div class="auto-draw-modes" role="group" aria-label="Auto draw mode"><button class="sort-option" id="autoDrawOff" type="button" aria-pressed="true">Off</button><button class="sort-option" id="autoDrawChosen" type="button" aria-pressed="false">Choose two piles</button><button class="sort-option" id="autoDrawHighest" type="button" aria-pressed="false">Highest two</button><button class="sort-option" id="autoDrawLowest" type="button" aria-pressed="false">Lowest two</button><button class="sort-option" id="autoDrawRandom" type="button" aria-pressed="false">Random</button></div>
+            <div id="autoDrawFixed" class="auto-draw-fixed" hidden><span class="sort-option-label">Choose two different piles</span><div class="auto-draw-piles" role="group" aria-label="Fixed draw piles"><button class="sort-option" id="autoDrawPile0" type="button" aria-pressed="true">1</button><button class="sort-option" id="autoDrawPile1" type="button" aria-pressed="true">2</button><button class="sort-option" id="autoDrawPile2" type="button" aria-pressed="false">3</button><button class="sort-option" id="autoDrawPile3" type="button" aria-pressed="false">4</button></div></div>
+            <p id="autoDrawStatus" class="auto-draw-status" role="status"></p>
+          </div>
+          <div class="auto-match-row" role="group" aria-labelledby="cardSelectionLabel">
+            <div class="sort-option-label" id="cardSelectionLabel">Card selection</div>
+            <button class="btn ghost sm" id="selectMatching" type="button" role="switch" aria-label="Select matching ranks" aria-describedby="matchingRanksHelp" aria-checked="false" aria-pressed="false">Select matching ranks</button>
+            <p class="auto-draw-help" id="matchingRanksHelp">Tap one 4 to select all your 4s. Tap again to clear that rank. Works with Automatic draw off and never plays cards. Naturals do not select wilds; jokers and deuces each group separately.</p>
+          </div>
+        </div>
       </div>
-      <div class="hand" id="myHand"></div>
+      <div class="melds" id="myMelds" aria-label="Your melds"></div>
+      <div class="hand" id="myHand" aria-labelledby="handPill"></div>
       <div class="log" id="logBox"></div>
     </div>
   </div>
@@ -206,18 +221,28 @@
   </div>
 </section>
 
-<div class="sheet" id="rulesSheet" hidden>
+<div class="sheet" id="rulesSheet" role="dialog" aria-modal="true" aria-labelledby="rulesTitle" hidden>
   <div class="sheet-in">
     <div class="sect-head" style="margin-bottom:14px">
-      <h2 style="font-size:22px">Rules &amp; look</h2>
+      <h2 style="font-size:22px" id="rulesTitle">Settings</h2>
       <div class="spacer" style="flex:1"></div>
       <button class="btn ghost sm" id="closeRules">Close</button>
     </div>
     <div id="rulesBody"></div>
+    <div class="settings-footer"><button class="btn ghost sm" id="leaveBtn" type="button" hidden>Leave table</button></div>
   </div>
 </div>
 
-<div class="sheet" id="peekSheet" hidden>
+<div class="sheet" id="chatSheet" role="dialog" aria-modal="true" aria-labelledby="chatTitle" hidden>
+  <div class="sheet-in chat-panel">
+    <div class="sect-head chat-heading"><h2 id="chatTitle">Table chat</h2><button class="btn ghost sm" id="closeChat" type="button" aria-label="Close chat">Close</button></div>
+    <p class="chat-status" id="chatStatus" role="status">Messages stay at this table.</p>
+    <div id="chatMessages" class="chat-messages" role="log" aria-label="Table messages" aria-live="polite" aria-relevant="additions text"></div>
+    <form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">Message the table</label><input type="text" id="chatInput" maxlength="500" autocomplete="off" placeholder="Message the table…"><button class="btn" id="chatSend" type="submit">Send</button></form>
+  </div>
+</div>
+
+<div class="sheet" id="peekSheet" role="dialog" aria-modal="true" aria-labelledby="peekTitle" hidden>
   <div class="sheet-in">
     <div class="sect-head" style="margin-bottom:14px">
       <h2 style="font-size:22px" id="peekTitle">The discard pile</h2>
@@ -228,7 +253,7 @@
   </div>
 </div>
 
-<div class="sheet" id="scoreSheet" hidden>
+<div class="sheet" id="scoreSheet" role="dialog" aria-modal="true" aria-labelledby="scoreTitle" hidden>
   <div class="sheet-in">
     <div class="sect-head" style="margin-bottom:14px">
       <h2 style="font-size:22px" id="scoreTitle">Scores</h2>
@@ -243,5 +268,6 @@
 
 <script src="engine.js"></script>
 <script src="app.js"></script>
+<script src="menu.js"></script>
 </body>
 </html>

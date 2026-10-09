@@ -127,12 +127,12 @@ t('red book vs black book detection', () => {
 
 console.log('\n-- turn rules --');
 function rigged(hands, opts) {
-  const s = G.createGame(['A', 'B', 'C'], opts && opts.settings);
+  const s = G.createGame(['A', 'B', 'C'], Object.assign({ reshuffleOnce: false }, opts && opts.settings));
   G.startRound(s, mulberry(3));
   hands.forEach((h, i) => { if (h) s.players[i].hand = h.slice(); });
   if (opts && opts.discard) s.discard = opts.discard.slice();
   if (opts && opts.round != null) s.round = opts.round;
-  s.turn = 0; s.turnPhase = 'draw'; s.turnState = { melded: 0, tookPile: false, drew: false, pickedUpFoot: false, snapshot: JSON.stringify({ hand: s.players[0].hand, foot: s.players[0].foot, inFoot: false, melds: [] }) };
+  s.turn = 0; s.turnPhase = 'draw'; s.turnState = { melded: 0, tookPile: false, drew: false, pickedUpFoot: false, logMark: s.logSeq || 0, snapshot: JSON.stringify({ hand: s.players[0].hand, foot: s.players[0].foot, inFoot: false, melds: [], redThrees: s.players[0].redThrees, hasInitialMeld: false }) };
   return s;
 }
 
@@ -739,6 +739,406 @@ t('going out is worth 500', () => {
   const p = s.players[0];
   p.melds = []; p.hand = []; p.foot = []; p.redThrees = []; p.wentOut = true;
   eq(G.scoreRound(s)[0].total, 500);
+});
+
+console.log('\n-- atomic moves and undo --');
+t('a duplicate card cannot create a meld or remove an unrelated card', () => {
+  const s = rigged([['KS0', 'KH0', '9C0']]);
+  G.drawStock(s, 0, [0, 1]);
+  const before = JSON.stringify(s);
+  no(G.meldNew(s, 0, 'K', ['KS0', 'KS0', 'KH0']));
+  eq(JSON.stringify(s), before, 'every part of the state is unchanged');
+});
+t('a duplicate add and an empty add leave the table untouched', () => {
+  const s = rigged([['KS1', '9C0']]);
+  s.players[0].melds = [{ id: 'k', rank: 'K', cards: ['KS0', 'KH0', 'KD0'] }];
+  G.drawStock(s, 0, [0, 1]);
+  const before = JSON.stringify(s);
+  no(G.meldAdd(s, 0, 'k', ['KS1', 'KS1']));
+  no(G.meldAdd(s, 0, 'k', []));
+  eq(JSON.stringify(s), before);
+});
+t('a refused foot pickup restores turn flags and a full history', () => {
+  const s = rigged([['AS0', 'AH0', 'AD0']]);
+  G.drawStock(s, 0, [0, 1]);
+  s.players[0].hand = ['AS0', 'AH0', 'AD0'];
+  s.players[0].foot = ['9C0'];
+  s.log = Array.from({ length: 200 }, (_, i) => ({ id: i + 1, t: 'draw', seat: 1 }));
+  s.logSeq = 200;
+  const before = JSON.stringify(s);
+  no(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']));
+  eq(JSON.stringify(s), before, 'no foot badge, lost history or phantom meld remains');
+});
+t('a refused pile take restores new-card highlights as well as the cards', () => {
+  const s = rigged([['KH0', 'KD0']], { discard: ['9C0', 'KS0'] });
+  const p = s.players[0];
+  p.inFoot = true; p.foot = []; p.hasInitialMeld = true;
+  const before = JSON.stringify(s);
+  no(G.takePile(s, 0, ['KH0', 'KD0']));
+  eq(JSON.stringify(s), before);
+});
+t('undoing a pile take restores laid-off red threes without duplicating them', () => {
+  const s = rigged([['AH0', 'AD0', '9C0']], {
+    settings: { redThreeAutoLayOff: true }, discard: ['3H5', 'AS0'],
+  });
+  const beforeRed = s.players[0].redThrees.slice();
+  ok(G.takePile(s, 0, ['AH0', 'AD0']).ok);
+  ok(s.players[0].redThrees.includes('3H5'));
+  ok(G.undoTurnMelds(s, 0).ok);
+  eq(s.players[0].redThrees, beforeRed);
+  eq(s.discard, ['3H5', 'AS0']);
+});
+t('undoing a foot pickup restores its laid-off red threes', () => {
+  const s = rigged([['AS0', 'AH0', 'AD0']], { settings: { redThreeAutoLayOff: true } });
+  const p = s.players[0];
+  s.stocks = [['AD0', '4S0'], ['AH0'], [], []];
+  p.hand = ['AS0']; p.foot = ['3H5', '9C0', '8C0'];
+  G.drawStock(s, 0, [0, 1]);
+  const red = p.redThrees.slice();
+  ok(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']).ok);
+  ok(p.redThrees.includes('3H5'));
+  ok(G.undoTurnMelds(s, 0).ok);
+  eq(p.redThrees, red);
+  eq(p.foot, ['3H5', '9C0', '8C0']);
+  ok(!p.inFoot);
+});
+t('undo preserves visibility rule changes made during a turn', () => {
+  const s = rigged([['AS0', 'AH0', 'AD0', '9C0']]);
+  G.drawStock(s, 0, [0, 1]);
+  G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']);
+  G.logRule(s, 0, 'revealPileTake', false);
+  G.logRule(s, 1, 'revealPileTake', true);
+  ok(G.undoTurnMelds(s, 0).ok);
+  eq(s.log.filter((e) => e.t === 'rule').length, 2);
+  eq(s.log.filter((e) => e.t === 'meld').length, 0);
+});
+t('going out cannot bypass an unfinished opening minimum', () => {
+  const s = rigged([['5H1']], { round: 3 });
+  const p = s.players[0];
+  p.inFoot = true; p.foot = [];
+  p.melds = [
+    { id: 'r', rank: '4', cards: ['4S0', '4H0', '4D0', '4C0', '4S1', '4H1', '4D1'] },
+    { id: 'b', rank: '5', cards: ['5S0', '5H0', '5D0', '5C0', '2S0', '2H0'] },
+  ];
+  s.turnPhase = 'play'; s.turnState.drew = true; s.turnState.melded = 95;
+  const before = JSON.stringify(s);
+  const r = G.meldAdd(s, 0, 'b', ['5H1']);
+  no(r); eq(r.code, 'initial_meld_short');
+  eq(JSON.stringify(s), before, 'the final card and score are unchanged');
+});
+t('undo cannot change cards after the round has been scored', () => {
+  const s = rigged([['QH1']]);
+  const p = s.players[0];
+  p.inFoot = true; p.foot = []; p.hasInitialMeld = true;
+  p.melds = [
+    { id: 'r', rank: 'K', cards: ['KS0', 'KH0', 'KD0', 'KC0', 'KS1', 'KH1', 'KD1'] },
+    { id: 'b', rank: 'Q', cards: ['QS0', 'QH0', 'QD0', 'QC0', 'QS1', '2H0', '2D0'] },
+  ];
+  G.drawStock(s, 0, [0, 1]);
+  p.hand = ['QH1'];
+  ok(G.meldAdd(s, 0, 'b', ['QH1']).roundEnded);
+  const before = JSON.stringify(s);
+  no(G.undoTurnMelds(s, 0));
+  eq(JSON.stringify(s), before);
+});
+
+
+console.log('\n-- configurable table rules --');
+t('rule validation returns independent defaults and accepts supported ranges', () => {
+  const original = E.DEFAULTS.minMelds.slice();
+  const result = E.validateSettings({}, 4);
+  ok(result.ok); eq(E.deckCountFor(result.settings, 4), 6);
+  result.settings.minMelds[0] = 0; eq(E.DEFAULTS.minMelds, original);
+  const custom = E.validateSettings({ deckCount: 12, handSize: 20, footSize: 5,
+    requireRedBook: 5, requireBlackBook: 0, pileTakeExtra: 19, bookSize: 10,
+    maxWildsInBook: 0, minNaturalsInMeld: 3, minMelds: [0, 100, 300, 500],
+    redBookBonus: 0, blackBookBonus: 2000, goOutBonus: 2000,
+    redThreeValue: -2000, redThreeAutoLayOff: true, revealPileTake: false, reshuffleOnce: false }, 4);
+  ok(custom.ok, custom.reason); eq(E.deckCountFor(custom.settings, 4), 12);
+  eq(custom.settings.drawCount, 2); eq(custom.settings.stockPiles, 4);
+});
+t('malformed, unknown and out-of-range rule changes are rejected', () => {
+  for (const rules of [null, [], { drawCount: 1 }, { deckCount: '4' }, { handSize: 4 },
+    { footSize: 21 }, { maxWildsInBook: 5 }, { minNaturalsInMeld: 1 },
+    { revealPileTake: 1 }, { reshuffleOnce: 'true' }, { minMelds: [50] },
+    { minMelds: [0, 1.5, 20, 50] }, { redThreeValue: 100 }, { goOutBonus: 2001 }]) {
+    no(E.validateSettings(rules, 4), JSON.stringify(rules));
+  }
+});
+t('setup rejects insufficient decks and impossible required books', () => {
+  no(E.validateSettings({ deckCount: 1 }, 4));
+  no(E.validateSettings({ maxWildsInBook: 0 }, 4));
+  no(E.validateSettings({ deckCount: 1, handSize: 5, footSize: 5 }, 2));
+  ok(E.validateSettings({ deckCount: 1, handSize: 5, footSize: 5, bookSize: 4 }, 2).ok);
+  const s = G.createGame(['A', 'B', 'C', 'D'], { deckCount: 1 });
+  const before = JSON.stringify(s); no(G.startRound(s)); eq(JSON.stringify(s), before);
+});
+t('a required black book must fit the natural and usable wild supply', () => {
+  const base = { deckCount: 1, handSize: 5, footSize: 5, requireRedBook: 0, requireBlackBook: 1 };
+  for (const rules of [{ bookSize: 7, maxWildsInBook: 2 }, { bookSize: 10, maxWildsInBook: 4 }]) {
+    const settings = Object.assign({}, base, rules);
+    no(E.validateSettings(settings, 2));
+    const s = G.createGame(['A', 'B'], settings);
+    const before = JSON.stringify(s); no(G.startRound(s)); eq(JSON.stringify(s), before);
+  }
+  ok(E.validateSettings(Object.assign({}, base, { bookSize: 6, maxWildsInBook: 2 }), 2).ok);
+  ok(E.validateSettings(Object.assign({}, base, { deckCount: 2, bookSize: 7, maxWildsInBook: 2 }), 2).ok);
+  const s = G.createGame(['A', 'B']); ok(G.startRound(s, mulberry(18)).ok); G.endRound(s, null);
+  s.pendingSettings = Object.assign({}, s.settings, base, { bookSize: 7, maxWildsInBook: 2 });
+  const before = JSON.stringify(s); no(G.nextRound(s)); eq(JSON.stringify(s), before);
+  s.pendingSettings = Object.assign({}, s.settings, base, { bookSize: 6, maxWildsInBook: 2 });
+  ok(G.nextRound(s).ok); eq(s.settings.bookSize, 6); eq(s.settings.deckCount, 1);
+});
+function allCards(s) {
+  return s.stocks.flat().concat(s.discard, ...s.players.map(p =>
+    p.hand.concat(p.foot, p.redThrees, ...p.melds.map(m => m.cards)))).sort();
+}
+t('fixed deck and custom deal sizes apply to every round', () => {
+  const s = G.createGame(['A', 'B'], { deckCount: 2, handSize: 5, footSize: 8 });
+  ok(G.startRound(s, mulberry(925)).ok);
+  for (let round = 0; round < 4; round++) {
+    eq(s.round, round); eq(allCards(s).length, 108); eq(new Set(allCards(s)).size, 108);
+    s.players.forEach(p => { eq(p.hand.length, 5); eq(p.foot.length, 8); });
+    G.endRound(s, null); if (round < 3) ok(G.nextRound(s).ok);
+  }
+});
+t('queued rules apply at the next deal, while invalid queued rules leave the scored round intact', () => {
+  const s = G.createGame(['A', 'B']); ok(G.startRound(s, mulberry(927)).ok);
+  const settings = E.validateSettings({ deckCount: 3, handSize: 6, footSize: 9 }, 2, s.settings).settings;
+  s.pendingSettings = settings; s.reshufflesUsed = 1;
+  eq(s.settings.handSize, 11); G.endRound(s, null); ok(G.nextRound(s).ok);
+  eq(s.settings.handSize, 6); eq(s.players[0].foot.length, 9);
+  eq(allCards(s).length, 162); eq(s.pendingSettings, undefined); eq(s.reshufflesUsed, 0);
+  G.endRound(s, null); s.pendingSettings = Object.assign({}, s.settings, { deckCount: 1, handSize: 20, footSize: 20 });
+  const before = JSON.stringify(s); no(G.nextRound(s)); eq(JSON.stringify(s), before);
+});
+t('custom wild cap, natural minimum, book size and book requirements are enforced', () => {
+  const S = E.validateSettings({ bookSize: 3, maxWildsInBook: 4, minNaturalsInMeld: 3,
+    requireRedBook: 2, requireBlackBook: 0 }, 3).settings;
+  no(E.checkMeld('K', ['KS0', 'KH0', 'XR0'], S));
+  ok(E.checkMeld('K', ['KS0', 'KH0', 'KD0', 'XR0', 'XB0', '2S0', '2H0'], S).ok);
+  const s = rigged([[]], { settings: S }); const p = s.players[0]; p.inFoot = true;
+  p.melds = [{ rank: 'K', cards: ['KS0', 'KH0', 'KD0'] }]; no(G.canGoOut(s, 0));
+  p.melds.push({ rank: 'Q', cards: ['QS0', 'QH0', 'QD0'] }); ok(G.canGoOut(s, 0).ok);
+});
+t('custom scoring bonuses and red-three penalty apply to held, foot and laid-off cards', () => {
+  const s = rigged([['3H0']], { settings: { bookSize: 3, redBookBonus: 750,
+    blackBookBonus: 450, goOutBonus: 250, redThreeValue: -200 } });
+  const p = s.players[0]; p.foot = ['3D0']; p.redThrees = ['3H1']; p.wentOut = true;
+  p.melds = [{ rank: 'K', cards: ['KS0', 'KH0', 'KD0'] }, { rank: 'Q', cards: ['QS0', 'QH0', '2S0'] }];
+  const score = G.scoreRound(s)[0]; eq(score.redPts, 750); eq(score.blackPts, 450);
+  eq(score.out, 250); eq(score.handCount, 600); eq(score.total, 920);
+  s.settings.redThreeValue = 0; eq(G.scoreRound(s)[0].handCount, 0);
+});
+
+console.log('\n-- once-per-round stock recycling --');
+function recyclingGame(extra) {
+  const s = rigged([['AS0', 'AH0', 'AD0']], { settings: Object.assign({ reshuffleOnce: true }, extra) });
+  s.stocks = [['4S0'], ['5S0', '6S0'], ['7S0', '8S0'], ['9S0', 'TS0']];
+  s.discard = ['JS0', 'QS0', 'KS0']; return s;
+}
+t('first empty pile recycles after both cards are drawn, preserving the top discard', () => {
+  const s = recyclingGame(); const before = allCards(s); const hand = s.players[0].hand.slice();
+  const result = G.drawStock(s, 0, [0, 1]); ok(result.ok); ok(result.reshuffled);
+  eq(s.players[0].hand, hand.concat(['4S0', '5S0'])); eq(s.discard, ['KS0']);
+  eq(s.stocks.map(p => p.length), [2, 2, 2, 1]); eq(s.reshufflesUsed, 1);
+  eq(s.turnPhase, 'play'); eq(allCards(s), before);
+  ok(!s.stocks.flat().some(c => c === '4S0' || c === '5S0'));
+  eq(s.log.slice(-2).map(e => e.t), ['draw', 'reshuffle']);
+});
+t('a draw that leaves all four piles occupied does not consume the recycle', () => {
+  const s = recyclingGame(); s.stocks[0].push('4H0');
+  ok(G.drawStock(s, 0, [0, 1]).ok); eq(s.reshufflesUsed, 0); eq(s.discard.length, 3);
+});
+t('second exhaustion ends the round after drawing without scoring twice', () => {
+  const s = recyclingGame(); s.reshufflesUsed = 1; const before = allCards(s);
+  ok(G.drawStock(s, 0, [0, 1]).roundEnded); eq(s.phase, 'roundEnd');
+  eq(s.scores.length, 1); eq(s.discard.length, 3); eq(s.reshufflesUsed, 1); eq(allCards(s), before);
+  no(G.drawStock(s, 0, [1, 2])); eq(s.scores.length, 1);
+});
+t('recycle disabled retains the original last-stock behavior', () => {
+  const s = recyclingGame({ reshuffleOnce: false });
+  ok(G.drawStock(s, 0, [0, 1]).ok); eq(s.phase, 'playing'); eq(s.reshufflesUsed, 0);
+  eq(s.stocks[0].length, 0); eq(s.discard.length, 3);
+});
+t('taking melds back never undoes a stock recycle or restores drawn stock cards', () => {
+  const s = recyclingGame(); ok(G.drawStock(s, 0, [0, 1]).ok);
+  const stocks = JSON.stringify(s.stocks); const hand = s.players[0].hand.slice();
+  ok(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']).ok); ok(G.undoTurnMelds(s, 0).ok);
+  eq(JSON.stringify(s.stocks), stocks); eq(s.players[0].hand, hand);
+  eq(s.reshufflesUsed, 1); eq(s.discard, ['KS0']);
+});
+t('persisted recycle usage still ends the second exhausted draw', () => {
+  const s = recyclingGame(); s.reshufflesUsed = 1;
+  const loaded = JSON.parse(JSON.stringify(s)); ok(G.drawStock(loaded, 0, [0, 1]).roundEnded);
+  eq(loaded.reshufflesUsed, 1); eq(loaded.log.filter(e => e.t === 'reshuffle').length, 0);
+});
+t('too few recyclable cards ends cleanly and conserves every card', () => {
+  const s = recyclingGame(); s.stocks = [['4S0'], ['5S0'], [], []]; s.discard = ['KS0'];
+  const before = allCards(s); ok(G.drawStock(s, 0, [0, 1]).roundEnded);
+  eq(s.reshufflesUsed, 1); eq(s.discard, ['KS0']); eq(allCards(s), before);
+});
+t('red-three replacement exhaustion retries atomically using the one recycle', () => {
+  const s = recyclingGame({ redThreeAutoLayOff: true });
+  s.stocks = [['3H0'], ['3D0'], [], []];
+  s.discard = ['4H0', '5H0', '6H0', '7H0', '8H0', '9H0', 'TH0', 'KS0'];
+  const before = allCards(s); const handLength = s.players[0].hand.length;
+  ok(G.drawStock(s, 0, [0, 1]).ok); eq(s.reshufflesUsed, 1); eq(allCards(s), before);
+  eq(s.players[0].hand.length, handLength + 2); ok(s.players[0].hand.every(c => !E.isRedThree(c)));
+  eq(s.discard, ['KS0']);
+});
+
+console.log('\n-- arrival replacement and terminal turns --');
+// Small, disjoint card zones make conservation failures unambiguous. These
+// are late-round positions, so a deal is deliberately unnecessary.
+function arrivalGame(options = {}) {
+  const s = G.createGame(['A', 'B'], Object.assign({ redThreeAutoLayOff: true, reshuffleOnce: false }, options.settings));
+  s.phase = 'playing'; s.turnPhase = options.turnPhase || 'play';
+  s.stocks = options.stocks || [['4S0', '5S0'], ['4H0', '5H0'], ['4D0', '5D0'], ['4C0', '5C0']];
+  s.discard = options.discard || ['KS0'];
+  Object.assign(s.players[0], {
+    hand: options.hand || ['AS0', 'AH0', 'AD0'],
+    foot: options.foot || ['3H0', '6S0', '7S0', '8S0', '9S0'],
+    inFoot: !!options.inFoot, hasInitialMeld: true, melds: options.melds || [],
+  });
+  s.turnState = { melded: 0, tookPile: false, drew: s.turnPhase === 'play',
+    pickedUpFoot: false, picked: [], logMark: 0, snapshot: JSON.stringify(s.players[0]) };
+  return s;
+}
+function zones(s) {
+  return JSON.stringify({ players: s.players, stocks: s.stocks, discard: s.discard, reshufflesUsed: s.reshufflesUsed });
+}
+t('the final one or two stock cards allow a last turn then score for either discard top', () => {
+  for (const count of [1, 2]) for (const card of ['3C0', '9C0']) {
+    const s = arrivalGame({ hand: [card], turnPhase: 'draw', settings: { redThreeAutoLayOff: false },
+      stocks: count === 1 ? [['4S0'], [], [], []] : [['4S0'], ['5S0'], [], []] });
+    const before = allCards(s);
+    ok(G.drawStock(s, 0, count === 2 ? [0, 1] : []).ok);
+    eq(s.phase, 'playing'); eq(s.turnPhase, 'play'); eq(s.scores.length, 0);
+    eq(s.players[0].hand.length, count + 1); eq(G.stockCount(s), 0);
+    eq(s.log.find(e => e.t === 'draw').n, count);
+    ok(G.discard(s, 0, card).roundEnded); eq(s.phase, 'roundEnd'); eq(s.scores.length, 1);
+    eq(s.discard[s.discard.length - 1], card); eq(allCards(s), before);
+    no(G.drawStock(s, 1, [])); no(G.discard(s, 0, '4S0')); eq(s.scores.length, 1);
+  }
+});
+t('a final no-recycle draw may still be melded to win', () => {
+  const s = arrivalGame({ hand: ['KH0', 'KD0'], foot: [], inFoot: true, turnPhase: 'draw',
+    stocks: [['KC0'], [], [], []], settings: { bookSize: 3, requireRedBook: 1, requireBlackBook: 0 } });
+  const before = allCards(s); ok(G.drawStock(s, 0, []).ok); eq(s.phase, 'playing');
+  ok(G.meldNew(s, 0, 'K', ['KH0', 'KD0', 'KC0']).roundEnded);
+  ok(s.players[0].wentOut); eq(s.outSeat, 0); eq(s.scores.length, 1); eq(allCards(s), before);
+});
+t('automatic deal replacements preserve hand size and every card', () => {
+  let seen = 0;
+  for (let seed = 0; seed < 30; seed++) {
+    const s = G.createGame(['A', 'B'], { deckCount: 2, handSize: 5, footSize: 5, redThreeAutoLayOff: true });
+    ok(G.startRound(s, mulberry(seed)).ok);
+    s.players.forEach(p => { eq(p.hand.length, 5); ok(p.hand.every(c => !E.isRedThree(c))); seen += p.redThrees.length; });
+    eq(allCards(s), E.buildDeck(2).sort());
+  }
+  ok(seen > 0);
+});
+t('both meld paths and discard replace foot red threes, including replacement chains', () => {
+  for (const path of ['new', 'add', 'discard']) for (const chained of [false, true]) {
+    const s = arrivalGame();
+    if (chained) s.stocks[0].unshift('3D0');
+    if (path === 'add') {
+      s.players[0].hand = ['AD0'];
+      s.players[0].melds = [{ id: 'aces', rank: 'A', cards: ['AS0', 'AH0', 'AC0'] }];
+    }
+    if (path === 'discard') s.players[0].hand = ['AS0'];
+    s.turnState.snapshot = JSON.stringify(s.players[0]);
+    const before = allCards(s), beforeZones = zones(s), stock = G.stockCount(s);
+    const result = path === 'new' ? G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']) :
+      path === 'add' ? G.meldAdd(s, 0, 'aces', ['AD0']) : G.discard(s, 0, 'AS0');
+    ok(result.ok, path); eq(s.phase, 'playing'); ok(s.players[0].inFoot);
+    eq(s.players[0].hand, ['4S0', '6S0', '7S0', '8S0', '9S0']);
+    eq(s.players[0].redThrees, chained ? ['3H0', '3D0'] : ['3H0']);
+    eq(G.stockCount(s), stock - (chained ? 2 : 1)); eq(allCards(s), before);
+    if (path !== 'discard') {
+      ok(G.undoTurnMelds(s, 0).ok); eq(zones(s), beforeZones); eq(allCards(s), before);
+      eq(s.log.filter(e => ['meld', 'foot'].includes(e.t)), []);
+    } else eq(s.turn, 1);
+  }
+});
+t('pile pickup replaces red threes and undo restores the replacement stocks and packet', () => {
+  for (const chained of [false, true]) {
+    const s = arrivalGame({ turnPhase: 'draw', hand: ['AH0', 'AD0', '9C0'],
+      foot: ['6S0', '7S0'], discard: ['3H0', 'AS0'] });
+    if (chained) s.stocks[0].unshift('3D0');
+    const before = allCards(s), beforeZones = zones(s);
+    ok(G.takePile(s, 0, ['AH0', 'AD0']).ok);
+    eq(s.players[0].hand, ['9C0', '4S0']);
+    eq(s.players[0].redThrees, chained ? ['3H0', '3D0'] : ['3H0']); eq(allCards(s), before);
+    ok(G.undoTurnMelds(s, 0).ok); eq(zones(s), beforeZones); eq(s.turnPhase, 'draw'); eq(allCards(s), before);
+  }
+});
+t('an illegal foot entry rolls back its replacement stock and turn history atomically', () => {
+  const s = arrivalGame({ foot: ['3H0'] }); const before = JSON.stringify(s);
+  no(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0'])); eq(JSON.stringify(s), before);
+});
+t('a replacement can recycle during the chain and undo restores all recycled zones', () => {
+  const s = arrivalGame({ settings: { reshuffleOnce: true }, stocks: [['3D0'], [], [], []],
+    discard: ['4S0', '5S0', '4H0', '5H0', '4D0', '5D0', '4C0', '5C0', 'TC0', 'JC0', 'KS0'] });
+  const before = allCards(s), beforeZones = zones(s);
+  ok(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']).ok);
+  eq(s.phase, 'playing'); eq(s.reshufflesUsed, 1); eq(s.discard, ['KS0']);
+  eq(s.players[0].hand.length, 5); eq(s.players[0].redThrees, ['3H0', '3D0']); eq(allCards(s), before);
+  ok(G.undoTurnMelds(s, 0).ok); eq(zones(s), beforeZones); eq(allCards(s), before);
+  eq(s.log.filter(e => e.t === 'reshuffle').length, 0);
+});
+t('pile replacement recycling can be handed back with its original stocks and discard', () => {
+  const s = arrivalGame({ turnPhase: 'draw', settings: { reshuffleOnce: true, pileTakeExtra: 1 },
+    hand: ['AH0', 'AD0', '9C0'], foot: ['6S0', '7S0'], stocks: [['4S0'], ['5S0'], ['6C0'], ['7C0']],
+    discard: ['8C0', 'TC0', 'JC0', 'QC0', '3H0', 'AS0'] });
+  const before = allCards(s), beforeZones = zones(s);
+  ok(G.takePile(s, 0, ['AH0', 'AD0']).ok); eq(s.reshufflesUsed, 1); eq(s.phase, 'playing');
+  eq(s.discard, ['QC0']); eq(allCards(s), before);
+  ok(G.undoTurnMelds(s, 0).ok); eq(zones(s), beforeZones); eq(allCards(s), before);
+});
+t('undo of foot replacements preserves the earlier stock draw and its recycle', () => {
+  const s = arrivalGame({ turnPhase: 'draw', hand: ['AS0'], settings: { reshuffleOnce: true },
+    stocks: [['AH0'], ['AD0', '4S0', '5S0'], ['4H0', '5H0', 'TC0'], ['4D0', '5D0', 'JC0']],
+    discard: ['QS0', 'QH0', 'QD0', 'QC0', 'KS0', 'KH0', 'KD0'] });
+  const before = allCards(s);
+  ok(G.drawStock(s, 0, [0, 1]).ok); eq(s.reshufflesUsed, 1); const afterDraw = zones(s);
+  ok(G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']).ok); ok(G.undoTurnMelds(s, 0).ok);
+  eq(zones(s), afterDraw); eq(s.reshufflesUsed, 1); eq(allCards(s), before);
+  eq(s.log.filter(e => e.t === 'reshuffle').length, 1); eq(s.turnPhase, 'play');
+});
+t('replacement at second exhaustion or insufficient recycling scores once and conserves every card', () => {
+  for (const used of [0, 1]) for (const path of ['foot', 'pile']) {
+    const s = arrivalGame({ settings: { reshuffleOnce: true }, stocks: [['4S0'], [], [], []],
+      ...(path === 'pile' ? { turnPhase: 'draw', hand: ['AH0', 'AD0', '9C0'],
+        foot: ['6S0', '7S0'], discard: ['3H0', 'AS0'] } : {}) });
+    s.reshufflesUsed = used; const before = allCards(s);
+    const result = path === 'foot' ? G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']) : G.takePile(s, 0, ['AH0', 'AD0']);
+    ok(result.roundEnded);
+    eq(s.phase, 'roundEnd'); eq(s.scores.length, 1); eq(s.reshufflesUsed, 1);
+    eq(s.players[0].hand.length, path === 'foot' ? 5 : 2); eq(allCards(s), before);
+    no(G.undoTurnMelds(s, 0)); no(G.discard(s, 0, '4S0')); eq(s.scores.length, 1);
+  }
+});
+t('replacement exhaustion still transfers the rest of a picked-up packet before scoring', () => {
+  const s = arrivalGame({ turnPhase: 'draw', hand: ['AH0', 'AD0', '9C0'], foot: ['6S0', '7S0'],
+    discard: ['3H0', '9H0', '3D0', 'AS0'], stocks: [[], [], [], []] });
+  const before = allCards(s); ok(G.takePile(s, 0, ['AH0', 'AD0']).roundEnded);
+  eq(s.players[0].hand, ['9C0', '9H0']); eq(s.players[0].redThrees, ['3H0', '3D0']);
+  eq(allCards(s), before); eq(s.scores.length, 1); eq(s.phase, 'roundEnd');
+});
+t('an all-red-three foot either receives every replacement or scores at exhaustion', () => {
+  const foot = ['3H0', '3D0', '3H1', '3D1', '3H2'];
+  for (const path of ['meld', 'discard']) for (const supply of [0, 2, 5]) {
+    const s = arrivalGame({ foot: foot.slice(), hand: path === 'meld' ? ['AS0', 'AH0', 'AD0'] : ['AS0'],
+      stocks: [['4S0', '5S0', '6S0', '7S0', '8S0'].slice(0, supply), [], [], []] });
+    const before = allCards(s);
+    const result = path === 'meld' ? G.meldNew(s, 0, 'A', ['AS0', 'AH0', 'AD0']) : G.discard(s, 0, 'AS0');
+    ok(result.ok); eq(s.players[0].redThrees, foot); eq(s.players[0].hand.length, supply);
+    eq(allCards(s), before); ok(!s.players[0].wentOut);
+    if (supply < 5 || path === 'discard') { ok(result.roundEnded); eq(s.scores.length, 1); }
+    else { eq(s.phase, 'playing'); ok(G.discard(s, 0, '4S0').roundEnded); }
+  }
 });
 
 console.log('\n-- full games --');

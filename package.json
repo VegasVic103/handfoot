@@ -1,12 +1,12 @@
 {
   "name": "handfoot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Online Hand and Foot (solo scoring) for a small group of friends",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node rules.test.js && node server.test.js"
+    "test": "node rules.test.js && node server.test.js && node bot.test.js && node ui.test.js && node menu.test.js && node motion.test.js && node presets.test.js"
   },
   "engines": {
     "node": ">=18"

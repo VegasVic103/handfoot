@@ -12,6 +12,7 @@ function done(extra) { return Object.assign({ ok: true }, extra || {}); }
 
 function createGame(seatNames, settings) {
   const S = Object.assign({}, E.DEFAULTS, settings || {});
+  S.minMelds = S.minMelds.slice();
   return {
     v: 1,
     settings: S,
@@ -26,6 +27,7 @@ function createGame(seatNames, settings) {
     turnState: null,
     scores: [],
     log: [],
+    reshufflesUsed: 0,
   };
 }
 
@@ -42,11 +44,22 @@ function minMeldFor(state) {
 }
 
 function startRound(state, rng) {
-  const S = state.settings;
   const n = state.seats.length;
-  const deckCount = n + 2;
+  const checked = E.validateSettings({}, n, state.pendingSettings || state.settings);
+  if (!checked.ok) return fail(checked.reason, 'invalid_settings');
+  const S = checked.settings;
+  const deckCount = E.deckCountFor(S, n);
   let stock = E.shuffle(E.buildDeck(deckCount), rng);
 
+  // Reserve a legal initial discard before dealing. Even a deliberately small
+  // custom deck must not leave a remaining stock made entirely of wilds.
+  const firstAt = stock.findIndex(card => !E.isWild(card) && !E.isRedThree(card));
+  if (firstAt < 0) return fail('These decks cannot supply a starting discard.', 'invalid_settings');
+  const first = stock.splice(firstAt, 1)[0];
+
+  state.settings = S;
+  delete state.pendingSettings;
+  state.reshufflesUsed = 0;
   state.players = state.seats.map(() => emptyPlayer());
   for (let i = 0; i < n; i++) {
     state.players[i].hand = stock.splice(0, S.handSize);
@@ -60,20 +73,8 @@ function startRound(state, rng) {
   if (S.redThreeAutoLayOff) {
     for (let i = 0; i < n; i++) {
       const p = state.players[i];
-      for (let k = 0; k < p.hand.length; k++) {
-        while (E.isRedThree(p.hand[k]) && stock.length) {
-          p.redThrees.push(p.hand[k]);
-          p.hand[k] = stock.shift();
-        }
-      }
+      receiveCards(state, i, p.hand.splice(0), () => stock.length ? stock.shift() : null, false);
     }
-  }
-
-  // Turn the first discard. A wild or a red three cannot start the pile.
-  let first = stock.shift();
-  while (E.isWild(first) || E.isRedThree(first)) {
-    stock.push(first);
-    first = stock.shift();
   }
 
   // Split what's left into the draw piles.
@@ -91,7 +92,7 @@ function snapOf(state, seat) {
   const p = state.players[seat];
   return JSON.stringify({
     hand: p.hand, foot: p.foot, inFoot: p.inFoot, melds: p.melds,
-    hasInitialMeld: p.hasInitialMeld,
+    redThrees: p.redThrees, hasInitialMeld: p.hasInitialMeld,
   });
 }
 
@@ -117,6 +118,60 @@ function notePicked(state, card) {
   if (!ts) return;
   if (!Array.isArray(ts.picked)) ts.picked = [];
   ts.picked.push(card);
+}
+
+/* Every arrival uses the same replacement chain. The caller controls where
+ * replacements come from and when an exhausted stock ends the round. Finish
+ * moving the whole packet even when replacements run out, so no cards vanish. */
+function receiveCards(state, seat, cards, replace, highlight = true) {
+  const p = state.players[seat];
+  let exhausted = false;
+  for (let card of cards) {
+    while (state.settings.redThreeAutoLayOff && E.isRedThree(card)) {
+      p.redThrees.push(card);
+      card = exhausted ? null : replace();
+      if (card === null) { exhausted = true; break; }
+    }
+    if (card !== null) {
+      p.hand.push(card);
+      if (highlight) notePicked(state, card);
+    }
+  }
+  return !exhausted;
+}
+
+/* Pile and foot arrivals can draw replacements during a reversible play.
+ * Capture only when needed; a normal stock draw and its recycle stay outside
+ * this snapshot and therefore survive Undo melds. */
+function receiveFromPlay(state, seat, cards, highlight = true) {
+  const replaces = state.settings.redThreeAutoLayOff && cards.some(E.isRedThree);
+  if (!replaces) {
+    receiveCards(state, seat, cards, () => null, highlight);
+    return done();
+  }
+  const ts = state.turnState;
+  if (!ts.arrivalSnapshot) {
+    ts.arrivalSnapshot = {
+      stocks: state.stocks.map(pile => pile.slice()), discard: state.discard.slice(),
+      reshufflesUsed: state.reshufflesUsed, logMark: state.logSeq || 0,
+    };
+  }
+  let terminal = false;
+  let reshuffled = false;
+  const received = receiveCards(state, seat, cards, () => {
+    let card = takeAny(state);
+    if (card !== null) return card;
+    const result = checkStockExhaustion(state, true, undefined, true);
+    terminal = !!result.stockExhausted;
+    reshuffled = reshuffled || !!result.reshuffled;
+    return terminal ? null : takeAny(state);
+  }, highlight);
+  if (received && state.settings.reshuffleOnce) {
+    const result = checkStockExhaustion(state, false, undefined, true);
+    terminal = !!result.stockExhausted;
+    reshuffled = reshuffled || !!result.reshuffled;
+  }
+  return done({ stockExhausted: terminal || !received, reshuffled });
 }
 
 /* ---------- draw ---------- */
@@ -155,6 +210,27 @@ function takeAny(state) {
   return live.length ? takeFrom(state, live[0]) : null;
 }
 
+/* Complete a draw before testing individual pile exhaustion. The drawn cards
+ * belong to the player's hand and are never part of this recycling pool. */
+function checkStockExhaustion(state, forced, rng, deferEnd = false) {
+  const exhausted = () => deferEnd ? done({ stockExhausted: true }) : endRoundOutOfCards(state);
+  if (!forced && state.stocks.every(pile => pile.length > 0)) return done();
+  if (!state.settings.reshuffleOnce) {
+    return stockCount(state) === 0 ? exhausted() : done();
+  }
+  if ((state.reshufflesUsed || 0) >= 1) return exhausted();
+  const top = state.discard.length ? state.discard[state.discard.length - 1] : null;
+  const pool = state.stocks.flat().concat(top ? state.discard.slice(0, -1) : state.discard);
+  state.stocks = splitPiles(E.shuffle(pool, rng), state.settings.stockPiles);
+  state.discard = top ? [top] : [];
+  state.reshufflesUsed = 1;
+  log(state, { t: 'reshuffle', n: pool.length, remaining: 0 });
+  // Fewer than four recyclable cards cannot refill all four piles. The second
+  // exhaustion has already occurred, so score rather than create a dead turn.
+  if (state.stocks.some(pile => !pile.length)) return exhausted();
+  return done({ reshuffled: true });
+}
+
 /* `piles` names which draw piles the cards come from — one card from each, and
  * they must be different piles while enough piles still have cards. */
 function drawStock(state, seat, piles) {
@@ -162,8 +238,13 @@ function drawStock(state, seat, piles) {
   if (!g.ok) return g;
   const S = state.settings;
   const p = state.players[seat];
-  const live = livePiles(state);
-  if (!live.length) return endRoundOutOfCards(state);
+  let live = livePiles(state);
+  if (!live.length) {
+    const exhausted = checkStockExhaustion(state, true);
+    if (state.phase !== 'playing') return exhausted;
+    live = livePiles(state);
+    if (!Array.isArray(piles) || piles.length !== S.drawCount) piles = live.slice(0, S.drawCount);
+  }
 
   let picks;
   if (live.length >= S.distinctDrawPiles) {
@@ -185,29 +266,45 @@ function drawStock(state, seat, piles) {
     for (let k = 0; k < S.drawCount; k++) picks.push(live[0]);
   }
 
+  const before = {
+    stocks: state.stocks.map(pile => pile.slice()), hand: p.hand.slice(),
+    redThrees: p.redThrees.slice(), picked: state.turnState.picked && state.turnState.picked.slice(),
+  };
+  function exhaustedDuringReplacement() {
+    // An exceptional chain of red-three replacements can exhaust every card.
+    // Roll back the whole attempted draw before recycling and retrying, so no
+    // partial draw is committed and no card is duplicated or left behind.
+    state.stocks = before.stocks; p.hand = before.hand; p.redThrees = before.redThrees;
+    state.turnState.picked = before.picked || [];
+    if (!S.reshuffleOnce || (state.reshufflesUsed || 0) >= 1) return endRoundOutOfCards(state);
+    const result = checkStockExhaustion(state, true);
+    if (state.phase !== 'playing') return result;
+    return drawStock(state, seat, picks);
+  }
+  let drawn = 0;
   for (const idx of picks) {
     let c = takeFrom(state, idx);
     if (c === null) c = takeAny(state);
-    if (c === null) return endRoundOutOfCards(state);
+    if (c === null) {
+      // With recycling off, the final available card still gets a last turn.
+      if (!S.reshuffleOnce) break;
+      return exhaustedDuringReplacement();
+    }
     // Under the lay-off rule a drawn red three goes face up and you draw again
     // from the same pile. Playing them as dead cards, it is just a card you now
     // have to get rid of, so it comes into the hand like any other.
-    let guardCount = 0;
-    while (S.redThreeAutoLayOff && E.isRedThree(c) && guardCount++ < 40) {
-      p.redThrees.push(c);
-      c = takeFrom(state, idx);
-      if (c === null) c = takeAny(state);
-      if (c === null) return endRoundOutOfCards(state);
+    if (!receiveCards(state, seat, [c], () => takeFrom(state, idx) || takeAny(state))) {
+      return exhaustedDuringReplacement();
     }
-    p.hand.push(c);
-    notePicked(state, c);
+    drawn++;
   }
   state.turnState.drew = true;
   state.turnPhase = 'play';
   // Undo rolls back melds laid this turn, never the draw itself.
   state.turnState.snapshot = snapOf(state, seat);
-  log(state, { t: 'draw', seat, n: S.drawCount, piles: picks.map((i) => i + 1) });
+  log(state, { t: 'draw', seat, n: drawn, piles: picks.slice(0, drawn).map((i) => i + 1) });
   state.turnState.logMark = state.logSeq;   // the draw itself survives an undo
+  if (S.reshuffleOnce) return checkStockExhaustion(state, false);
   return done();
 }
 
@@ -251,7 +348,7 @@ function takePile(state, seat, handCards) {
     if (!chk.ok) return fail(chk.reason);
   }
 
-  const value = cards.reduce((s, c) => s + E.cardValue(c), 0);
+  const value = cards.reduce((s, c) => s + E.cardValue(c, S), 0);
   /* No initial-meld check here. Taking the pile is a draw, and at this table the
    * minimum is totalled across everything you lay in the turn — so two kings and
    * the king on top is 30 towards the 50, not a refusal. What it cannot do is
@@ -273,15 +370,14 @@ function takePile(state, seat, handCards) {
     if (live) live.cards = live.cards.concat(cards);
     else p.melds.push({ id: newMeldId(), rank, cards });
 
-    for (const c of taken) {
-      if (S.redThreeAutoLayOff && E.isRedThree(c)) p.redThrees.push(c);
-      else { p.hand.push(c); notePicked(state, c); }
-    }
+    const arrival = receiveFromPlay(state, seat, taken);
     state.turnState.melded += value;
     log(state, { t: 'pile', seat, n: takeCount, rank });
-    return afterHandShrink(state, seat);
+    if (arrival.stockExhausted) return arrival;
+    return Object.assign(arrival, afterHandShrink(state, seat));
   });
   if (!r.ok) return r;
+  if (r.roundEnded) return r;
 
   state.turnState.tookPile = true;
   state.turnState.pileSnapshot = pileBefore;
@@ -303,6 +399,8 @@ function meldNew(state, seat, rank, cards) {
   if (!g.ok) return g;
   const S = state.settings;
   const p = state.players[seat];
+  if (!Array.isArray(cards) || !cards.length) return fail('Select cards to meld.');
+  if (new Set(cards).size !== cards.length) return fail('Duplicate card in the selection.');
   /* A second book of a rank is allowed, but only once the one you have is
    * closed — otherwise you could spread the same rank across two half-books and
    * never finish either. */
@@ -317,7 +415,7 @@ function meldNew(state, seat, rank, cards) {
   return tx(state, seat, () => {
     for (const c of cards) p.hand.splice(p.hand.indexOf(c), 1);
     p.melds.push({ id: newMeldId(), rank, cards: cards.slice() });
-    state.turnState.melded += cards.reduce((s, c) => s + E.cardValue(c), 0);
+    state.turnState.melded += cards.reduce((s, c) => s + E.cardValue(c, S), 0);
     log(state, { t: 'meld', seat, rank, n: cards.length });
     return afterHandShrink(state, seat);
   });
@@ -328,6 +426,8 @@ function meldAdd(state, seat, meldId, cards) {
   if (!g.ok) return g;
   const S = state.settings;
   const p = state.players[seat];
+  if (!Array.isArray(cards) || !cards.length) return fail('Select cards to add.');
+  if (new Set(cards).size !== cards.length) return fail('Duplicate card in the selection.');
   const m = p.melds.find((x) => x.id === meldId);
   if (!m) return fail('No such meld.');
   if (!cards.every((c) => p.hand.includes(c))) return fail('Those cards are not in your hand.');
@@ -335,6 +435,7 @@ function meldAdd(state, seat, meldId, cards) {
    * wild onto it would quietly turn 500 points into 300. Start a second book of
    * the rank for that wild instead. */
   const st = E.meldStats(m, S);
+  if (st.complete && S.closedBooksLocked) return fail('That book is complete. Start another book of that rank.');
   if (st.complete && st.wilds === 0 && cards.some((c) => E.isWild(c))) {
     return fail('That is a red book — a wild would turn it black. Start another book of that rank.');
   }
@@ -345,7 +446,7 @@ function meldAdd(state, seat, meldId, cards) {
     const live = p.melds.find((x) => x.id === meldId);
     for (const c of cards) p.hand.splice(p.hand.indexOf(c), 1);
     live.cards = live.cards.concat(cards);
-    state.turnState.melded += cards.reduce((s, c) => s + E.cardValue(c), 0);
+    state.turnState.melded += cards.reduce((s, c) => s + E.cardValue(c, S), 0);
     log(state, { t: 'meld', seat, rank: live.rank, n: cards.length });
     return afterHandShrink(state, seat);
   });
@@ -360,25 +461,40 @@ function tx(state, seat, apply) {
     hand: p.hand.slice(), foot: p.foot.slice(), inFoot: p.inFoot,
     melds: JSON.parse(JSON.stringify(p.melds)),
     redThrees: p.redThrees.slice(),
+    stocks: state.settings.redThreeAutoLayOff ? state.stocks.map(pile => pile.slice()) : null,
+    reshufflesUsed: state.reshufflesUsed,
     discard: state.discard.slice(),
-    melded: state.turnState.melded,
-    logLen: state.log.length,
+    turnState: JSON.parse(JSON.stringify(state.turnState)),
+    log: state.log.slice(), logSeq: state.logSeq,
   };
   const r = apply();
-  const legal = r.ok ? legalToStop(state, seat) : done();
+  // Exhaustion during an arrival is terminal, not an illegal empty-foot move.
+  // All cards are now in their final zones; score only after the play finishes.
+  if (r.ok && r.stockExhausted) return endRoundOutOfCards(state);
+  let legal = r.ok ? legalToStop(state, seat) : done();
+  // Going out has no discard, so it must enforce the opening minimum here as
+  // well. Otherwise two inexpensive books can finish a later round short.
+  if (r.ok && legal.ok && p.inFoot && p.hand.length === 0 &&
+      !p.hasInitialMeld && state.turnState.melded < minMeldFor(state)) {
+    legal = fail(`Going down needs ${minMeldFor(state)} — you have laid ${state.turnState.melded}.`,
+      'initial_meld_short');
+  }
   if (!r.ok || !legal.ok) {
     p.hand = before.hand; p.foot = before.foot; p.inFoot = before.inFoot;
     p.melds = before.melds; p.redThrees = before.redThrees;
+    if (before.stocks) state.stocks = before.stocks;
+    state.reshufflesUsed = before.reshufflesUsed;
     state.discard = before.discard;
-    state.turnState.melded = before.melded;
-    state.log.length = before.logLen;
+    state.turnState = before.turnState;
+    state.log = before.log; state.logSeq = before.logSeq;
     return r.ok ? legal : r;
   }
   /* Playing your last card from your foot is how you go out at this table:
    * every card has to land in a meld and there is no final discard. Checked
    * here rather than inside the play, because ending the round writes the
    * scores and is not something the rollback above could undo. */
-  if (p.inFoot && p.hand.length === 0 && canGoOut(state, seat).ok) {
+  if (!state.settings.goOutWithDiscard && p.inFoot && p.hand.length === 0 && canGoOut(state, seat).ok) {
+    p.hasInitialMeld = true;
     p.wentOut = true;
     return endRound(state, seat);
   }
@@ -403,6 +519,7 @@ function legalToStop(state, seat) {
   /* Nothing left at all. The only legal way to be here is going out, which at
    * this table means every card played into a meld and none discarded. */
   if (p.hand.length === 0) {
+    if (state.settings.goOutWithDiscard) return fail('Keep your final card to discard when going out.', 'final_discard_required');
     if (out.ok) return done();
     return fail('Keep a card to discard unless you are going out — ' + out.reason.toLowerCase(),
       'foot_empty');
@@ -427,19 +544,13 @@ function legalToStop(state, seat) {
 function afterHandShrink(state, seat) {
   const p = state.players[seat];
   if (p.hand.length === 0 && !p.inFoot) {
-    p.hand = p.foot;
+    const foot = p.foot;
     p.foot = [];
     p.inFoot = true;
     state.turnState.pickedUpFoot = true;
-    // Under the lay-off rule, red threes carried in the foot go face up at
-    // once. Played as dead cards they simply come up with the rest of it.
-    if (state.settings.redThreeAutoLayOff) {
-      for (let k = p.hand.length - 1; k >= 0; k--) {
-        if (E.isRedThree(p.hand[k])) p.redThrees.push(p.hand.splice(k, 1)[0]);
-      }
-    }
+    const arrival = receiveFromPlay(state, seat, foot, false);
     log(state, { t: 'foot', seat });
-    return done({ pickedUpFoot: true });
+    return Object.assign(arrival, { pickedUpFoot: true });
   }
   return done();
 }
@@ -478,7 +589,8 @@ function discard(state, seat, card) {
    * every card goes into a meld — so a discard that empties your hand is
    * always illegal here, books or no books. Checked before anything is moved,
    * so a refusal costs the player nothing. */
-  if (p.inFoot && p.hand.length === 1) {
+  if (p.inFoot && p.hand.length === 1 && !(S.goOutWithDiscard && canGoOut(state, seat).ok)) {
+    if (S.goOutWithDiscard) return fail('You cannot go out yet. ' + canGoOut(state, seat).reason, 'foot_last_card');
     return fail('That is your last card. In your foot you have to keep one — ' +
       'the only way to finish with an empty hand is to go out, which means ' +
       'melding it instead of discarding it.', 'foot_last_card');
@@ -497,34 +609,41 @@ function discard(state, seat, card) {
   p.hand.splice(p.hand.indexOf(card), 1);
   state.discard.push(card);
   log(state, { t: 'discard', seat, card });
+  if (S.goOutWithDiscard && p.inFoot && p.hand.length === 0) {
+    p.wentOut = true;
+    return endRound(state, seat);
+  }
 
   /* A discard never goes out — going out is melding your last card, handled in
    * tx. Emptying your hand this way just leaves you with nothing until you draw
    * again, which is legal and sometimes the only move you have. */
   if (p.hand.length === 0 && !p.inFoot) {
-    p.hand = p.foot;
-    p.foot = [];
-    p.inFoot = true;
-    if (S.redThreeAutoLayOff) {
-      for (let k = p.hand.length - 1; k >= 0; k--) {
-        if (E.isRedThree(p.hand[k])) p.redThrees.push(p.hand.splice(k, 1)[0]);
-      }
-    }
-    log(state, { t: 'foot', seat });
+    const arrival = afterHandShrink(state, seat);
+    if (arrival.stockExhausted) return endRoundOutOfCards(state);
   }
   return nextTurn(state);
 }
 
 function undoTurnMelds(state, seat) {
-  if (state.turn !== seat) return fail('Not your turn.');
+  const g = guard(state, seat, 'play');
+  if (!g.ok) return g;
   const ts = state.turnState;
   if (!ts || !ts.snapshot) return fail('Nothing to undo.');
   const snap = JSON.parse(ts.snapshot);
   const p = state.players[seat];
   p.hand = snap.hand; p.foot = snap.foot; p.inFoot = snap.inFoot; p.melds = snap.melds;
+  if (Array.isArray(snap.redThrees)) p.redThrees = snap.redThrees;
   /* Going down is part of what the turn did, so taking the melds back takes that
    * back too — otherwise a turn you undid would still have opened your account. */
   if (typeof snap.hasInitialMeld === 'boolean') p.hasInitialMeld = snap.hasInitialMeld;
+  const arrival = ts.arrivalSnapshot;
+  if (arrival) {
+    state.stocks = arrival.stocks.map(pile => pile.slice());
+    state.discard = arrival.discard.slice();
+    state.reshufflesUsed = arrival.reshufflesUsed;
+    state.log = state.log.filter(e => e.t !== 'reshuffle' || e.id <= arrival.logMark);
+    delete ts.arrivalSnapshot;
+  }
   /* Taking the pile back puts every card of it where it was and returns you to
    * the draw, so the turn starts over rather than stranding you mid-way. A
    * normal draw is not undone: those cards came off a stock nobody can see. */
@@ -541,12 +660,18 @@ function undoTurnMelds(state, seat) {
   // The melds are off the table again, so the lines announcing them should go
   // too — otherwise the history reads as though they were laid twice.
   if (typeof ts.logMark === 'number') {
-    state.log = state.log.filter(function (e) { return !e.id || e.id <= ts.logMark; });
+    state.log = state.log.filter(function (e) {
+      return !e.id || e.id <= ts.logMark || e.seat !== seat ||
+        !['meld', 'pile', 'foot'].includes(e.t);
+    });
   }
   return done();
 }
 
 function nextTurn(state) {
+  // The final successful draw is playable when recycling is disabled, but a
+  // following draw turn with no stock must never strand the next player.
+  if (!state.settings.reshuffleOnce && stockCount(state) === 0) return endRoundOutOfCards(state);
   state.turn = (state.turn + 1) % state.seats.length;
   state.turnPhase = 'draw';
   state.turnState = freshTurn(state);
@@ -596,21 +721,20 @@ function scoreRound(state) {
       const st = E.meldStats(m, S);
       if (st.isRedBook) { redPts += S.redBookBonus; red++; }
       else if (st.isBlackBook || st.isWildBook) { blackPts += S.blackBookBonus; black++; }
-      meldPts += m.cards.reduce((s, c) => s + E.cardValue(c), 0);
+      meldPts += m.cards.reduce((s, c) => s + E.cardValue(c, S), 0);
     }
-    /* The sheet the table keeps: books, what is on the table against what is in
-     * your hand, and the bonus for going out. A red three needs no column of its
-     * own — it is simply an expensive card to be caught with, 100 against you
-     * inside the hand count like any other card. cardValue already prices it,
-     * and ones laid off under the other rule are added back here. */
+    /* The sheet keeps books, table cards minus held cards, and the going-out
+     * bonus. Held and laid-off red threes use the configured penalty; their
+     * printed/default card value does not override the table's rule. */
     const held = p.hand.concat(p.foot);
-    const handCount = held.reduce((s, c) => s + E.cardValue(c), 0) +
-      p.redThrees.length * Math.abs(S.redThreeValue);
-    const tableCount = meldPts - handCount;
+    const handCount = held.reduce((s, c) => s + (E.isRedThree(c) ? Math.abs(S.redThreeValue) : E.cardValue(c, S)), 0) +
+      (S.redThreeBonus ? 0 : p.redThrees.length * Math.abs(S.redThreeValue));
+    const redThreePts = S.redThreeBonus ? p.redThrees.length * Math.abs(S.redThreeValue) : 0;
+    const tableCount = meldPts + redThreePts - handCount;
     const out = p.wentOut ? S.goOutBonus : 0;
     return {
       redPts, blackPts, redBooks: red, blackBooks: black,
-      meldPts, handCount, tableCount, out,
+      meldPts, handCount, redThreePts, tableCount, out,
       total: redPts + blackPts + tableCount + out,
     };
   });
@@ -636,10 +760,13 @@ function nextRound(state) {
     state.phase = 'gameEnd';
     return done({ gameEnded: true });
   }
+  const priorRound = state.round;
   state.round += 1;
+  const result = startRound(state);
+  if (!result.ok) { state.round = priorRound; return result; }
   state.roundDetail = null;
   state.outSeat = null;
-  return startRound(state);
+  return result;
 }
 
 function totals(state) {

@@ -9,6 +9,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { randomUUID, randomInt } = require('crypto');
 const { WebSocketServer } = require('ws');
 
 const E = require('./engine.js');
@@ -21,10 +22,16 @@ const PUBLIC = __dirname;
 // Only these are served to browsers; everything else stays server-side.
 const SERVABLE = {
   '/index.html': 1, '/app.js': 1, '/style.css': 1, '/manifest.webmanifest': 1,
+  '/menu.js': 1, '/menu.css': 1, '/enhancements.css': 1, '/handfoot-mark.svg': 1,
 };
 const SAVE_FILE = process.env.SAVE_FILE || path.join(__dirname, 'tables.json');
 const ROOM_TTL_MS = 12 * 60 * 60 * 1000;   // a table is forgotten after 12 quiet hours
 const MAX_ROOMS = 200;
+const MAX_NEW_PLAYERS = 4;
+const CHAT_LIMIT = 100;
+const CHAT_TEXT_LIMIT = 500;
+const CHAT_BURST_LIMIT = 5;
+const CHAT_WINDOW_MS = 10000;
 
 /* ---------------- rooms ---------------- */
 
@@ -41,17 +48,22 @@ function makeCode() {
   return 'T' + Date.now().toString(36).slice(-3).toUpperCase();
 }
 
-function newRoom(seatCount, solo) {
+function newRoom(seatCount, solo, settings) {
   const names = [];
   for (let i = 0; i < seatCount; i++) names.push(solo ? 'Seat ' + (i + 1) : 'Open seat');
   const room = {
     code: makeCode(),
-    game: G.createGame(names),
+    game: G.createGame(names, settings),
     tokens: new Array(seatCount).fill(null),
     solo: !!solo,
     bots: new Array(seatCount).fill(false),
+    botStyles: new Array(seatCount).fill(null),
+    hostSeat: 0,
+    turnId: 0,
     touched: Date.now(),
     live: new Map(),
+    chat: [],
+    chatRates: new Map(),
   };
   room.game.code = room.code;
   rooms.set(room.code, room);
@@ -70,6 +82,16 @@ function seatedCount(room) {
 
 function isBotSeat(room, i) { return !!(room.bots && room.bots[i]); }
 
+function assignBotStyles(room, reroll) {
+  const previous = room.botStyles || [];
+  room.botStyles = room.bots.map(function (isBot, i) {
+    if (!isBot) return null;
+    if (!reroll && BOT.STYLES.includes(previous[i])) return previous[i];
+    const choices = BOT.STYLES.filter(function (style) { return !reroll || style !== previous[i]; });
+    return choices[randomInt(choices.length)];
+  });
+}
+
 function anyoneWatching(room) {
   let n = 0;
   room.live.forEach(function (set) { n += set.size; });
@@ -86,6 +108,38 @@ function connectedSeats(room) {
  * This is the whole reason the server exists. `viewFor` is the only function
  * that turns real state into something a client sees, so a card can only leak
  * if it leaks here. Other players' hands and feet become counts. */
+
+function publicSettings(settings) {
+  const S = Object.assign({}, E.DEFAULTS, settings || {});
+  return {
+    deckCount: S.deckCount,
+    bookSize: S.bookSize,
+    drawCount: S.drawCount,
+    distinctDrawPiles: S.distinctDrawPiles,
+    pileNaturalsRequired: S.pileNaturalsRequired,
+    pileTakeExtra: S.pileTakeExtra,
+    maxWildsInBook: S.maxWildsInBook,
+    minNaturalsInMeld: S.minNaturalsInMeld,
+    minNaturalsWithWild: S.minNaturalsWithWild,
+    closedBooksLocked: !!S.closedBooksLocked,
+    highEightNine: !!S.highEightNine,
+    redThreeBonus: !!S.redThreeBonus,
+    goOutWithDiscard: !!S.goOutWithDiscard,
+    minMelds: S.minMelds.slice(),
+    handSize: S.handSize,
+    footSize: S.footSize,
+    stockPiles: S.stockPiles,
+    redBookBonus: S.redBookBonus,
+    blackBookBonus: S.blackBookBonus,
+    goOutBonus: S.goOutBonus,
+    redThreeValue: S.redThreeValue,
+    redThreeAutoLayOff: !!S.redThreeAutoLayOff,
+    requireRedBook: S.requireRedBook,
+    requireBlackBook: S.requireBlackBook,
+    revealPileTake: !!S.revealPileTake,
+    reshuffleOnce: !!S.reshuffleOnce,
+  };
+}
 
 function viewFor(room, seat) {
   const g = room.game;
@@ -149,31 +203,17 @@ function viewFor(room, seat) {
     minMeld: G.minMeldFor(g),
     roundsTotal: S.minMelds.length,
     turn: g.turn,
+    turnId: room.turnId,
     turnPhase: g.turnPhase,
     turnState: g.turnState
       ? { melded: g.turnState.melded, tookPile: g.turnState.tookPile, drew: g.turnState.drew }
       : null,
-    settings: {
-      bookSize: S.bookSize,
-      drawCount: S.drawCount,
-      distinctDrawPiles: S.distinctDrawPiles,
-      pileNaturalsRequired: S.pileNaturalsRequired,
-      pileTakeExtra: S.pileTakeExtra,
-      maxWildsInBook: S.maxWildsInBook,
-      minNaturalsInMeld: S.minNaturalsInMeld,
-      minMelds: S.minMelds,
-      handSize: S.handSize,
-      footSize: S.footSize,
-      stockPiles: S.stockPiles,
-      redBookBonus: S.redBookBonus,
-      blackBookBonus: S.blackBookBonus,
-      goOutBonus: S.goOutBonus,
-      redThreeValue: S.redThreeValue,
-      redThreeAutoLayOff: !!S.redThreeAutoLayOff,
-      requireRedBook: S.requireRedBook,
-      requireBlackBook: S.requireBlackBook,
-      revealPileTake: !!S.revealPileTake,
-    },
+    settings: publicSettings(S),
+    pendingSettings: g.pendingSettings ? publicSettings(g.pendingSettings) : null,
+    hostSeat: room.hostSeat,
+    canConfigureRules: seat >= 0 && (room.solo || seat === room.hostSeat) && !!room.tokens[room.hostSeat],
+    reshufflesUsed: Number(g.reshufflesUsed) || 0,
+    reshufflesRemaining: S.reshuffleOnce ? Math.max(0, 1 - (Number(g.reshufflesUsed) || 0)) : 0,
     seats: seats,
     you: you,
     stocks: (g.stocks || []).map(function (p) { return p.length; }),
@@ -219,7 +259,8 @@ function runBots(room) {
   room.botTimer = setTimeout(function () {
     room.botTimer = null;
     const seat = room.game.turn;
-    if (room.game.phase !== 'playing' || !isBotSeat(room, seat)) return;
+    if (room.game.phase !== 'playing' || !isBotSeat(room, seat) ||
+        !anyoneWatching(room) || rooms.get(room.code) !== room) return;
 
     /* A turn is a draw, a handful of melds and a discard. If a bot ever takes
      * far more moves than that it is going round in a circle — laying cards
@@ -239,8 +280,14 @@ function runBots(room) {
       return runBots(room);
     }
 
-    const move = BOT.decide(viewFor(room, seat));
-    if (!move) { forceBotDiscard(room, seat); broadcast(room); return runBots(room); }
+    const move = BOT.decide(viewFor(room, seat), room.botStyles && room.botStyles[seat]);
+    if (!move) {
+      forceBotDiscard(room, seat);
+      room.touched = Date.now();
+      broadcast(room);
+      save();
+      return runBots(room);
+    }
 
     const msg = Object.assign({ t: 'action' }, move);
     const r = applyAction(room, room.tokens[seat] || ('bot:' + seat), msg, seat);
@@ -264,12 +311,18 @@ function runBots(room) {
 
 /* last resort so a refused bot move can never stall the table */
 function forceBotDiscard(room, seat) {
+  const before = turnContext(room);
+  try { return forceBotDiscardNow(room, seat); }
+  finally { advanceTurnId(room, before); }
+}
+
+function forceBotDiscardNow(room, seat) {
   const g = room.game;
   if (g.phase !== 'playing' || g.turn !== seat) return;
   if (g.turnPhase === 'draw') {
     const live = [];
     (g.stocks || []).forEach(function (p, i) { if (p.length) live.push(i); });
-    G.drawStock(g, seat, live.length >= g.settings.distinctDrawPiles ? [live[0], live[1]] : []);
+    G.drawStock(g, seat, live.length >= g.settings.distinctDrawPiles ? [live[0], live[g.settings.distinctDrawPiles === 1 ? 0 : 1]] : []);
   }
   if (g.phase !== 'playing' || g.turn !== seat) return;
   const tryAll = function () {
@@ -285,6 +338,13 @@ function forceBotDiscard(room, seat) {
    * and discard from the hand it started with. A bot should never reach here —
    * layBudget stops it — but a wedged seat would stall the whole table. */
   G.undoTurnMelds(g, seat);
+  // Undoing a pile take restores the draw phase; a discard is not legal until
+  // the bot has replaced that take with a stock draw.
+  if (g.turnPhase === 'draw') {
+    const live = [];
+    (g.stocks || []).forEach(function (p, i) { if (p.length) live.push(i); });
+    G.drawStock(g, seat, live.length >= g.settings.distinctDrawPiles ? [live[0], live[g.settings.distinctDrawPiles === 1 ? 0 : 1]] : []);
+  }
   tryAll();
 }
 
@@ -292,7 +352,14 @@ function sendTo(ws, obj) {
   if (ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
 
-function fail(ws, message) { sendTo(ws, { t: 'error', message: message }); }
+function fail(ws, message, context) {
+  sendTo(ws, { t: 'error', message: message, context: context });
+}
+
+function joined(ws, room, seat) {
+  sendTo(ws, { t: 'joined', code: room.code, seat: seat });
+  sendTo(ws, { t: 'chatHistory', messages: room.chat || [] });
+}
 
 /* ---------------- actions ---------------- */
 
@@ -301,16 +368,33 @@ function actingSeat(room, token) {
   return room.solo ? room.game.turn : seatOf(room, token);
 }
 
-/* House rules a player may change from the table. Deliberately short: these
- * only change what everyone is allowed to see, never what counts as a legal
- * play. Adding a rule here makes it settable by anyone at the table. */
+/* The existing shared preview toggle stays live for every seated player.
+ * Structural/scoring rules use the separate host-only validated action. */
 const SETTABLE_RULES = ['revealPileTake'];
+const TURN_ACTIONS = new Set(['start', 'draw', 'pile', 'meldNew', 'meldAdd',
+  'discard', 'undo', 'nextRound', 'rematch']);
+
+function turnContext(room) {
+  const g = room.game;
+  return [g.phase, g.round, g.turn].join(':');
+}
+
+function advanceTurnId(room, before) {
+  if (turnContext(room) !== before) room.turnId++;
+}
 
 function applyAction(room, token, msg, forcedSeat) {
+  const before = turnContext(room);
+  const result = dispatchAction(room, token, msg, forcedSeat);
+  if (result && result.ok) advanceTurnId(room, before);
+  return result;
+}
+
+function dispatchAction(room, token, msg, forcedSeat) {
   const g = room.game;
   const seat = typeof forcedSeat === 'number' ? forcedSeat : actingSeat(room, token);
   if (seat < 0) return { ok: false, reason: 'You are not seated at this table.' };
-  if (typeof forcedSeat !== 'number' && !room.solo && seatOf(room, token) < 0) {
+  if (typeof forcedSeat !== 'number' && seatOf(room, token) < 0) {
     return { ok: false, reason: 'You are not seated at this table.' };
   }
 
@@ -328,10 +412,13 @@ function applyAction(room, token, msg, forcedSeat) {
         const names = keep.map(function (i) { return room.game.seats[i].name; });
         const tokens = keep.map(function (i) { return room.tokens[i]; });
         const bots = keep.map(function (i) { return isBotSeat(room, i); });
-        room.game = G.createGame(names);
+        const botStyles = keep.map(function (i) { return (room.botStyles || [])[i] || null; });
+        room.game = G.createGame(names, g.settings);
         room.game.code = room.code;
         room.tokens = tokens;
         room.bots = bots;
+        room.botStyles = botStyles;
+        room.hostSeat = keep.indexOf(room.hostSeat);
         return G.startRound(room.game);
       }
       return G.startRound(g);
@@ -348,14 +435,28 @@ function applyAction(room, token, msg, forcedSeat) {
       return G.discard(g, seat, String(msg.card || ''));
     case 'undo':
       return G.undoTurnMelds(g, seat);
+    case 'configureRules': {
+      if (typeof forcedSeat === 'number' || token !== room.tokens[room.hostSeat]) {
+        return { ok: false, reason: 'Only the host can change the table rules.' };
+      }
+      const checked = E.validateSettings(msg.rules, g.seats.length, g.pendingSettings || g.settings);
+      if (!checked.ok) return checked;
+      if (g.phase === 'lobby') {
+        g.settings = checked.settings;
+        g.pendingSettings = null;
+      } else {
+        // Never rewrite the referee underneath cards already dealt. A full
+        // validated snapshot is persisted and applied by startRound instead.
+        g.pendingSettings = JSON.stringify(publicSettings(checked.settings)) ===
+          JSON.stringify(publicSettings(g.settings)) ? null : checked.settings;
+      }
+      return { ok: true };
+    }
     case 'setRule': {
-      /* Only the house rules that are genuinely a table's choice can be set
-       * from a browser, and only to a boolean. Everything that decides what is
-       * a legal play — book size, the minimums, the wild cap — stays in
-       * engine.js where no client can reach it. */
       const key = String(msg.key || '');
       if (SETTABLE_RULES.indexOf(key) === -1) return { ok: false, reason: 'That rule is not adjustable.' };
       const value = !!msg.value;
+      if (g.pendingSettings) g.pendingSettings[key] = value;
       if (g.settings[key] === value) return { ok: true };
       g.settings[key] = value;
       G.logRule(g, seat, key, value);
@@ -366,6 +467,7 @@ function applyAction(room, token, msg, forcedSeat) {
       return G.nextRound(g);
     case 'rematch':
       if (g.phase !== 'gameEnd') return { ok: false, reason: 'Finish this game first.' };
+      assignBotStyles(room, true);
       g.round = 0; g.scores = []; g.roundDetail = null; g.outSeat = null;
       return G.startRound(g);
     default:
@@ -382,14 +484,25 @@ function cleanName(v) {
   return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 14);
 }
 
+function initialRules(msg, seatCount) {
+  const input = msg.rules === undefined ? {} : msg.rules;
+  const checked = E.validateSettings(input, seatCount);
+  if (!checked.ok) return checked;
+  // Retain the established setup checkbox without trusting arbitrary settings.
+  if (typeof msg.revealDiscard === 'boolean') checked.settings.revealPileTake = msg.revealDiscard;
+  return checked;
+}
+
 /* ---------------- websocket wiring ---------------- */
 
 const server = http.createServer(serveStatic);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 16384 });
 
 wss.on('connection', function (ws) {
   ws.token = null;
   ws.room = null;
+  ws.isAlive = true;
+  ws.on('pong', function () { ws.isAlive = true; });
 
   ws.on('message', function (raw) {
     let msg;
@@ -399,13 +512,21 @@ wss.on('connection', function (ws) {
     const token = typeof msg.token === 'string' && msg.token.length >= 8 && msg.token.length <= 64
       ? msg.token : null;
     if (!token) return fail(ws, 'Missing session token. Reload the page.');
-    ws.token = token;
+    // A socket belongs to the session that attached it. An unsuccessful join
+    // or a message with another token must not change who gets its snapshots.
+    if (ws.token && ws.token !== token) return fail(ws, 'Session changed. Reconnect to continue.');
 
     if (msg.t === 'vsbot') {
+      const opponents = msg.bots == null ? 2 :
+        (typeof msg.bots === 'number' || typeof msg.bots === 'string') ? Number(msg.bots) : NaN;
+      if (!Number.isInteger(opponents) || opponents < 1 || opponents >= MAX_NEW_PLAYERS) {
+        return fail(ws, 'Choose between 1 and 3 computer opponents.');
+      }
+      const checked = initialRules(msg, opponents + 1);
+      if (!checked.ok) return fail(ws, checked.reason);
       if (rooms.size >= MAX_ROOMS) sweep(true);
       if (rooms.size >= MAX_ROOMS) return fail(ws, 'The server is full right now. Try again shortly.');
-      const opponents = Math.max(1, Math.min(5, parseInt(msg.bots, 10) || 2));
-      const room = newRoom(opponents + 1, false);
+      const room = newRoom(opponents + 1, false, checked.settings);
       room.tokens[0] = token;
       room.game.seats[0].name = cleanName(msg.name) || 'You';
       const BOT_NAMES = ['Ace', 'Deuce', 'Trey', 'Cleo', 'Rook'];
@@ -413,9 +534,11 @@ wss.on('connection', function (ws) {
         room.bots[i] = true;
         room.game.seats[i].name = BOT_NAMES[i - 1] + ' (bot)';
       }
+      assignBotStyles(room, false);
       G.startRound(room.game);
+      room.turnId++;
       attach(ws, room, token);
-      sendTo(ws, { t: 'joined', code: room.code, seat: 0 });
+      joined(ws, room, 0);
       broadcast(room);
       save();
       runBots(room);
@@ -423,16 +546,22 @@ wss.on('connection', function (ws) {
     }
 
     if (msg.t === 'create' || msg.t === 'practice') {
+      const solo = msg.t === 'practice';
+      const seats = solo || msg.seats == null ? 3 :
+        (typeof msg.seats === 'number' || typeof msg.seats === 'string') ? Number(msg.seats) : NaN;
+      if (!Number.isInteger(seats) || seats < 2 || seats > MAX_NEW_PLAYERS) {
+        return fail(ws, 'Choose between 2 and 4 total players.');
+      }
+      const checked = initialRules(msg, seats);
+      if (!checked.ok) return fail(ws, checked.reason);
       if (rooms.size >= MAX_ROOMS) sweep(true);
       if (rooms.size >= MAX_ROOMS) return fail(ws, 'The server is full right now. Try again shortly.');
-      const solo = msg.t === 'practice';
-      let seats = solo ? 3 : Math.max(2, Math.min(6, parseInt(msg.seats, 10) || 3));
-      const room = newRoom(seats, solo);
+      const room = newRoom(seats, solo, checked.settings);
       room.tokens[0] = token;
       if (!solo) room.game.seats[0].name = cleanName(msg.name) || 'Host';
-      if (solo) { G.startRound(room.game); }
+      if (solo) { G.startRound(room.game); room.turnId++; }
       attach(ws, room, token);
-      sendTo(ws, { t: 'joined', code: room.code, seat: 0 });
+      joined(ws, room, 0);
       broadcast(room);
       save();
       return;
@@ -452,10 +581,11 @@ wss.on('connection', function (ws) {
           return fail(ws, 'That game has already started.');
         }
         room.tokens[seat] = token;
+        if (room.hostSeat < 0) room.hostSeat = seat;
       }
       room.game.seats[seat].name = cleanName(msg.name) || room.game.seats[seat].name || 'Player';
       attach(ws, room, token);
-      sendTo(ws, { t: 'joined', code: room.code, seat: seat });
+      joined(ws, room, seat);
       broadcast(room);
       save();
       return;
@@ -466,17 +596,56 @@ wss.on('connection', function (ws) {
       const room = rooms.get(code);
       if (!room) return fail(ws, 'That table is no longer open.');
       const seat = seatOf(room, token);
-      if (seat === -1 && !room.solo) return fail(ws, 'You do not have a seat at that table.');
+      if (seat === -1) return fail(ws, 'You do not have a seat at that table.');
       attach(ws, room, token);
-      sendTo(ws, { t: 'joined', code: room.code, seat: room.solo ? room.game.turn : seat });
+      joined(ws, room, room.solo ? room.game.turn : seat);
       broadcast(room);
       runBots(room);
+      return;
+    }
+
+    if (msg.t === 'leave') {
+      leave(ws);
+      return;
+    }
+
+    if (msg.t === 'chat') {
+      const room = ws.room;
+      if (!room || seatOf(room, token) < 0) return fail(ws, 'You are not seated at this table.', 'chat');
+      if (typeof msg.text !== 'string') return fail(ws, 'Write a message first.', 'chat');
+      const body = msg.text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim();
+      if (!body) return fail(ws, 'Write a message first.', 'chat');
+      if (body.length > CHAT_TEXT_LIMIT) return fail(ws, 'Messages can be up to 500 characters.', 'chat');
+      const now = Date.now();
+      const recent = (room.chatRates.get(token) || []).filter(function (at) {
+        return now - at < CHAT_WINDOW_MS;
+      });
+      if (recent.length >= CHAT_BURST_LIMIT) return fail(ws, 'A little slower — try again in a few seconds.', 'chat');
+      recent.push(now);
+      room.chatRates.set(token, recent);
+      const seat = actingSeat(room, token);
+      const message = {
+        id: randomUUID(), seat: seat,
+        name: room.game.seats[seat].name, text: body, at: now,
+      };
+      room.chat.push(message);
+      if (room.chat.length > CHAT_LIMIT) room.chat.splice(0, room.chat.length - CHAT_LIMIT);
+      room.touched = now;
+      room.live.forEach(function (sockets) {
+        sockets.forEach(function (socket) { sendTo(socket, { t: 'chat', message: message }); });
+      });
       return;
     }
 
     if (msg.t === 'action') {
       const room = ws.room;
       if (!room) return fail(ws, 'You are not at a table.');
+      if (TURN_ACTIONS.has(msg.action) &&
+          (!Number.isSafeInteger(msg.turnId) || msg.turnId !== room.turnId)) {
+        fail(ws, 'That turn has changed. Your table has been refreshed.', 'staleTurn');
+        sendTo(ws, { t: 'state', view: viewFor(room, actingSeat(room, token)) });
+        return;
+      }
       room.touched = Date.now();
       const r = applyAction(room, token, msg);
       if (!r || !r.ok) return fail(ws, (r && r.reason) || 'Not a legal play.');
@@ -504,12 +673,48 @@ wss.on('connection', function (ws) {
   ws.on('error', function () { /* the close handler does the cleanup */ });
 });
 
+function leave(ws) {
+  const room = ws.room;
+  if (!room) return sendTo(ws, { t: 'left' });
+  const token = ws.token;
+  const seat = seatOf(room, token);
+  if (room.game.phase === 'lobby' && seat >= 0) {
+    room.tokens[seat] = null;
+    room.game.seats[seat].name = 'Open seat';
+    room.chatRates.delete(token);
+    if (room.hostSeat === seat) {
+      room.hostSeat = room.tokens.findIndex(function (t) { return !!t; });
+    }
+    // A reservation belongs to the session, including its other open tabs.
+    const sockets = room.live.get(token) || new Set([ws]);
+    sockets.forEach(function (socket) {
+      socket.room = null;
+      sendTo(socket, { t: 'left' });
+    });
+    room.live.delete(token);
+  } else {
+    const sockets = room.live.get(token);
+    if (sockets) {
+      sockets.delete(ws);
+      if (!sockets.size) room.live.delete(token);
+    }
+    ws.room = null;
+    sendTo(ws, { t: 'left' });
+  }
+  room.touched = Date.now();
+  broadcast(room);
+  save();
+}
+
 function attach(ws, room, token) {
-  if (ws.room && ws.room !== room) {
-    const old = ws.room.live.get(token);
-    if (old) { old.delete(ws); if (!old.size) ws.room.live.delete(token); }
+  const previous = ws.room;
+  if (previous && previous !== room) {
+    const old = previous.live.get(ws.token);
+    if (old) { old.delete(ws); if (!old.size) previous.live.delete(ws.token); }
+    broadcast(previous);
   }
   ws.room = room;
+  ws.token = token;
   room.touched = Date.now();
   if (!room.live.has(token)) room.live.set(token, new Set());
   room.live.get(token).add(ws);
@@ -529,7 +734,9 @@ const TYPES = {
 };
 
 function serveStatic(req, res) {
-  let rel = decodeURIComponent((req.url || '/').split('?')[0]);
+  let rel;
+  try { rel = decodeURIComponent((req.url || '/').split('?')[0]); }
+  catch (e) { res.writeHead(400); return res.end('Bad request'); }
   if (rel === '/' || rel === '') rel = '/index.html';
   if (rel === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
@@ -578,17 +785,30 @@ function save() {
   if (saveTimer) return;
   saveTimer = setTimeout(function () {
     saveTimer = null;
-    const out = [];
-    rooms.forEach(function (room) {
-      out.push({
-        code: room.code, game: room.game, tokens: room.tokens,
-        solo: room.solo, touched: room.touched,
-      });
-    });
-    try {
-      fs.writeFileSync(SAVE_FILE, JSON.stringify({ v: 1, rooms: out }));
-    } catch (e) { /* a read-only disk just means tables live in memory only */ }
+    flushSave();
   }, 1500);
+}
+
+function flushSave() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  const out = [];
+  rooms.forEach(function (room) {
+    out.push({
+      code: room.code, game: room.game, tokens: room.tokens,
+      solo: room.solo, bots: room.bots, botStyles: room.botStyles,
+      hostSeat: room.hostSeat, turnId: room.turnId, touched: room.touched,
+    });
+  });
+  const temporary = SAVE_FILE + '.tmp-' + process.pid;
+  try {
+    fs.writeFileSync(temporary, JSON.stringify({ v: 1, rooms: out }));
+    fs.renameSync(temporary, SAVE_FILE);
+    return true;
+  } catch (e) {
+    console.error('Could not save tables: ' + e.message);
+    try { fs.unlinkSync(temporary); } catch (ignored) {}
+    return false;
+  }
 }
 
 function load() {
@@ -597,10 +817,32 @@ function load() {
     (data.rooms || []).forEach(function (r) {
       if (!r || !r.code || !r.game) return;
       if (Date.now() - (r.touched || 0) > ROOM_TTL_MS) return;
-      rooms.set(r.code, {
+      // New settings have safe defaults for old saves; keep their cards and
+      // all existing rules intact, including legacy tables over four seats.
+      r.game.settings = Object.assign({}, E.DEFAULTS, r.game.settings || {});
+      if (!Number.isInteger(r.game.reshufflesUsed)) r.game.reshufflesUsed = 0;
+      const restored = {
         code: r.code, game: r.game, tokens: r.tokens || [],
-        solo: !!r.solo, touched: r.touched || Date.now(), live: new Map(),
+        solo: !!r.solo,
+        hostSeat: Number.isInteger(r.hostSeat) && (r.tokens || [])[r.hostSeat]
+          ? r.hostSeat : (r.tokens || []).findIndex(function (t) { return !!t; }),
+        turnId: Number.isSafeInteger(r.turnId) && r.turnId >= 0 ? r.turnId : 0,
+        // Older saves did not store bot flags. Their unclaimed, named bot
+        // seats are unambiguous, and must resume as computer opponents.
+        bots: r.game.seats.map(function (s, i) {
+          return Array.isArray(r.bots) ? !!r.bots[i] :
+            !r.solo && !(r.tokens || [])[i] && / \(bot\)$/.test(s.name);
+        }),
+        botStyles: Array.isArray(r.botStyles) ? r.botStyles : [],
+        touched: r.touched || Date.now(), live: new Map(), chat: [], chatRates: new Map(),
+      };
+      // Old saves use the original balanced player until their next rematch;
+      // reconnecting must not silently change their personality each time.
+      restored.botStyles = restored.bots.map(function (isBot, i) {
+        if (!isBot) return null;
+        return BOT.STYLES.includes(restored.botStyles[i]) ? restored.botStyles[i] : 'balanced';
       });
+      rooms.set(r.code, restored);
     });
     if (rooms.size) console.log('restored ' + rooms.size + ' table(s)');
   } catch (e) { /* first boot, or nothing saved yet */ }
@@ -617,14 +859,36 @@ function sweep(force) {
 }
 setInterval(function () { sweep(false); }, 15 * 60 * 1000).unref();
 
-/* keep proxies from dropping idle sockets */
-setInterval(function () {
-  wss.clients.forEach(function (ws) { if (ws.readyState === 1) ws.ping(); });
-}, 25000).unref();
+/* A missing pong is a lost connection, not an indefinitely occupied socket. */
+function heartbeat() {
+  wss.clients.forEach(function (ws) {
+    if (ws.readyState !== 1) return;
+    if (!ws.isAlive) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}
+const heartbeatTimer = setInterval(heartbeat, 25000);
+heartbeatTimer.unref();
+
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  clearInterval(heartbeatTimer);
+  rooms.forEach(function (room) { if (room.botTimer) clearTimeout(room.botTimer); });
+  const saved = flushSave();
+  wss.clients.forEach(function (ws) { ws.terminate(); });
+  wss.close();
+  server.close(function () { process.exit(saved ? 0 : 1); });
+  setTimeout(function () { process.exit(saved ? 0 : 1); }, 1000).unref();
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 load();
 server.listen(PORT, function () {
   console.log('Hand and Foot server listening on ' + PORT);
 });
 
-module.exports = { server, rooms, viewFor, runBots };
+module.exports = { server, rooms, viewFor, runBots, heartbeat, flushSave };
