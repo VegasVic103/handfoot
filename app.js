@@ -2785,7 +2785,7 @@ var RULE_CONFIG_FIELDS = [
 ];
 
 function rulesPresetName(id) {
-  return id === 'real' ? 'Real Rules' : id === 'christine' ? 'Christine’s Rules' : 'Customized rules';
+  return id === 'real' ? 'Real Rules' : id === 'christine' ? 'House Rules' : 'Customized rules';
 }
 
 function rulePresetControl(id, selected) {
@@ -2950,7 +2950,7 @@ function renderRulesEditor(body) {
   rulesEditorPresetBase = rulesDraft && rulesDraft.code === view.code && rulesDraft.presetBase || base;
   form.appendChild(rulePresetControl('rulesPreset', E.rulePresetId(rulesEditorPresetBase)));
   var presetNote = document.createElement('p'); presetNote.className = 'note';
-  presetNote.textContent = 'Christine’s Rules is the default. Real Rules uses Bicycle’s rules with individual scoring. Choosing a set replaces every rule in this editor.'; form.appendChild(presetNote);
+  presetNote.textContent = 'House Rules is the default. Real Rules uses Bicycle’s rules with individual scoring. Choosing a set replaces every rule in this editor.'; form.appendChild(presetNote);
   rulesEditorBase = JSON.parse(JSON.stringify(base)); rulesEditorCode = view.code;
   function groupHeading(title) {
     group = document.createElement('div'); group.className = 'look-row rules-fields';
@@ -3137,7 +3137,7 @@ function buildRules() {
   });
 
   var differences = document.createElement('details'); differences.className = 'rules-detail';
-  var diffTitle = document.createElement('summary'); diffTitle.textContent = 'Different from Christine’s'; differences.appendChild(diffTitle);
+  var diffTitle = document.createElement('summary'); diffTitle.textContent = 'Different from House Rules'; differences.appendChild(diffTitle);
   var baseline = E.rulesForPreset('christine'), changedCount = 0;
   RULE_CONFIG_FIELDS.forEach(function (field) {
     if (JSON.stringify(S[field.key]) === JSON.stringify(baseline[field.key])) return;
