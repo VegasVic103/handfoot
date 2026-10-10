@@ -74,8 +74,8 @@
 .discard-choice.takeable .card{outline:2px solid var(--brass);outline-offset:1px}
 
 /* Natural-width fans fill each row without empty grid cells or resizing cards. */
-#myMelds{display:flex;flex-wrap:wrap;gap:9px 10px;align-items:flex-start;align-content:flex-start;min-height:48px;padding:3px 8px;--bk-w:21px;--bk-h:29px;--bk-r:11px;--bk-s:6px}
-#myMelds .meld{flex:0 0 auto;min-width:0;max-width:100%;width:calc(var(--bk-w) + (var(--meld-count,3) - 1)*13px + 20px);align-self:start;overflow:hidden;padding:4px;gap:3px;border-radius:11px;text-align:left}
+#myMelds{display:flex;flex-wrap:wrap;gap:9px 10px;align-items:flex-start;align-content:flex-start;min-height:48px;padding:3px 8px;--bk-w:22.47px;--bk-h:31.03px;--bk-r:11.77px;--bk-s:6.42px}
+#myMelds .meld{flex:0 0 auto;min-width:0;max-width:100%;width:calc(var(--bk-w) + (var(--meld-count,3) - 1)*13.91px + 20px);align-self:start;overflow:hidden;padding:4px;gap:3px;border-radius:11px;text-align:left}
 #myMelds .meld-top{display:flex;align-items:center;gap:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:14px;padding:0;border-radius:0;background:none}
 #myMelds .meld-top::after{content:none}
 #myMelds .threes .meld-top{font-size:11px}
@@ -85,7 +85,7 @@
 .opponent-melds .meld.clean .meld-top{color:var(--rouge)}
 .opponent-melds .meld.dirty .meld-top{color:var(--ink)}
 .opponent-melds .meld-top{width:fit-content;padding:0 3px;background:var(--bone);border-radius:3px}
-#myMelds .meld-cards{display:grid;grid-template-columns:repeat(var(--meld-count,1),minmax(0,1fr));gap:0;width:100%;max-width:calc(var(--bk-w) + (var(--meld-count,1) - 1)*13px);padding-right:calc(var(--bk-w) - 13px);height:var(--bk-h);flex:none;overflow:visible}
+#myMelds .meld-cards{display:grid;grid-template-columns:repeat(var(--meld-count,1),minmax(0,1fr));gap:0;width:100%;max-width:calc(var(--bk-w) + (var(--meld-count,1) - 1)*13.91px);padding-right:calc(var(--bk-w) - 13.91px);height:var(--bk-h);flex:none;overflow:visible}
 #myMelds .meld-cards .card.tiny{width:var(--bk-w);height:var(--bk-h);margin:0;justify-content:center;align-items:flex-end;padding:2px;border-radius:5px}
 #myMelds .meld-cards .card.tiny+.card.tiny{margin:0}
 #myMelds .meld-cards .card.tiny:first-child{align-items:center}
@@ -244,7 +244,7 @@
 /* Tiles use the same rank/count language at both sizes. Expanding one reveals
    the real cards inline, without changing the preference for other melds. */
 :is(.seat,#myMelds) .meld[data-presentation="tile"]{position:relative;display:block;width:32px;max-width:32px;height:44px;padding:4px;border:1px solid var(--f-edge);border-radius:5px;background:var(--f-bone);box-shadow:var(--sh-1);overflow:hidden}
-#myMelds .meld[data-presentation="tile"]{width:38px;max-width:38px;height:52px}
+#myMelds .meld[data-presentation="tile"]{width:40.66px;max-width:40.66px;height:55.64px}
 :is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-top{display:block;line-height:16px;font-size:14px;padding:0;background:none;color:var(--ink)}
 :is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-top::after{content:none}
 :is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-count{position:absolute;right:4px;bottom:3px;font-size:10px;line-height:12px}
@@ -507,7 +507,7 @@
 #myMelds .meld.nearly-book:not([data-presentation="tile"]) .meld-cards .card.tiny:first-child{
   width:var(--bk-h);height:var(--bk-w);margin-top:calc((var(--bk-h) - var(--bk-w))/2);flex-direction:row;align-items:center;justify-content:center;gap:2px;
 }
-#myMelds .meld.nearly-book[data-presentation="tile"]{width:48px;max-width:100%;height:36px;align-self:start;margin-block:8px}
+#myMelds .meld.nearly-book[data-presentation="tile"]{width:51.36px;max-width:100%;height:38.52px;align-self:start;margin-block:8.56px}
 
 /* One personal header for the books and hand, below the shared draw tray. */
 .mine > .books-head{margin:2px 0 0;min-height:24px}

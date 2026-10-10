@@ -1,0 +1,45 @@
+/* A short, physical deal. Both stacks stay face-down until a choice is final. */
+.deal-choice{position:fixed;inset:0;margin:auto;width:min(420px,calc(100vw - 28px));max-height:calc(100dvh - 28px);padding:0;overflow-y:auto;border:1px solid var(--table-edge,var(--hair-2));border-radius:20px;color:var(--txt);background:var(--app-1);box-shadow:0 20px 70px rgba(0,0,0,.38);font-family:Archivo,Helvetica,Arial,sans-serif}
+.deal-choice:not([open]){display:none}
+.deal-choice::backdrop{background:rgba(3,12,9,.7)}
+.deal-choice-panel{padding:26px 22px 20px;text-align:center;background:var(--table-grain,none),linear-gradient(155deg,var(--table-panel-hi,var(--app-2)),var(--table-panel-lo,var(--app-1)))}
+#dealChoiceTitle{font-family:inherit;font-size:23px;line-height:1.2;font-weight:600;letter-spacing:-.025em;margin:0 0 8px}
+#dealChoiceSummary{margin:0 auto;max-width:32ch;font-size:13px;line-height:1.5;color:var(--txt-2)}
+.deal-choice-stage{position:relative;padding-top:68px;margin-block:14px 6px}
+.deal-choice-deck{position:absolute;top:5px;left:calc(50% - 24px);width:48px;height:65px;opacity:0;transition:opacity .2s}
+.deal-choice-deck .deal-choice-card{width:48px;height:65px;position:absolute;inset:0;transform:rotate(-4deg)}
+.deal-choice-card{display:block;width:64px;height:90px;border:2px solid #eee4cd;border-radius:7px;background:repeating-linear-gradient(45deg,#81352e 0 6px,#713027 6px 12px);box-shadow:inset 0 0 0 1px #c99a6a,1px 2px 0 #938b78,0 4px 7px rgba(0,0,0,.2)}
+.deal-choice-card::after{content:'♣';position:absolute;inset:7px;display:grid;place-items:center;border:1px solid rgba(236,216,178,.45);border-radius:4px;color:#ead4ac;font-size:18px}
+.deal-choice-piles{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.deal-choice-pile{appearance:none;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:7px;min-height:164px;min-width:0;margin:0;padding:16px 8px 12px;border:1px solid transparent;border-radius:13px;background:transparent;color:var(--txt);font:inherit;cursor:pointer;transition:background .16s,border-color .16s;touch-action:manipulation}
+.deal-choice-pile:disabled{cursor:default;opacity:1}
+.deal-choice-pile:focus-visible{outline:2px solid var(--txt);outline-offset:2px}
+.deal-choice-pile.is-selected,.deal-choice-pile.is-foot{border-color:var(--brass-lt);background:color-mix(in srgb,var(--brass) 10%,transparent)}
+.deal-choice-pile.is-hand{border-color:var(--hair-2);background:var(--hair)}
+.deal-choice-stack{display:block;position:relative;width:70px;height:98px;margin-bottom:2px}
+.deal-choice-stack .deal-choice-card{position:absolute;top:0;left:0;transform:translate(calc(min(var(--stack-index,0),10)*.55px),calc(min(var(--stack-index,0),10)*.65px));z-index:var(--stack-index,0)}
+.deal-choice-pile-label{font-size:14px;line-height:18px;font-weight:600}
+.deal-choice-pile-count{font-size:11px;line-height:14px;color:var(--txt-2)}
+#dealChoiceStatus{min-height:36px;margin:16px 0 10px;font-size:12px;line-height:18px;color:var(--txt-2);text-wrap:balance}
+#dealChoiceStatus:empty{display:none}
+#confirmFootChoice{width:100%;min-height:46px;margin:16px 0 0;font-size:14px;color:#302515;background:linear-gradient(165deg,#f4dfad,#dbc48e);box-shadow:inset 0 0 0 1px rgba(101,72,28,.24)}
+#confirmFootChoice:disabled{opacity:.45}
+#confirmFootChoice[hidden]{display:none}
+.deal-choice.is-dealing .deal-choice-deck{opacity:1}
+.deal-choice.is-dealing .deal-choice-deck .deal-choice-card:nth-child(1){animation:shuffle-left .52s ease-in-out 2}
+.deal-choice.is-dealing .deal-choice-deck .deal-choice-card:nth-child(2){animation:shuffle-right .52s ease-in-out 2}
+.deal-choice.is-dealing .deal-choice-stack .deal-choice-card{animation:deal-to-stack .24s ease-out both;animation-delay:calc(.55s + var(--deal-index,0)*.045s)}
+@keyframes shuffle-left{0%,100%{transform:translateX(0) rotate(-4deg)}50%{transform:translateX(-21px) rotate(-13deg)}}
+@keyframes shuffle-right{0%,100%{transform:translateX(0) rotate(4deg)}50%{transform:translateX(20px) rotate(12deg)}}
+@keyframes deal-to-stack{from{opacity:0;transform:translate(calc((.5 - var(--pile-index,0))*120px),-88px) rotate(-8deg)}to{opacity:1;transform:translate(calc(min(var(--stack-index,0),10)*.55px),calc(min(var(--stack-index,0),10)*.65px)) rotate(0)}}
+@media(max-height:540px){.deal-choice-panel{padding:16px}.deal-choice-stage{padding-top:42px;margin-block:6px}.deal-choice-deck{transform:scale(.65);transform-origin:top center}.deal-choice-pile{min-height:144px;padding-top:6px}#dealChoiceStatus{margin-top:7px;min-height:18px}}
+@media(prefers-reduced-motion:reduce){.deal-choice *{animation:none!important;transition:none!important}}
+html[data-card-motion="off"] .deal-choice *{animation:none!important;transition:none!important}
+
+/* The shared start count occupies the otherwise empty meld shelf. No overlay
+   obscures the hand and no additional table row is introduced. */
+#myMelds:has(>.round-countdown){position:relative}
+#myMelds[data-countdown="true"]>.note{visibility:hidden}
+#myMelds>.round-countdown{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;pointer-events:none;color:var(--txt)}
+.round-countdown-label{font-size:12px;line-height:16px;color:var(--txt-2);font-weight:500}
+.round-countdown-number{font-size:38px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;color:var(--brass-lt)}

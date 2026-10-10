@@ -34,7 +34,7 @@ function createGame(seatNames, settings) {
 function emptyPlayer() {
   return {
     hand: [], foot: [], inFoot: false, melds: [],
-    redThrees: [], hasInitialMeld: false, wentOut: false,
+    redThrees: [], hasInitialMeld: false, wentOut: false, handChoice: null,
   };
 }
 
@@ -43,7 +43,7 @@ function minMeldFor(state) {
   return m[Math.min(state.round, m.length - 1)];
 }
 
-function startRound(state, rng) {
+function startRound(state, rng, deferHandChoice = false) {
   const n = state.seats.length;
   const checked = E.validateSettings({}, n, state.pendingSettings || state.settings);
   if (!checked.ok) return fail(checked.reason, 'invalid_settings');
@@ -60,32 +60,57 @@ function startRound(state, rng) {
   state.settings = S;
   delete state.pendingSettings;
   state.reshufflesUsed = 0;
+  state.roundBeginsAt = 0;
   state.players = state.seats.map(() => emptyPlayer());
   for (let i = 0; i < n; i++) {
     state.players[i].hand = stock.splice(0, S.handSize);
     state.players[i].foot = stock.splice(0, S.footSize);
   }
 
-  // Under the lay-off rule a dealt red three goes face up at once and is
-  // replaced; the replacement can itself be a red three, so keep drawing. This
-  // table plays them as dead cards instead, so by default nothing happens here
-  // and they stay in the hand to be discarded.
-  if (S.redThreeAutoLayOff) {
-    for (let i = 0; i < n; i++) {
-      const p = state.players[i];
-      receiveCards(state, i, p.hand.splice(0), () => stock.length ? stock.shift() : null, false);
-    }
-  }
-
-  // Split what's left into the draw piles.
   state.stocks = splitPiles(stock, S.stockPiles);
   state.discard = [first];
-  state.phase = 'playing';
+  state.phase = 'choosing';
   state.turn = state.round % n;
   state.turnPhase = 'draw';
-  state.turnState = freshTurn(state);
+  state.turnState = null;
   state.log = [{ t: 'round', round: state.round, min: minMeldFor(state) }];
+  // The server always defers. Pure engine simulations can keep their existing
+  // ready-to-play setup by accepting the originally assigned piles here.
+  if (!deferHandChoice) {
+    state.players.forEach(p => { p.handChoice = 0; });
+    finishHandChoices(state);
+  }
   return done();
+}
+
+function finishHandChoices(state) {
+  // Red threes cannot reveal or alter either face-down pile before a choice.
+  // Once every seat has committed, process the selected hands in seat order.
+  const stock = state.stocks.flat();
+  if (state.settings.redThreeAutoLayOff) {
+    state.players.forEach((p, seat) => {
+      receiveCards(state, seat, p.hand.splice(0), () => stock.length ? stock.shift() : null, false);
+    });
+  }
+  state.stocks = splitPiles(stock, state.settings.stockPiles);
+  state.phase = 'playing';
+  state.turnState = freshTurn(state);
+}
+
+function chooseHand(state, seat, pile) {
+  if (state.phase !== 'choosing') return fail('The hand choice for this deal has finished.');
+  if (!Number.isInteger(seat) || !state.players[seat]) return fail('Choose only your own piles.');
+  if (pile !== 0 && pile !== 1) return fail('Choose one of your two face-down piles.');
+  const p = state.players[seat];
+  if (p.handChoice !== null) return fail('Your hand is already chosen for this deal.');
+  if (state.settings.handSize !== state.settings.footSize && pile !== 0) {
+    return fail('Different hand and foot sizes keep their assigned piles. Confirm the assigned hand.');
+  }
+  if (pile === 1) [p.hand, p.foot] = [p.foot, p.hand];
+  p.handChoice = pile;
+  const remaining = state.players.filter(player => player.handChoice === null).length;
+  if (!remaining) finishHandChoices(state);
+  return done({ handChosen: true, remaining });
 }
 
 function snapOf(state, seat) {
@@ -624,6 +649,42 @@ function discard(state, seat, card) {
   return nextTurn(state);
 }
 
+/* A partial undo may only return a wild placed during this turn. Earlier
+ * turns, completed books and transitions into the foot cannot be rewritten. */
+function returnableWilds(state, seat) {
+  if (!guard(state, seat, 'play').ok) return [];
+  const ts = state.turnState, p = state.players[seat], S = state.settings;
+  if (!ts || !ts.snapshot || ts.pickedUpFoot) return [];
+  let snap;
+  try { snap = JSON.parse(ts.snapshot); } catch (_) { return []; }
+  const oldCards = new Set((snap.melds || []).flatMap(m => m.cards));
+  const out = [];
+  for (const m of p.melds) {
+    if (E.meldStats(m, S).complete) continue;
+    for (const card of m.cards) {
+      if (!E.isWild(card) || oldCards.has(card)) continue;
+      const rest = m.cards.filter(c => c !== card);
+      if (!E.checkMeld(m.rank, rest, S).ok) continue;
+      if (!snap.hasInitialMeld && p.hasInitialMeld && ts.melded - E.cardValue(card, S) < minMeldFor(state)) continue;
+      out.push({ meldId: m.id, rank: m.rank, card });
+    }
+  }
+  return out;
+}
+
+function returnWild(state, seat, meldId, card) {
+  const g = guard(state, seat, 'play');
+  if (!g.ok) return g;
+  if (!returnableWilds(state, seat).some(o => o.meldId === meldId && o.card === card))
+    return fail('Only a wild added this turn to an unfinished meld can be returned, and the meld must stay legal.');
+  const p = state.players[seat], m = p.melds.find(m => m.id === meldId);
+  m.cards.splice(m.cards.indexOf(card), 1);
+  p.hand.push(card);
+  state.turnState.melded -= E.cardValue(card, state.settings);
+  log(state, { t: 'returnWild', seat, rank: m.rank, card });
+  return done();
+}
+
 function undoTurnMelds(state, seat) {
   const g = guard(state, seat, 'play');
   if (!g.ok) return g;
@@ -662,7 +723,7 @@ function undoTurnMelds(state, seat) {
   if (typeof ts.logMark === 'number') {
     state.log = state.log.filter(function (e) {
       return !e.id || e.id <= ts.logMark || e.seat !== seat ||
-        !['meld', 'pile', 'foot'].includes(e.t);
+        !['meld', 'pile', 'foot', 'returnWild'].includes(e.t);
     });
   }
   return done();
@@ -755,14 +816,14 @@ function endRoundOutOfCards(state) {
   return endRound(state, null);
 }
 
-function nextRound(state) {
+function nextRound(state, deferHandChoice = false) {
   if (state.round + 1 >= state.settings.minMelds.length) {
     state.phase = 'gameEnd';
     return done({ gameEnded: true });
   }
   const priorRound = state.round;
   state.round += 1;
-  const result = startRound(state);
+  const result = startRound(state, undefined, deferHandChoice);
   if (!result.ok) { state.round = priorRound; return result; }
   state.roundDetail = null;
   state.outSeat = null;
@@ -774,8 +835,8 @@ function totals(state) {
 }
 
 module.exports = {
-  createGame, startRound, drawStock, takePile, meldNew, meldAdd,
-  discard, undoTurnMelds, canGoOut, scoreRound, endRound, nextRound,
+  createGame, startRound, chooseHand, drawStock, takePile, meldNew, meldAdd,
+  discard, undoTurnMelds, returnWild, returnableWilds, canGoOut, scoreRound, endRound, nextRound,
   totals, minMeldFor, emptyPlayer, stockCount, livePiles, splitPiles,
   logRule, pileTakeCards,
 };

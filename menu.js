@@ -27,11 +27,16 @@
 
   function updateAutomaticDecks(prefix) {
     byId(prefix + '-automaticDecks').textContent = 'Auto · ' + (setupSeats(prefix) + 2) + ' decks';
+    var total = setupSeats(prefix), others = total - 1;
+    byId(prefix + 'SeatsHint').textContent = prefix === 'host'
+      ? 'You + ' + others + (others === 1 ? ' friend' : ' friends')
+      : total + ' players, including you';
   }
 
   function setupField(prefix, field) {
     var label = document.createElement('label');
-    label.className = field.boolean ? 'menu-toggle setup-rule-toggle' : 'setup-rule-field';
+    label.className = field.boolean ? 'menu-toggle setup-rule-toggle setup-rule-row' : 'setup-rule-field setup-rule-row';
+    label.setAttribute('data-rule-key', field.key);
     var id = prefix + '-' + field.id;
     label.setAttribute('for', id);
     var title = document.createElement('span');
@@ -51,15 +56,16 @@
       }
       input.value = String(window.E.DEFAULTS[field.key]);
     } else if (field.boolean) {
-      input.type = 'checkbox'; input.checked = !!window.E.DEFAULTS[field.key];
+      input.type = 'checkbox'; input.setAttribute('role', 'switch'); input.checked = !!window.E.DEFAULTS[field.key];
     } else {
       input.type = 'number'; input.min = String(field.min); input.max = String(field.max);
       input.step = '1'; input.required = true;
       input.inputMode = field.min < 0 ? 'text' : 'numeric';
       input.value = String(window.E.DEFAULTS[field.key] + (field.total ? 1 : 0));
     }
-    if (field.help) {
-      var help = document.createElement('small'); help.textContent = field.help;
+    var explanation = field.key === 'pileTakeExtra' ? 'Includes the top discard.' : field.help;
+    if (explanation) {
+      var help = document.createElement('small'); help.textContent = explanation;
       title.appendChild(help);
     }
     label.appendChild(input);
@@ -69,58 +75,89 @@
   function buildSetupRules(prefix, formId) {
     var area = byId(prefix + 'SetupRules');
     setupBase[prefix] = window.E.rulesForPreset('christine');
-    var title = document.createElement('h3'); title.textContent = 'Game rules';
+    var title = document.createElement('h3'); title.textContent = 'Choose rules';
     area.appendChild(title);
     var presetLabel = document.createElement('label'); presetLabel.className = 'field'; presetLabel.setAttribute('for', prefix + 'RulePreset');
-    var presetCaption = document.createElement('span'); presetCaption.textContent = 'Rule set'; presetLabel.appendChild(presetCaption);
+    var presetCaption = document.createElement('span'); presetCaption.className = 'sr-only'; presetCaption.textContent = 'Rule set'; presetLabel.appendChild(presetCaption);
     var preset = document.createElement('select'); preset.id = prefix + 'RulePreset';
     [['christine', 'House Rules'], ['real', 'Real Rules'], ['custom', 'Customized rules']].forEach(function (entry) {
       var option = document.createElement('option'); option.value = entry[0]; option.textContent = entry[1]; option.disabled = entry[0] === 'custom'; preset.appendChild(option);
     });
     preset.value = 'christine'; presetLabel.appendChild(preset); area.appendChild(presetLabel);
     var presetNote = document.createElement('p'); presetNote.className = 'setup-rules-note'; presetNote.id = prefix + 'PresetNote'; area.appendChild(presetNote);
-    var differences = document.createElement('details'); differences.className = 'menu-rules';
-    var diffSummary = document.createElement('summary'); diffSummary.textContent = 'Different from House Rules'; differences.appendChild(diffSummary);
-    var diffBody = document.createElement('div'); diffBody.id = prefix + 'PresetDifferences'; differences.appendChild(diffBody); area.appendChild(differences);
-    preset.addEventListener('change', function () { applySetupPreset(prefix, preset.value); });
-    var note = document.createElement('p'); note.className = 'setup-rules-note';
-    note.textContent = 'Individual scoring. Set before the first deal. Pickup total includes the top discard.';
-    area.appendChild(note);
-    var main = document.createElement('div'); main.className = 'setup-rule-grid';
+    var overview = document.createElement('dl'); overview.className = 'setup-rule-overview';
+    overview.id = prefix + 'RuleOverview';
     mainRuleKeys.forEach(function (key) {
-      main.appendChild(setupField(prefix, ruleFields.find(function (field) { return field.key === key; })));
+      var cell = document.createElement('div'), name = document.createElement('dt'), value = document.createElement('dd');
+      name.textContent = mainRuleLabels[key]; value.id = prefix + '-summary-' + key;
+      cell.appendChild(name); cell.appendChild(value); overview.appendChild(cell);
     });
-    area.appendChild(main);
-    var more = document.createElement('details'); more.className = 'menu-rules setup-more-rules';
-    var summary = document.createElement('summary'); summary.textContent = 'More rules';
-    more.appendChild(summary);
-    var advanced = document.createElement('div'); advanced.className = 'setup-advanced-rules';
-    var groupName = 'Deal', group = null;
-    ruleFields.forEach(function (field) {
-      if (field.group) { groupName = field.group; group = null; }
-      if (mainRuleKeys.includes(field.key) || field.key === 'revealPileTake') return;
-      if (!group) {
-        group = document.createElement('fieldset'); group.className = 'setup-rule-grid setup-rule-group';
-        var heading = document.createElement('legend'); heading.textContent = groupName;
-        group.appendChild(heading); advanced.appendChild(group);
-      }
-      group.appendChild(setupField(prefix, field));
+    area.appendChild(overview);
+    var customize = document.createElement('details'); customize.className = 'menu-rules setup-customize'; customize.id = prefix + 'CustomizeRules';
+    var customizeTitle = document.createElement('summary'); customizeTitle.textContent = 'Customize rules'; customizeTitle.id = prefix + 'CustomizeTitle';
+    var optional = document.createElement('span'); optional.id = prefix + 'CustomizationCount'; optional.textContent = 'Optional'; customizeTitle.appendChild(optional);
+    customize.appendChild(customizeTitle);
+    var customBody = document.createElement('div'); customBody.className = 'setup-customize-body'; customize.appendChild(customBody); area.appendChild(customize);
+    preset.addEventListener('change', function () { applySetupPreset(prefix, preset.value); });
+    var note = document.createElement('p'); note.className = 'setup-editor-note';
+    note.textContent = 'Set the rules for everyone at this table.'; customBody.appendChild(note);
+    // A single reading surface: related controls stay together, with no
+    // hidden Advanced submenu or repeated editable copies of a rule.
+    var groups = [
+      { title: 'The deal', note: 'Cards and draw piles.', keys: ['deckCount', 'stockPiles', 'handSize', 'footSize'] },
+      { title: 'Melds & books', note: 'Build books and qualify to go out.', keys: ['requireRedBook', 'requireBlackBook', 'bookSize', 'maxWildsInBook', 'minNaturalsInMeld', 'minNaturalsWithWild', 'closedBooksLocked', 'goOutWithDiscard'] },
+      { title: 'Draw & discard', note: 'Pickup, preview and reshuffling.', keys: ['pileTakeExtra', 'revealPileTake', 'reshuffleOnce'] },
+      { title: 'Opening points', note: 'Minimum points to lay your first melds each round.', opening: true },
+      { title: 'Scoring & red threes', note: 'Book bonuses and special-card rules.', keys: ['redBookBonus', 'blackBookBonus', 'goOutBonus', 'redThreeValue', 'highEightNine', 'redThreeAutoLayOff', 'redThreeBonus'] },
+    ];
+    groups.forEach(function (definition) {
+      var group = document.createElement('fieldset'); group.className = 'setup-editor-group';
+      var legend = document.createElement('legend'); legend.textContent = definition.title; group.appendChild(legend);
+      var subtitle = document.createElement('p'); subtitle.className = 'setup-group-note'; subtitle.textContent = definition.note; group.appendChild(subtitle);
+      var rows = document.createElement('div'); rows.className = definition.opening ? 'setup-opening-grid' : 'setup-editor-rows';
+      if (definition.opening) {
+        window.E.DEFAULTS.minMelds.forEach(function (minimum, index) {
+          var label = document.createElement('label'); label.className = 'setup-rule-field setup-opening-field';
+          var id = prefix + '-opening' + index; label.setAttribute('for', id);
+          var caption = document.createElement('span'); caption.textContent = 'Round ' + (index + 1); label.appendChild(caption);
+          var input = document.createElement('input'); input.id = id; input.type = 'number';
+          input.min = '0'; input.max = '500'; input.step = '1'; input.required = true; input.inputMode = 'numeric';
+          input.value = String(minimum); label.appendChild(input); rows.appendChild(label);
+        });
+      } else definition.keys.forEach(function (key) {
+        var field = ruleFields.find(function (item) { return item.key === key; });
+        if (key === 'revealPileTake') {
+          var revealLabel = byId(prefix + 'Reveal').closest('label');
+          revealLabel.className = 'menu-toggle setup-rule-toggle setup-rule-row';
+          revealLabel.setAttribute('data-rule-key', key); byId(prefix + 'Reveal').setAttribute('role', 'switch');
+          rows.appendChild(revealLabel);
+        } else rows.appendChild(setupField(prefix, field));
+      });
+      group.appendChild(rows); customBody.appendChild(group);
     });
-    var opening = document.createElement('fieldset'); opening.className = 'setup-opening';
-    var legend = document.createElement('legend'); legend.textContent = 'Opening minimum by round';
-    opening.appendChild(legend);
-    window.E.DEFAULTS.minMelds.forEach(function (minimum, index) {
-      var label = document.createElement('label'); label.className = 'setup-rule-field';
-      var id = prefix + '-opening' + index;
-      label.setAttribute('for', id); label.textContent = 'Round ' + (index + 1);
-      var input = document.createElement('input'); input.id = id; input.type = 'number';
-      input.min = '0'; input.max = '500'; input.step = '1'; input.required = true; input.inputMode = 'numeric';
-      input.value = String(minimum); label.appendChild(input); opening.appendChild(label);
-    });
-    advanced.appendChild(opening); more.appendChild(advanced); area.appendChild(more);
+    var reset = document.createElement('button'); reset.type = 'button'; reset.className = 'btn ghost sm setup-reset';
+    reset.id = prefix + 'ResetRules'; reset.textContent = 'Reset to House Rules';
+    reset.onclick = function () { applySetupPreset(prefix, 'christine'); };
+    var editorEnd = document.createElement('div'); editorEnd.className = 'setup-editor-end';
+    editorEnd.appendChild(reset);
+    var done = document.createElement('button'); done.type = 'button'; done.className = 'btn ghost setup-editor-done';
+    done.id = prefix + 'RulesDone'; done.textContent = 'Done';
+    done.onclick = function () { customize.open = false; customizeTitle.focus({ preventScroll: false }); };
+    editorEnd.appendChild(done); customBody.appendChild(editorEnd);
+    var form = byId(formId), footer = document.createElement('div'); footer.className = 'setup-submit-footer';
+    footer.id = prefix + 'SetupFooter';
+    var footerNote = document.createElement('p'); footerNote.className = 'setup-submit-note'; footerNote.id = prefix + 'SubmitSummary';
+    footer.appendChild(footerNote);
+    footer.appendChild(byId(prefix + 'RulesError'));
+    footer.appendChild(byId(prefix === 'host' ? 'createBtn' : 'vsBotBtn'));
+    form.appendChild(footer);
+    // A native validation error inside a closed disclosure must be made visible
+    // before the browser attempts to focus its field.
+    form.addEventListener('invalid', function (event) {
+      revealSetupField(event.target);
+    }, true);
     updateAutomaticDecks(prefix);
     syncSetupPreset(prefix);
-    var form = byId(formId);
     ['input', 'change'].forEach(function (eventName) {
       form.addEventListener(eventName, function (event) {
         // Native selects emit input before change. Do not infer the old preset
@@ -147,22 +184,41 @@
     var current = readSetupRules(prefix), preset = window.E.rulePresetId(current);
     byId(prefix + 'RulePreset').value = preset;
     byId(prefix + 'PresetNote').textContent = preset === 'christine'
-      ? 'Default house rules. Finish a book before starting another of the same rank.'
-      : preset === 'real' ? 'Bicycle-based • individual scoring. Choosing this set replaces all rules below.'
-      : 'Customized rules. Your current values are kept until you choose a rule set.';
-    var target = byId(prefix + 'PresetDifferences');
-    while (target.children.length) target.removeChild(target.children[0]);
+      ? 'Default house rules. Ready to play as they are.'
+      : preset === 'real' ? 'Bicycle-based · Individual scoring'
+      : 'Your customized rules. Changes stay when you go back.';
+    var printable = function (value) { return Number.isFinite(value) ? String(value) : '—'; };
+    byId(prefix + '-summary-deckCount').textContent = current.deckCount === 0
+      ? 'Auto · ' + (setupSeats(prefix) + 2) : printable(current.deckCount);
+    byId(prefix + '-summary-requireRedBook').textContent = printable(current.requireRedBook);
+    byId(prefix + '-summary-requireBlackBook').textContent = printable(current.requireBlackBook);
+    byId(prefix + '-summary-pileTakeExtra').textContent = printable(current.pileTakeExtra + 1) + ' cards';
+    var others = setupSeats(prefix) - 1;
+    byId(prefix + 'SubmitSummary').textContent = prefix === 'host'
+      ? 'Next: share your code with ' + others + (others === 1 ? ' friend.' : ' friends.')
+      : 'You + ' + others + (others === 1 ? ' computer. ' : ' computers. ') + 'Choose your foot, then play.';
+    byId(prefix + 'ResetRules').hidden = preset === 'christine';
     var standard = window.E.rulesForPreset('christine');
+    var count = ruleFields.filter(function (field) {
+      return JSON.stringify(current[field.key]) !== JSON.stringify(standard[field.key]);
+    }).length;
+    if (JSON.stringify(current.minMelds) !== JSON.stringify(standard.minMelds)) count++;
+    byId(prefix + 'CustomizationCount').textContent = count ? count + (count === 1 ? ' change' : ' changes') : 'Optional';
     ruleFields.forEach(function (field) {
-      if (JSON.stringify(current[field.key]) === JSON.stringify(standard[field.key])) return;
-      var line = document.createElement('p'); line.className = 'setup-rules-note';
-      var value = field.boolean ? (current[field.key] ? 'On' : 'Off') : Number(current[field.key]) + (field.total ? 1 : 0);
-      line.textContent = field.label + ': ' + value + (field.help ? ' — ' + field.help : ''); target.appendChild(line);
+      var input = byId(field.key === 'revealPileTake' ? prefix + 'Reveal' : prefix + '-' + field.id);
+      input.closest('label').setAttribute('data-changed', JSON.stringify(current[field.key]) !== JSON.stringify(standard[field.key]) ? 'true' : 'false');
     });
-    if (JSON.stringify(current.minMelds) !== JSON.stringify(standard.minMelds)) {
-      var line = document.createElement('p'); line.className = 'setup-rules-note'; line.textContent = 'Opening minimums: ' + current.minMelds.join(' / '); target.appendChild(line);
+    current.minMelds.forEach(function (minimum, index) {
+      byId(prefix + '-opening' + index).closest('label').setAttribute('data-changed', minimum !== standard.minMelds[index] ? 'true' : 'false');
+    });
+  }
+
+  function revealSetupField(field) {
+    var parent = field && field.parentNode;
+    while (parent) {
+      if (String(parent.tagName).toLowerCase() === 'details') parent.open = true;
+      parent = parent.parentNode;
     }
-    target.parentNode.hidden = !target.children.length;
   }
 
   function readSetupRules(prefix) {
@@ -188,6 +244,7 @@
     var rules = readSetupRules(prefix);
     var checked = window.E.validateSettings(rules, setupSeats(prefix));
     if (!checked.ok) {
+      byId(prefix + 'CustomizeRules').open = true;
       var error = byId(prefix + 'RulesError');
       error.textContent = checked.reason; error.hidden = false; error.focus({ preventScroll: false });
       return;
@@ -209,10 +266,13 @@
   }
 
   function goTo(page, focus) {
+    // Older links and callers can still use the former friends hub; its two
+    // actions now live directly beside Practice on the Play page.
+    if (page === 'friends') page = 'play';
     var next = byId('menu-' + page);
     if (!next) return;
-    if (page === 'host' && currentPage !== 'host') applySetupPreset('host', 'christine');
-    if (page === 'computer' && currentPage !== 'computer') applySetupPreset('bot', 'christine');
+    // Drafts belong to the setup session, not to a single page visit. The
+    // initial construction supplies House Rules; only an explicit choice resets.
     currentPage = page;
     byId('lobby').setAttribute('data-menu-page', page);
     document.querySelectorAll('.menu-page').forEach(function (el) { el.hidden = el !== next; });

@@ -5,6 +5,8 @@
 
 process.env.PORT = process.env.TEST_PORT || '3987';
 process.env.BOT_PACE_MS = '100';
+process.env.NODE_ENV = 'test';
+process.env.HANDFOOT_TEST_COUNTDOWN_MS = '0';
 process.env.SAVE_FILE = require('path').join(__dirname, '.test-tables.json');
 try { require('fs').unlinkSync(process.env.SAVE_FILE); } catch (e) {}
 
@@ -36,6 +38,8 @@ function client(name, options, url) {
     ws: null,
     onState: null,
     left: 0,
+    autoChoose: !options || options.autoChoose !== false,
+    choicesSent: new Set(),
   };
   return new Promise(function (resolve) {
     const ws = new WebSocket(url || URL, options || {});
@@ -44,8 +48,19 @@ function client(name, options, url) {
     ws.on('message', function (raw) {
       const msg = JSON.parse(String(raw));
       if (msg.t === 'state') {
-        c.view = msg.view;
         c.seenPayloads.push(String(raw));
+        // Existing gameplay regressions explicitly accept assigned piles.
+        // Choice/privacy regressions opt out to exercise the real waiting gate.
+        if (c.autoChoose && msg.view.phase === 'choosing' && msg.view.handChoice) {
+          const key = [msg.view.code, msg.view.round, msg.view.turnId, msg.view.you.seat].join(':');
+          if (msg.view.handChoice.pending && !c.choicesSent.has(key)) {
+            c.choicesSent.add(key);
+            ws.send(JSON.stringify({ t: 'action', token: c.token, action: 'chooseHand',
+              pile: 0, seat: msg.view.you.seat, turnId: msg.view.turnId }));
+          }
+          return;
+        }
+        c.view = msg.view;
         if (c.onState) c.onState(msg.view);
       } else if (msg.t === 'error') {
         c.errors.push(msg.message);
@@ -197,6 +212,385 @@ function botStep(c) {
 
 /* ---------- the run ---------- */
 
+async function hostileInputRegressions() {
+  console.log('\n-- hostile input at the websocket boundary --');
+  const hostile = { toString: 1 };
+  const clients = [];
+  const report = console.error;
+  const handlerErrors = [];
+  console.error = function () {
+    if (arguments[0] === 'message handler:') handlerErrors.push(arguments[1]);
+    report.apply(console, arguments);
+  };
+  const roomState = room => JSON.stringify({ game: room.game, turnId: room.turnId,
+    tokens: room.tokens, hostSeat: room.hostSeat });
+  async function refused(c, message, label, room) {
+    const errors = c.errors.length, guards = handlerErrors.length;
+    const before = room ? roomState(room) : app.rooms.size;
+    send(c, message); // Uses the actual latest server-issued turnId.
+    await untilTrue(() => c.errors.length > errors, label + ' response');
+    ok(c.errors.length === errors + 1 &&
+      c.errors.at(-1) !== 'Something went wrong with that action.' &&
+      c.errorContexts.at(-1) !== 'staleTurn' && handlerErrors.length === guards,
+    label + ' is rejected normally, without stale-turn or exception fallback');
+    ok(room ? roomState(room) === before : app.rooms.size === before && !c.code && !c.view,
+      label + ' leaves game, turn ID, seats, and session unchanged');
+  }
+  try {
+    const stranger = await client('Hostile-unseated'); clients.push(stranger);
+    for (const value of [hostile, [hostile]]) {
+      await refused(stranger, { t: 'join', code: value, name: 'Visitor' },
+        'unseated hostile join code');
+      await refused(stranger, { t: 'resume', code: value }, 'unseated hostile resume code');
+    }
+
+    const host = await client('Hostile-host'); clients.push(host);
+    const beforeCreate = handlerErrors.length;
+    send(host, { t: 'create', name: hostile, seats: 2 });
+    await until(host, v => v.phase === 'lobby', 'hostile-name table');
+    ok(host.view.seats[0].name === 'Host' && host.errors.length === 0 &&
+      handlerErrors.length === beforeCreate, 'an object name safely uses the ordinary Host fallback');
+    const guest = await client('Hostile-guest'); clients.push(guest);
+    send(guest, { t: 'join', code: host.code, name: [hostile] });
+    await until(guest, v => v.you.seat === 1, 'hostile-name guest');
+    await until(host, v => v.seated === 2, 'both hostile-test players seated');
+    ok(typeof guest.view.seats[1].name === 'string' && guest.errors.length === 0 &&
+      handlerErrors.length === beforeCreate, 'an array name safely uses the ordinary join-name fallback');
+    send(host, { t: 'action', action: 'start' });
+    await until(host, v => v.phase === 'playing' && v.turn === v.you.seat,
+      'real current-turn game for hostile actions');
+    const room = app.rooms.get(host.code);
+    ok(Number.isSafeInteger(host.view.turnId) && host.view.turnId === room.turnId,
+      'hostile action probes carry the real current turn ID');
+
+    for (const value of [hostile, [hostile], null, true, '', 'not-a-pile', 0.5, -1, 99]) {
+      await refused(host, { t: 'action', action: 'draw', piles: [value, 1] },
+        'hostile draw pile ' + JSON.stringify(value), room);
+    }
+    send(host, { t: 'action', action: 'draw', piles: [0, 1] });
+    await until(host, v => v.turnPhase === 'play', 'valid draw after malformed piles');
+    ok(host.view.you.hand.length === room.game.settings.handSize + 2 &&
+      host.ws.readyState === WebSocket.OPEN && guest.ws.readyState === WebSocket.OPEN,
+      'valid draw works on the same connections after malformed piles');
+
+    for (const value of [hostile, [hostile]]) {
+      const card = host.view.you.hand[0];
+      await refused(host, { t: 'action', action: 'discard', card: value }, 'hostile discard card', room);
+      await refused(host, { t: 'action', action: 'meldNew', rank: value, cards: [card] },
+        'hostile new-meld rank', room);
+      await refused(host, { t: 'action', action: 'meldAdd', meldId: value, cards: [card] },
+        'hostile existing-meld ID', room);
+      await refused(host, { t: 'action', action: 'setRule', key: value, value: true },
+        'hostile rule key', room);
+    }
+    const priorTurn = host.view.turnId;
+    send(host, { t: 'action', action: 'discard', card: host.view.you.hand[0] });
+    await until(guest, v => v.turn === v.you.seat && v.turnId > priorTurn,
+      'next human turn after hostile inputs');
+    send(guest, { t: 'action', action: 'draw', piles: [0, 1] });
+    await until(guest, v => v.turnPhase === 'play', 'other player draws after hostile inputs');
+    ok(host.ws.readyState === WebSocket.OPEN && guest.ws.readyState === WebSocket.OPEN &&
+      handlerErrors.length === 0, 'both players can continue and no hostile probe trips the exception guard');
+  } finally {
+    console.error = report;
+    clients.forEach(c => c.ws.close());
+  }
+}
+
+
+
+async function roundCountdownRegression() {
+  console.log('\n-- authoritative three-second round countdown --');
+  const fs = require('fs'), path = require('path');
+  const directory = fs.mkdtempSync(path.join(require('os').tmpdir(), 'handfoot-countdown-'));
+  const saveFile = path.join(directory, 'tables.json'); let running;
+  async function start() {
+    const script = [
+      "const a=require('./server');",
+      "a.server.on('listening',()=>process.send({t:'ready',port:a.server.address().port}));",
+      // Isolate a bot-first-round fixture; it still uses real server actions,
+      // production timing and the normal public WebSocket view thereafter.
+      "process.on('message',m=>{if(m.t==='botFirst'){a.rooms.get(m.code).game.turn=1;process.send({t:'botFirst'});}});",
+    ].join('\n');
+    const child = require('child_process').spawn(process.execPath, ['-e', script], {
+      cwd: __dirname, env: Object.assign({}, process.env, { PORT: '0', SAVE_FILE: saveFile,
+        NODE_ENV: 'production', HANDFOOT_TEST_COUNTDOWN_MS: '0' }),
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    });
+    let logs = ''; child.stdout.on('data', data => { logs += data; }); child.stderr.on('data', data => { logs += data; });
+    running = child;
+    const port = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('countdown server startup: ' + logs)), 5000);
+      child.once('message', m => { clearTimeout(timer); resolve(m.port); });
+      child.once('error', reject);
+    });
+    return { child, url: 'ws://127.0.0.1:' + port };
+  }
+  async function stop(child) {
+    const stopped = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('countdown server shutdown')), 5000);
+      child.once('exit', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('countdown exit ' + code)); });
+    });
+    child.kill('SIGTERM'); await stopped; running = null;
+  }
+  try {
+    let session = await start();
+    const human = await client('Countdown-human', {}, session.url);
+    send(human, { t: 'practice' });
+    await until(human, v => v.phase === 'playing', 'production countdown begins');
+    const humanDeadline = human.view.roundBeginsAt, humanToken = human.token, humanCode = human.code;
+    const humanTurn = human.view.turnId;
+    ok(humanDeadline - human.view.serverNow >= 2900 && humanDeadline - human.view.serverNow <= 3000,
+      'production always starts a full three-second countdown even when the test-only skip flag is supplied');
+    ok(Math.abs(human.view.serverNow - Date.now()) < 500,
+      'each view supplies server time for device clock-offset correction');
+    const before = human.view.you.hand.slice();
+    const attempts = [
+      { action: 'draw', piles: [0, 1] }, { action: 'pile', cards: [] },
+      { action: 'meldNew', rank: 'K', cards: [] }, { action: 'meldAdd', meldId: 'none', cards: [] },
+      { action: 'discard', card: before[0] }, { action: 'undo' },
+    ];
+    attempts.forEach(msg => send(human, Object.assign({ t: 'action' }, msg)));
+    await untilTrue(() => human.errors.length === attempts.length, 'all countdown action refusals');
+    ok(human.errors.every(message => /countdown/.test(message)) && human.view.turnPhase === 'draw' &&
+      JSON.stringify(human.view.you.hand) === JSON.stringify(before),
+      'every gameplay action is refused before the timestamp without advancing the hand');
+
+    const computer = await client('Countdown-computer', { autoChoose: false }, session.url);
+    send(computer, { t: 'vsbot', bots: 1 });
+    await until(computer, v => v.phase === 'choosing', 'bot-first choice fixture');
+    await new Promise(resolve => { session.child.once('message', resolve); session.child.send({ t: 'botFirst', code: computer.code }); });
+    send(computer, { t: 'action', action: 'chooseHand', seat: 0, pile: 0 });
+    await until(computer, v => v.phase === 'playing', 'bot-first countdown');
+    const botDeadline = computer.view.roundBeginsAt, botCode = computer.code, botToken = computer.token;
+    ok(computer.view.turn === 1 && computer.view.turnPhase === 'draw' && computer.view.seats[1].handCount === 11 &&
+      computer.view.serverNow < botDeadline, 'a computer assigned the first turn also waits at the countdown');
+
+    // Restart during the countdown rather than starting a replacement delay.
+    await stop(session.child);
+    const saved = JSON.parse(fs.readFileSync(saveFile, 'utf8'));
+    ok(saved.rooms.find(r => r.code === humanCode).game.roundBeginsAt === humanDeadline &&
+      saved.rooms.find(r => r.code === botCode).game.roundBeginsAt === botDeadline,
+      'graceful persistence keeps the exact human and computer countdown deadlines');
+    session = await start();
+    const resumed = await client('Countdown-resumed', {}, session.url); resumed.token = humanToken;
+    send(resumed, { t: 'resume', code: humanCode });
+    await until(resumed, v => v.phase === 'playing', 'resume human countdown');
+    const resumedBot = await client('Countdown-bot-resumed', {}, session.url); resumedBot.token = botToken;
+    send(resumedBot, { t: 'resume', code: botCode });
+    await until(resumedBot, v => v.phase === 'playing', 'resume computer countdown');
+    ok(resumed.view.roundBeginsAt === humanDeadline && resumed.view.turnId === humanTurn &&
+      resumedBot.view.roundBeginsAt === botDeadline && resumed.view.serverNow < humanDeadline,
+      'reconnect and restart retain the remaining countdown instead of restarting or skipping it');
+
+    await until(resumed, v => v.serverNow >= humanDeadline, 'deadline broadcast unlocks the human table', 5000);
+    ok(resumed.view.roundBeginsAt === humanDeadline && Date.now() >= humanDeadline,
+      'the server broadcasts at the deadline so waiting clients can unlock without another player action');
+    send(resumed, { t: 'action', action: 'draw', piles: [0, 1] });
+    await until(resumed, v => v.turnPhase === 'play', 'first draw after countdown');
+    ok(resumed.view.you.hand.length === before.length + 2 && resumed.errors.length === 0,
+      'the same legal draw succeeds after the authoritative countdown ends');
+    await until(resumedBot, v => v.turn !== 1 || v.turnPhase !== 'draw', 'first computer move after countdown', 5000);
+    const firstMove = resumedBot.seenPayloads.map(raw => JSON.parse(raw).view)
+      .find(v => v.phase === 'playing' && (v.turn !== 1 || v.turnPhase !== 'draw'));
+    ok(firstMove && firstMove.serverNow >= botDeadline && resumedBot.errors.length === 0,
+      'the server schedules the first computer move only after its countdown deadline');
+    resumed.ws.close(); resumedBot.ws.close(); human.ws.close(); computer.ws.close();
+    await stop(session.child);
+  } finally {
+    if (running) running.kill('SIGKILL');
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+async function handChoiceRegressions() {
+  console.log('\n-- private, persistent hand and foot choices --');
+  const host = await client('Choice-host', { autoChoose: false });
+  const guest = await client('Choice-guest', { autoChoose: false });
+  send(host, { t: 'create', seats: 2 });
+  await until(host, v => v.phase === 'lobby', 'choice lobby');
+  send(guest, { t: 'join', code: host.code });
+  await until(host, v => v.seated === 2, 'choice guest seated');
+  send(host, { t: 'action', action: 'start' });
+  await until(host, v => v.phase === 'choosing', 'host chooses a packet');
+  await until(guest, v => v.phase === 'choosing', 'guest chooses a packet');
+  const room = app.rooms.get(host.code);
+  const firstHand = room.game.players[0].hand.slice(), firstFoot = room.game.players[0].foot.slice();
+  const originalCards = JSON.stringify(room.game.players.map(p => [p.hand, p.foot]));
+  const packets = room.game.players.flatMap(p => p.hand.concat(p.foot));
+  const hidden = [host.view, guest.view].every(v => {
+    const payload = JSON.stringify(v);
+    return v.you.hand.length === 0 && v.you.foot === undefined && v.you.redThrees.length === 0 &&
+      packets.every(card => !payload.includes('"' + card + '"'));
+  });
+  ok(hidden && host.view.handChoice.pending && host.view.handChoice.remaining === 2 &&
+    JSON.stringify(host.view.handChoice.pileSizes) === '[11,11]' &&
+    host.view.seats.every(seat => !seat.handChosen),
+    'the deal exposes only two face-down packet counts to each seat before any choice');
+
+  async function refused(c, message, label) {
+    const before = JSON.stringify(room.game), errors = c.errors.length;
+    send(c, Object.assign({ t: 'action' }, message));
+    await untilTrue(() => c.errors.length === errors + 1, label);
+    ok(JSON.stringify(room.game) === before, label + ' leaves every packet and choice unchanged');
+  }
+  await refused(host, { action: 'draw', piles: [0, 1] }, 'draw before hand choices');
+  await refused(host, { action: 'meldNew', rank: firstHand[0][0], cards: firstHand.slice(0, 3) }, 'meld before hand choices');
+  await refused(host, { action: 'chooseHand', seat: 1, pile: 0 }, 'host choosing for another human');
+  await refused(guest, { action: 'chooseHand', seat: 0, pile: 0 }, 'guest choosing for another human');
+  for (const pile of ['1', -1, 2, null, {}]) {
+    await refused(host, { action: 'chooseHand', seat: 0, pile }, 'malformed pile ' + JSON.stringify(pile));
+  }
+  const chosenMessage = { action: 'chooseHand', seat: 0, pile: 1, turnId: host.view.turnId };
+  send(host, Object.assign({ t: 'action' }, chosenMessage));
+  await until(host, v => v.handChoice && !v.handChoice.pending, 'host packet committed');
+  await until(guest, v => v.handChoice && v.handChoice.remaining === 1, 'guest sees one remaining choice');
+  ok(JSON.stringify(host.view.you.hand) === JSON.stringify(firstFoot) &&
+    JSON.stringify(room.game.players[0].foot) === JSON.stringify(firstHand) &&
+    host.view.you.foot === undefined && guest.view.you.hand.length === 0 &&
+    !JSON.stringify(guest.view).includes('"' + firstFoot[0] + '"'),
+    'choosing the second pile reveals only that hand and keeps the other packet private');
+  await refused(host, chosenMessage, 'double-clicking a committed choice');
+  await refused(host, { action: 'draw', piles: [0, 1] }, 'drawing while another human is still choosing');
+
+  app.flushSave();
+  const restored = require('child_process').execFileSync(process.execPath, ['-e',
+    "const a=require('./server');a.server.on('listening',()=>{const r=a.rooms.get(" + JSON.stringify(host.code) +
+    ");console.log('CHOICES:'+JSON.stringify({phase:r.game.phase,players:r.game.players,host:a.viewFor(r,0),guest:a.viewFor(r,1),turnId:r.turnId}));a.server.close();});"
+  ], { cwd: __dirname, env: Object.assign({}, process.env, { PORT: '0' }), encoding: 'utf8', timeout: 5000 });
+  const saved = JSON.parse(restored.split('\n').find(line => line.startsWith('CHOICES:')).slice(8));
+  ok(saved.phase === 'choosing' && saved.players[0].handChoice === 1 && saved.players[1].handChoice === null &&
+    JSON.stringify(saved.host.you.hand) === JSON.stringify(firstFoot) && saved.guest.you.hand.length === 0 &&
+    saved.turnId === host.view.turnId,
+    'a real server restart restores the committed pile, remaining choice, hidden cards and choice token');
+  host.ws.close();
+  await until(guest, v => !v.seats[0].connected, 'choice host disconnect');
+  const returning = await client('Choice-returning', { autoChoose: false }); returning.token = host.token;
+  send(returning, { t: 'resume', code: host.code });
+  await until(returning, v => v.phase === 'choosing', 'resume partial choice');
+  ok(!returning.view.handChoice.pending && JSON.stringify(returning.view.you.hand) === JSON.stringify(firstFoot) &&
+    guest.view.handChoice.pending, 'reconnecting preserves the selected packet and waits for the other human');
+  send(guest, { t: 'action', action: 'chooseHand', seat: 1, pile: 0 });
+  await until(returning, v => v.phase === 'playing', 'all choices unlock play');
+  await until(guest, v => v.phase === 'playing', 'guest enters play');
+  ok(returning.view.handChoice === null && returning.view.turnPhase === 'draw' &&
+    returning.view.turn === 0 && returning.view.turnId > chosenMessage.turnId,
+    'only the final commitment starts the first draw and advances the server token');
+  await refused(returning, chosenMessage, 'replaying an old choice after play begins');
+  ok(returning.errorContexts.at(-1) === 'staleTurn', 'old choice messages use the normal stale-turn protection');
+
+  room.game.phase = 'roundEnd';
+  send(returning, { t: 'action', action: 'nextRound' });
+  await until(returning, v => v.phase === 'choosing' && v.round === 1, 'next round packet choices');
+  await until(guest, v => v.phase === 'choosing' && v.round === 1, 'guest next round choices');
+  ok(returning.view.you.hand.length === 0 && returning.view.handChoice.pending &&
+    returning.view.handChoice.remaining === 2 && room.game.players.every(p => p.handChoice === null) &&
+    JSON.stringify(room.game.players.map(p => [p.hand, p.foot])) !== originalCards,
+    'Next round reshuffles and requires a new private choice from every human');
+  await refused(returning, chosenMessage, 'old-round choice replay during a new deal');
+  send(returning, { t: 'action', action: 'chooseHand', seat: 0, pile: 0 });
+  send(guest, { t: 'action', action: 'chooseHand', seat: 1, pile: 1 });
+  await until(returning, v => v.phase === 'playing', 'new choices complete');
+  room.game.phase = 'gameEnd';
+  send(returning, { t: 'action', action: 'rematch' });
+  await until(returning, v => v.phase === 'choosing' && v.round === 0, 'rematch packet choices');
+  ok(returning.view.handChoice.remaining === 2 && returning.view.you.hand.length === 0,
+    'a rematch also starts with hidden packets and fresh choices');
+  returning.ws.close(); guest.ws.close();
+
+  const computer = await client('Choice-computers', { autoChoose: false });
+  send(computer, { t: 'vsbot', bots: 3 });
+  await until(computer, v => v.phase === 'choosing', 'computer packet choices');
+  const computerRoom = app.rooms.get(computer.code);
+  ok(computer.view.handChoice.remaining === 1 && computer.view.seats.slice(1).every(s => s.handChosen) &&
+    computerRoom.game.players.slice(1).every(p => p.handChoice === 0 || p.handChoice === 1) &&
+    computer.view.you.hand.length === 0 && computer.view.seats.every(s => s.hand === undefined && s.foot === undefined),
+    'computers commit automatic private pile choices while the human alone is still choosing');
+  send(computer, { t: 'action', action: 'chooseHand', seat: 0, pile: 1 });
+  await until(computer, v => v.phase === 'playing', 'computer deal unlock');
+  ok(computer.view.you.hand.length === 11, 'the human choice starts a computer table normally');
+  computer.ws.close();
+
+  const unequal = await client('Choice-unequal', { autoChoose: false });
+  send(unequal, { t: 'vsbot', bots: 1, rules: { handSize: 5, footSize: 12 } });
+  await until(unequal, v => v.phase === 'choosing', 'unequal packet acknowledgement');
+  const unequalRoom = app.rooms.get(unequal.code), unequalBefore = JSON.stringify(unequalRoom.game);
+  send(unequal, { t: 'action', action: 'chooseHand', seat: 0, pile: 1 });
+  await untilTrue(() => unequal.errors.length === 1, 'unequal swap refusal');
+  ok(!unequal.view.handChoice.canSwap && JSON.stringify(unequal.view.handChoice.pileSizes) === '[5,12]' &&
+    JSON.stringify(unequalRoom.game) === unequalBefore,
+    'unequal configured sizes expose acknowledgement and reject swapping without changing cards');
+  send(unequal, { t: 'action', action: 'chooseHand', seat: 0, pile: 0 });
+  await until(unequal, v => v.phase === 'playing', 'unequal assigned hand accepted');
+  ok(unequal.view.you.hand.length === 5 && unequal.view.you.footCount === 12,
+    'acknowledging unequal piles preserves the configured hand and foot sizes');
+  unequal.ws.close();
+
+  const practice = await client('Choice-practice', { autoChoose: false });
+  send(practice, { t: 'practice' });
+  await until(practice, v => v.phase === 'choosing', 'practice packet choices');
+  const practiceRoom = app.rooms.get(practice.code), turnId = practice.view.turnId;
+  send(practice, { t: 'action', action: 'chooseHand', seat: 0, pile: 1, turnId });
+  await until(practice, v => v.phase === 'choosing' && v.you.seat === 1, 'practice second seat');
+  const practiceBefore = JSON.stringify(practiceRoom.game);
+  send(practice, { t: 'action', action: 'chooseHand', seat: 0, pile: 1, turnId });
+  await untilTrue(() => practice.errors.length === 1, 'practice duplicate choice refusal');
+  ok(JSON.stringify(practiceRoom.game) === practiceBefore && practiceRoom.game.players[1].handChoice === null,
+    'a duplicated practice click cannot accidentally choose the next seat’s packet');
+  send(practice, { t: 'action', action: 'chooseHand', seat: 1, pile: 0, turnId });
+  await until(practice, v => v.phase === 'choosing' && v.you.seat === 2, 'practice third seat');
+  send(practice, { t: 'action', action: 'chooseHand', seat: 2, pile: 1, turnId });
+  await until(practice, v => v.phase === 'playing', 'practice all choices');
+  ok(practice.view.you.seat === 0 && practice.view.handChoice === null,
+    'the single practice owner can choose each seat’s piles and then begins normal play');
+  practice.ws.close();
+}
+
+async function ruleOwnershipRegressions() {
+  console.log('\n-- only the actual host can change table rules --');
+  const host = await client('Locked-rules-host');
+  const guest = await client('Locked-rules-guest');
+  send(host, { t: 'create', name: host.name, seats: 2 });
+  await until(host, v => v.phase === 'lobby', 'locked-rules lobby');
+  send(guest, { t: 'join', code: host.code, name: guest.name });
+  await until(guest, v => v.seated === 2, 'locked-rules guest');
+  const room = app.rooms.get(host.code);
+
+  async function denied(action, phase) {
+    const before = JSON.stringify(room.game), errors = guest.errors.length;
+    // Send a raw socket message with forged UI/seat claims. Permissions come
+    // from the attached session token, never fields supplied by the client.
+    guest.ws.send(JSON.stringify(Object.assign({ t: 'action', token: guest.token,
+      hostSeat: 1, seat: 0, forcedSeat: 0, canConfigureRules: true }, action)));
+    await untilTrue(() => guest.errors.length === errors + 1, phase + ' guest rule refusal');
+    ok(/host/i.test(guest.errors.at(-1)) && JSON.stringify(room.game) === before,
+      phase + ': raw guest ' + action.action + ' cannot change current rules, pending rules, or game state');
+  }
+  async function rejectBoth(phase) {
+    await denied({ action: 'configureRules', rules: { handSize: 12 } }, phase);
+    await denied({ action: 'setRule', key: 'revealPileTake', value: false }, phase);
+  }
+
+  await rejectBoth('lobby');
+  send(host, { t: 'action', action: 'start' });
+  await until(host, v => v.phase === 'playing', 'locked-rules deal');
+  send(host, { t: 'action', action: 'configureRules', rules: { handSize: 13 } });
+  await until(guest, v => v.pendingSettings && v.pendingSettings.handSize === 13, 'host queued rules');
+  await rejectBoth('active round with pending changes');
+  await denied({ action: 'configureRules', rules: { handSize: room.game.settings.handSize } },
+    'attempt to cancel the host’s queued changes');
+  send(host, { t: 'action', action: 'setRule', key: 'revealPileTake', value: false });
+  await until(guest, v => !v.settings.revealPileTake && !v.pendingSettings.revealPileTake,
+    'host live preview rule');
+  ok(room.game.settings.handSize === 11 && room.game.pendingSettings.handSize === 13 &&
+    guest.view.discardPeek === null, 'the host can change live preview without replacing queued gameplay rules');
+  for (const phase of ['roundEnd', 'gameEnd']) {
+    room.game.phase = phase;
+    await rejectBoth(phase);
+  }
+  host.ws.close(); guest.ws.close();
+}
+
 async function continuityRegressions() {
   console.log('\n-- explicit departure, reconnect and host transfer --');
   const host = await client('Leave-host');
@@ -228,6 +622,13 @@ async function continuityRegressions() {
   send(replacement, { t: 'action', action: 'configureRules', rules: { handSize: 12 } });
   await until(replacement, v => v.settings.handSize === 12, 'new host settings');
   ok(replacement.view.canConfigureRules, 'a departing lobby host transfers rules ownership');
+  send(replacement, { t: 'action', action: 'setRule', key: 'revealPileTake', value: false });
+  await until(replacement, v => !v.settings.revealPileTake, 'new host preview setting');
+  const thirdErrors = third.errors.length;
+  send(third, { t: 'action', action: 'setRule', key: 'revealPileTake', value: true });
+  await untilTrue(() => third.errors.length > thirdErrors, 'guest cannot impersonate transferred host');
+  ok(/host/i.test(third.errors.at(-1)) && !app.rooms.get(replacement.code).game.settings.revealPileTake,
+    'live preview follows the transferred host token, not the original seat number or any guest');
   send(replacement, { t: 'action', action: 'start' });
   await until(replacement, v => v.phase === 'playing', 'remaining players deal');
   ok(replacement.view.seats.length === 2 && replacement.view.you.seat === 0 &&
@@ -263,8 +664,14 @@ async function continuityRegressions() {
     const priorId = owner.view.turnId;
     send(owner, { t: 'action', action: 'discard', card: owner.view.you.hand[0] });
     await until(owner, v => v.turnId > priorId && v.turnPhase === 'draw', 'next practice turn');
-    if (i === 0) ok(owner.view.you.seat === 1 && owner.view.canConfigureRules,
-      'the practice owner keeps rules controls while acting as seat one');
+    if (i === 0) {
+      ok(owner.view.you.seat === 1 && owner.view.canConfigureRules,
+        'the practice owner keeps rules controls while acting as seat one');
+      send(owner, { t: 'action', action: 'setRule', key: 'revealPileTake', value: false });
+      await until(owner, v => !v.settings.revealPileTake, 'practice host preview change from seat one');
+      ok(owner.errors.length === errors + 1 && !room.game.settings.revealPileTake,
+        'practice rules authorization follows the owner token while another seat is active');
+    }
     if (i < 2) {
       send(owner, { t: 'action', action: 'draw', piles: [0, 1] });
       await until(owner, v => v.turnPhase === 'play', 'intervening draw');
@@ -416,6 +823,44 @@ async function shutdownRegressions() {
 }
 
 (async function run() {
+  await hostileInputRegressions();
+  // A focused isolated negative control can run this boundary regression
+  // against an older server without running or modifying a live game.
+  if (process.env.TEST_HOSTILE_ONLY === '1') {
+  
+  // Selective wild rollback uses the same authority and turn-token checks as a meld.
+  {
+    const owner=await client('wild-return-owner',{});
+    send(owner,{t:'create',name:'Wild owner',seats:2});
+    await until(owner,v=>v.phase==='lobby','wild rollback room');
+    const room=app.rooms.get(owner.code), g=room.game;
+    G.startRound(g);g.turn=0;g.turnPhase='play';g.phase='playing';
+    const p=g.players[0];p.hasInitialMeld=true;p.hand=['XR0','9S0','9H0'];
+    p.melds=[{id:'seven-return',rank:'7',cards:['7S0','7H0','7D0']}];
+    g.turnState={drew:true,melded:0,tookPile:false,picked:[],pickedUpFoot:false,
+      snapshot:JSON.stringify({hand:p.hand,foot:p.foot,inFoot:p.inFoot,melds:p.melds,redThrees:p.redThrees,hasInitialMeld:true}),logMark:g.logSeq || 0};
+    G.meldAdd(g,0,'seven-return',['XR0']);
+    ok(app.viewFor(room,0).you.returnableWilds.length===1,'owner sees eligible wild rollback');
+    ok(app.viewFor(room,1).you.returnableWilds.length===0 && !app.viewFor(room,-1).you,'other seats receive no rollback options');
+    send(owner,{t:'action',action:'returnWild',meldId:'seven-return',card:'XR0',turnId:room.turnId-1});await wait(80);
+    ok(!p.hand.includes('XR0'),'stale token cannot return a wild');
+    send(owner,{t:'action',action:'returnWild',meldId:'seven-return',card:'XR0',turnId:room.turnId});
+    await until(owner,v=>v.you.hand.includes('XR0'),'return wild websocket action');
+    ok(p.melds[0].cards.length===3 && g.turnState.melded===0,'authoritative return preserves meld and points');
+    const before=JSON.stringify(g);
+    send(owner,{t:'action',action:'returnWild',meldId:'seven-return',card:'XR0',turnId:room.turnId});await wait(80);
+    ok(JSON.stringify(g)===before,'repeated return cannot duplicate cards');
+    owner.ws.close();
+  }
+
+  console.log('\n' + pass + ' passed, ' + failed + ' failed');
+    app.server.close();
+    try { require('fs').unlinkSync(process.env.SAVE_FILE); } catch (x) {}
+    process.exit(failed ? 1 : 0);
+  }
+  await roundCountdownRegression();
+  await handChoiceRegressions();
+  await ruleOwnershipRegressions();
   await continuityRegressions();
   await shutdownRegressions();
   console.log('\n-- joining --');
@@ -749,7 +1194,7 @@ async function shutdownRegressions() {
     await until(host, function (v) { return v.pendingSettings && v.pendingSettings.blackBookBonus === 425; }, 'merged pending rules');
     ok(host.view.pendingSettings.deckCount === 5 && host.view.pendingSettings.handSize === 13,
       'a later patch preserves earlier queued rule choices');
-    send(guest, { t: 'action', action: 'setRule', key: 'revealPileTake', value: false });
+    send(host, { t: 'action', action: 'setRule', key: 'revealPileTake', value: false });
     await until(host, function (v) { return !v.settings.revealPileTake && v.pendingSettings && !v.pendingSettings.revealPileTake; }, 'live preview with pending rules');
     ok(host.view.discardPeek === null, 'the existing live preview toggle remains private and will not revert next round');
     const beforeInvalidPending = JSON.stringify(room.game.pendingSettings);
@@ -1089,7 +1534,7 @@ async function shutdownRegressions() {
   }
 
   // Adding an icon route must not have opened a door to the server's own files.
-  for (const [file, type] of [['/menu.js', 'text/javascript'], ['/menu.css', 'text/css'], ['/handfoot-mark.svg', 'image/svg+xml']]) {
+  for (const [file, type] of [['/startup.js', 'text/javascript'], ['/interaction-mode.css', 'text/css'], ['/table-cosmetics.css', 'text/css'], ['/preferences.css', 'text/css'], ['/audit-refinements.css', 'text/css'], ['/deal-choice.css', 'text/css'], ['/handfoot-cover.svg', 'image/svg+xml'], ['/menu.js', 'text/javascript'], ['/menu.css', 'text/css'], ['/handfoot-mark.svg', 'image/svg+xml'], ['/play-feedback.css', 'text/css'], ['/interaction-feedback.css', 'text/css'], ['/draw-feedback.css', 'text/css'], ['/chat-feedback.css', 'text/css']]) {
     const r = await get(file);
     ok(r.status === 200 && (r.headers['content-type'] || '').startsWith(type) && r.body.length > 0,
       file + ' is served with its expected browser content type');

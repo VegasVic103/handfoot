@@ -1,0 +1,83 @@
+/* A stopped Auto draw should explain itself right on the available pile. */
+.discard-choice.takeable{--pickup-cue:#a5dfbb;border:1px solid var(--pickup-cue);border-radius:7px;background:rgba(104,177,128,.16);box-shadow:inset 0 0 0 1px rgba(165,223,187,.16)}
+.discard-choice.takeable .card{outline:2px solid var(--pickup-cue);outline-offset:2px}
+.discard-choice.takeable .pickup-label{color:var(--pickup-cue);font-weight:700}
+.discard-choice.auto-pickup-paused .discard-count{display:none}
+.discard-choice.auto-pickup-paused .discard-status{display:inline;color:var(--pickup-cue);font-size:9px;line-height:14px;font-weight:600;white-space:nowrap}
+html[data-theme="ivory"] .discard-choice.takeable{--pickup-cue:#245b38;background:rgba(45,109,65,.1);box-shadow:none}
+
+/* Shared card vocabulary: quiet center tray, roomier draw chooser. */
+#centerRow.compact-piles,.board:has(#myMelds.empty) #centerRow.compact-piles{
+  padding:5px 10px;gap:8px;height:60px;min-height:60px;box-sizing:border-box;
+}
+.compact-piles .stock-choice,.compact-piles .discard-choice,
+.pile-picker-grid .stock-choice,.pile-picker-grid .discard-choice{
+  display:flex;align-items:center;justify-content:center;min-width:0;
+  height:54px;min-height:54px;padding:2px;box-sizing:border-box;border-radius:7px;
+}
+.compact-piles .pickup-label,.compact-piles .pickup-count,.compact-piles .discard-summary,
+.pile-picker-grid .pickup-label,.pile-picker-grid .pickup-count,.pile-picker-grid .discard-summary{display:none}
+.compact-piles .card,.pile-picker-grid .card{
+  --card-w:36px;--card-h:50px;width:36px;height:50px;position:relative;transform:none;
+}
+.stock-total{
+  position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;
+  font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;color:#fff4dd;
+  text-shadow:0 1px 2px #421515;border-radius:3px;z-index:2;
+  background:linear-gradient(transparent 20%,rgba(70,15,17,.68) 42%,rgba(70,15,17,.68) 62%,transparent 80%);
+}
+.compact-piles .stock-choice,.compact-piles .discard-choice{height:50px;min-height:50px}
+.compact-piles .card{--card-w:33px;--card-h:46px;width:33px;height:46px}
+.compact-piles .stock-total{font-size:15.5px}
+.empty .stock-total{background:none;color:var(--txt-3);text-shadow:none}
+.compact-piles .discard-choice,.pile-picker-grid .discard-choice{border-left:1px solid var(--hair-2);border-radius:0}
+.compact-piles .discard-choice .card,.pile-picker-grid .discard-choice .card{padding:3px;justify-content:flex-start;align-items:center}
+.compact-piles .discard-choice .card .r{font-size:17px;line-height:18px}
+.compact-piles .discard-choice .card .s{font-size:9px;line-height:10px;margin:0}
+.discard-total{
+  position:absolute;left:0;right:0;bottom:2px;display:flex;justify-content:center;
+  align-items:baseline;gap:2px;color:inherit;font-size:7px;line-height:10px;font-weight:500;font-variant-numeric:tabular-nums;
+}
+.discard-total b{font-size:9px;font-weight:700}
+.compact-piles .discard-choice.takeable,.pile-picker-grid .discard-choice.takeable{border-color:transparent;border-left-color:var(--hair-2);background:none;box-shadow:none}
+.compact-piles .discard-choice.takeable .card,.pile-picker-grid .discard-choice.takeable .card{outline:2px solid var(--pickup-cue);outline-offset:2px}
+.compact-piles .stock-choice:focus-visible,.pile-picker-grid .stock-choice:focus-visible,
+.compact-piles .discard-choice:focus-visible,.pile-picker-grid .discard-choice:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+
+/* A small table floating above play, not a full-screen detour. */
+#drawPickerSheet{padding:10px;align-items:flex-start;padding-top:min(29vh,250px);background:rgba(0,0,0,.35);backdrop-filter:none}
+#drawPickerPanel{
+  width:100%;max-width:430px;max-height:calc(100dvh - min(29vh,250px) - 20px);
+  padding:16px 12px 12px;border:1px solid var(--hair-2);border-radius:16px;background:var(--app-1);
+  box-shadow:var(--sh-3);color:var(--txt);overflow:auto;overscroll-behavior:contain;
+}
+.draw-picker-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-inline:4px}
+.draw-picker-eyebrow{margin:0 0 3px;font-size:10px;line-height:13px;font-weight:600;color:var(--txt-2)}
+#drawPickerTitle{font-size:20px;line-height:25px;letter-spacing:-.3px;margin:0}
+#closeDrawPicker{min-width:44px;min-height:44px;padding:8px;font-size:12px;border-radius:9px}
+.draw-picker-hint{font-size:12px;line-height:17px;min-height:34px;margin:9px 4px 10px;color:var(--txt-2)}
+#drawPickerPiles{padding:8px 5px;gap:6px;border-radius:11px;box-shadow:inset 0 0 0 1px var(--hair-2);margin:0}
+.pile-picker-grid .stock-choice,.pile-picker-grid .discard-choice{height:82px;min-height:82px;padding:4px 2px;position:relative}
+.pile-picker-grid .card{--card-w:46px;--card-h:66px;width:46px;height:66px}
+.pile-picker-grid .stock-total{font-size:22px}
+.pile-picker-grid .discard-choice .card .r{font-size:25px;line-height:29px}
+.pile-picker-grid .discard-choice .card .s{font-size:12px;line-height:14px;margin:0}
+.pile-picker-grid .discard-total{bottom:4px;font-size:8px;line-height:11px}
+.pile-picker-grid .discard-total b{font-size:11px}
+.pile-picker-grid .stock-choice.selected{border-color:var(--brass);background:rgba(214,174,62,.1)}
+.pile-picker-grid .stock-choice.selected::after{
+  content:'✓';position:absolute;right:0;top:0;width:16px;height:16px;display:grid;place-items:center;
+  border-radius:50%;background:var(--brass);color:var(--ink);font-size:11px;font-weight:700;line-height:1;
+}
+.draw-picker-actions{display:flex;gap:8px;margin-top:12px}
+.draw-picker-actions .btn{flex:1;min-width:0;min-height:44px;font-size:14px;line-height:20px;padding:10px 8px;border-radius:9px}
+.draw-picker-actions .btn:disabled{opacity:.4}
+@media(max-width:350px){
+  #centerRow.compact-piles,.board:has(#myMelds.empty) #centerRow.compact-piles{padding-inline:6px;gap:4px}
+  #drawPickerPanel{padding-inline:10px}
+  #drawPickerPiles{gap:3px;padding-inline:3px}
+  .pile-picker-grid .card{--card-w:40px;--card-h:58px;width:40px;height:58px}
+  .pile-picker-grid .stock-choice,.pile-picker-grid .discard-choice{height:74px;min-height:74px}
+  .pile-picker-grid .discard-choice .card .r{font-size:22px;line-height:25px}
+  .pile-picker-grid .discard-choice .card .s{font-size:10px;line-height:11px}
+}

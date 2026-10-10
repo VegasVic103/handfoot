@@ -1141,6 +1141,61 @@ t('an all-red-three foot either receives every replacement or scores at exhausti
   }
 });
 
+
+console.log('\n-- choosing the hand before play --');
+t('deferred dealing creates two hidden-choice packets and blocks gameplay until every choice', () => {
+  const s = G.createGame(['A', 'B']); ok(G.startRound(s, mulberry(181), true).ok);
+  eq(s.phase, 'choosing'); eq(s.turnState, null);
+  s.players.forEach(p => { eq(p.hand.length, 11); eq(p.foot.length, 11); eq(p.handChoice, null); });
+  const before = JSON.stringify(s);
+  no(G.drawStock(s, 0, [0, 1])); no(G.takePile(s, 0, []));
+  no(G.meldNew(s, 0, 'K', [])); no(G.discard(s, 0, s.players[0].hand[0]));
+  eq(JSON.stringify(s), before);
+  ok(G.chooseHand(s, 0, 0).ok); eq(s.phase, 'choosing'); no(G.drawStock(s, 0, [0, 1]));
+  ok(G.chooseHand(s, 1, 0).ok); eq(s.phase, 'playing'); ok(G.drawStock(s, 0, [0, 1]).ok);
+});
+t('choosing the second packet swaps exactly hand and foot once, without changing any cards', () => {
+  const s = G.createGame(['A', 'B']); G.startRound(s, mulberry(182), true);
+  const cards = allCards(s), originalHand = s.players[0].hand.slice(), originalFoot = s.players[0].foot.slice();
+  ok(G.chooseHand(s, 0, 1).ok); eq(s.players[0].hand, originalFoot); eq(s.players[0].foot, originalHand);
+  eq(s.players[0].handChoice, 1); eq(allCards(s), cards);
+  const before = JSON.stringify(s);
+  no(G.chooseHand(s, 0, 0)); no(G.chooseHand(s, 2, 0)); no(G.chooseHand(s, 1, '1'));
+  eq(JSON.stringify(s), before);
+  ok(G.chooseHand(s, 1, 1).ok); eq(s.phase, 'playing'); eq(allCards(s), cards);
+  eq(JSON.parse(s.turnState.snapshot).hand, originalFoot);
+});
+t('unequal configured sizes require acknowledgement and never swap or silently resize the packets', () => {
+  const s = G.createGame(['A', 'B'], { handSize: 5, footSize: 12 }); G.startRound(s, mulberry(183), true);
+  const before = JSON.stringify(s); no(G.chooseHand(s, 0, 1)); eq(JSON.stringify(s), before);
+  ok(G.chooseHand(s, 0, 0).ok); ok(G.chooseHand(s, 1, 0).ok);
+  s.players.forEach(p => { eq(p.hand.length, 5); eq(p.foot.length, 12); });
+  eq(s.settings.handSize, 5); eq(s.settings.footSize, 12);
+});
+t('automatic red threes are processed only from the chosen hand, after everybody commits', () => {
+  let s;
+  for (let seed = 0; seed < 100; seed++) {
+    s = G.createGame(['A', 'B'], { redThreeAutoLayOff: true }); G.startRound(s, mulberry(seed), true);
+    if (s.players[0].foot.some(E.isRedThree)) break;
+  }
+  ok(s.players[0].foot.some(E.isRedThree)); const cards = allCards(s), unchosen = s.players[0].hand.slice();
+  ok(G.chooseHand(s, 0, 1).ok); eq(s.players[0].redThrees, []);
+  ok(G.chooseHand(s, 1, 0).ok); ok(s.players[0].redThrees.length > 0);
+  ok(s.players.every(p => p.hand.every(c => !E.isRedThree(c))));
+  eq(s.players[0].foot, unchosen); eq(s.players[0].hand.length, 11); eq(allCards(s), cards);
+});
+t('a saved partial choice resumes without redealing, and next round resets the gate', () => {
+  const s = G.createGame(['A', 'B']); G.startRound(s, mulberry(184), true); G.chooseHand(s, 0, 1);
+  const loaded = JSON.parse(JSON.stringify(s)), hand = loaded.players[0].hand.slice();
+  eq(loaded.players[0].handChoice, 1); eq(loaded.players[1].handChoice, null);
+  ok(G.chooseHand(loaded, 1, 0).ok); eq(loaded.players[0].hand, hand);
+  loaded.roundBeginsAt = Date.now() + 3000;
+  G.endRound(loaded, null); ok(G.nextRound(loaded, true).ok);
+  eq(loaded.round, 1); eq(loaded.turn, 1); eq(loaded.phase, 'choosing');
+  eq(loaded.roundBeginsAt, 0);
+  loaded.players.forEach(p => eq(p.handChoice, null)); eq(loaded.scores.length, 1);
+});
+
 console.log('\n-- full games --');
 /* `noPile` is how the turn is replayed after handing the pile back: taking it
  * again would only land in the same place, so the retry draws from stock. */
@@ -1251,6 +1306,58 @@ t('a four-round game reaches gameEnd with four score rows', () => {
   eq(s.phase, 'gameEnd');
   eq(s.scores.length, 4);
   eq(G.totals(s).length, 3);
+});
+
+
+console.log('\n-- returning a wild from an unfinished meld --');
+function wildFixture() {
+  const s = G.createGame(['A', 'B']); G.startRound(s, mulberry(77));
+  s.turn = 0; s.phase = 'playing'; s.turnPhase = 'play';
+  const p = s.players[0]; p.hasInitialMeld = true; p.inFoot = false;
+  p.hand = ['XR0', '2S0', '9S0', '9H0'];
+  p.melds = [{ id:'seven', rank:'7', cards:['7S0','7H0','7D0'] }];
+  s.turnState = { drew:true, melded:0, picked:[], tookPile:false, pickedUpFoot:false,
+    snapshot:JSON.stringify({hand:p.hand,foot:p.foot,inFoot:p.inFoot,melds:p.melds,redThrees:p.redThrees,hasInitialMeld:true}), logMark:s.logSeq || 0 };
+  return s;
+}
+t('returning one wild preserves other plays and allows re-use', () => {
+  const s = wildFixture(); ok(G.meldAdd(s,0,'seven',['XR0','2S0']).ok,'adding both wilds');
+  eq(G.returnableWilds(s,0).length,2);
+  const before = s.players[0].hand.length;
+  ok(G.returnWild(s,0,'seven','XR0').ok);
+  eq(s.players[0].hand.length,before+1); eq(s.turnState.melded,20);
+  eq(s.players[0].melds[0].cards,['7S0','7H0','7D0','2S0']);
+  ok(G.meldAdd(s,0,'seven',['XR0']).ok);
+  ok(G.undoTurnMelds(s,0).ok); eq(s.players[0].hand,['XR0','2S0','9S0','9H0']);
+  eq(s.players[0].melds[0].cards,['7S0','7H0','7D0']);
+  ok(!s.log.some(e=>e.t==='returnWild'), 'full undo removes return log');
+});
+t('a duplicate return or a natural return is atomic and refused', () => {
+  const s=wildFixture();ok(G.meldAdd(s,0,'seven',['XR0']).ok);ok(G.returnWild(s,0,'seven','XR0').ok);
+  const before=JSON.stringify(s);no(G.returnWild(s,0,'seven','XR0'));no(G.returnWild(s,0,'seven','7S0'));eq(JSON.stringify(s),before);
+});
+t('cannot return another turn or another player wild', () => {
+  const s=wildFixture();ok(G.meldAdd(s,0,'seven',['XR0']).ok);
+  no(G.returnWild(s,1,'seven','XR0'));
+  const snap=JSON.parse(s.turnState.snapshot);snap.melds=s.players[0].melds;s.turnState.snapshot=JSON.stringify(snap);
+  const before=JSON.stringify(s);no(G.returnWild(s,0,'seven','XR0'));eq(JSON.stringify(s),before);
+});
+t('cannot break a three-card meld or reopen a completed book', () => {
+  const s=wildFixture();s.players[0].melds[0].cards=['7S0','7H0','XR0'];
+  no(G.returnWild(s,0,'seven','XR0'));
+  s.players[0].melds[0].cards=['7S0','7H0','7D0','7C0','7S1','7H1','XR0'];
+  no(G.returnWild(s,0,'seven','XR0'));
+});
+t('cannot undo a wild across foot pickup or after discarding', () => {
+  const s=wildFixture();ok(G.meldAdd(s,0,'seven',['XR0']).ok);s.turnState.pickedUpFoot=true;
+  no(G.returnWild(s,0,'seven','XR0'));s.turnState.pickedUpFoot=false;
+  ok(G.discard(s,0,'9S0').ok);no(G.returnWild(s,0,'seven','XR0'));
+});
+t('cannot invalidate an opening already committed by pile pickup', () => {
+  const s=wildFixture();ok(G.meldAdd(s,0,'seven',['XR0']).ok);
+  const snap=JSON.parse(s.turnState.snapshot);snap.hasInitialMeld=false;s.turnState.snapshot=JSON.stringify(snap);
+  s.turnState.tookPile=true;s.turnState.melded=60;
+  no(G.returnWild(s,0,'seven','XR0'));
 });
 
 console.log('\n' + pass + ' passed, ' + failn + ' failed\n');

@@ -1,0 +1,147 @@
+/* Intentional choices stay small and use the selected table's palette. */
+#discardConfirmSheet{align-items:center;padding:20px}
+#discardConfirmSheet .discard-confirm-panel{width:min(100%,360px);margin:auto;padding:24px;border:1px solid var(--line);border-radius:16px;text-align:center}
+#discardConfirmTitle{margin:0;font-size:21px;line-height:1.25;text-wrap:balance}
+#discardConfirmCard{display:flex;justify-content:center;margin:20px 0 16px}
+#discardConfirmCard .card{width:66px;height:90px;flex:none;pointer-events:none}
+#discardConfirmDescription{margin:0;color:var(--txt-2);font-size:14px;line-height:1.5}
+.discard-confirm-actions{display:grid;grid-template-columns:1fr;gap:8px;margin-top:22px}
+.discard-confirm-actions .btn{min-height:44px;width:100%;margin:0}
+@media (prefers-reduced-motion:reduce){#discardConfirmSheet .sheet-in{animation:none}}
+
+/* Play happens at its destination. The old fixed button panel is now only a
+   compact status line; lifecycle controls stay in normal table flow. */
+#table .board{padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
+#table .board .actions{
+  position:static;inset:auto;z-index:auto;flex:none;padding:0;margin-top:-4px;
+  background:none;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+#table .actions-in{display:flex;flex-wrap:wrap;align-items:center;gap:8px;grid-template-rows:none;min-width:0}
+#table .actions .hint{
+  flex:1 1 100%;min-width:0;min-height:16px;max-height:32px;height:auto;
+  margin:0;padding:0;overflow-y:auto;font-size:11px;line-height:16px;
+}
+#table .actions-in > .btn{flex:1 1 auto;min-height:44px}
+.hand-head .hand-tools #tableUndo{min-width:36px;padding-inline:4px;font-size:10px}
+.hand-head .hand-tools #clearSel{min-width:32px}
+
+/* Keep a small landing spot in the shelf so selecting a playable group cannot
+   rewrap every existing book. Its contents appear only for a legal new meld. */
+#myMelds .new-meld-slot{width:70.29px;height:41.03px;min-width:70.29px;flex:0 0 70.29px;align-self:flex-start}
+#myMelds .new-meld-target{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;width:100%;height:100%;min-height:41.03px;padding:4px;position:relative;
+  border:1px dashed var(--brass);border-radius:11px;
+  background:var(--accent-soft,rgba(214,174,62,.1));color:var(--txt);
+  font:inherit;font-size:11px;font-weight:600;line-height:14px;cursor:pointer;
+}
+#myMelds .new-meld-target[hidden]{display:none}
+#myMelds .new-meld-target .new-meld-caption{font-size:9px;font-weight:400;color:var(--txt-2)}
+#myMelds .new-meld-target:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+/* The count has its own lane, clear of the card edge and the stack shadow. */
+#table .seat .meld[data-presentation="stack"],#table #myMelds .meld[data-presentation="stack"]{
+  display:flex;flex-direction:row;align-items:flex-start;gap:4px;
+}
+#table .seat .meld[data-presentation="stack"]{width:40px;max-width:40px;height:36px;padding-inline:2px}
+#table .seat .meld.nearly-book[data-presentation="stack"]{width:48px;max-width:48px}
+#table #myMelds .meld[data-presentation="stack"]{width:49.22px;max-width:49.22px;padding-right:4px}
+#table #myMelds .meld.nearly-book[data-presentation="stack"]{width:57.78px;max-width:57.78px}
+#table .seat .meld[data-presentation="stack"] .meld-cards.closed-book-stack,
+#table #myMelds .meld[data-presentation="stack"] .meld-cards.closed-book-stack{order:0;flex:none;margin:0}
+#table .seat .meld.nearly-book[data-presentation="stack"] .meld-cards.closed-book-stack{width:30px}
+#table #myMelds .meld.nearly-book[data-presentation="stack"] .meld-cards.closed-book-stack{width:var(--bk-h)}
+#table .seat .meld[data-presentation="stack"] .meld-top,
+#table #myMelds .meld[data-presentation="stack"] .meld-top{
+  position:static;order:1;align-self:flex-end;overflow:visible;flex:none;
+  min-width:6px;padding:0 0 1px;border:0;border-radius:0;background:none;box-shadow:none;
+}
+#table .seat .meld[data-presentation="stack"] .meld-count,
+#table .seat .meld.nearly-book[data-presentation="stack"] .meld-count,
+#table #myMelds .meld[data-presentation="stack"] .meld-count{
+  display:block;padding:0;border:0;border-radius:0;outline:0;background:none;box-shadow:none;
+  font-size:9px;font-weight:500;line-height:12px;color:var(--txt-2);
+}
+
+/* A stationary destination cue: gentle light, no moving layout. The words
+   remain after the pulse, and also when reduced motion is preferred. */
+#discardPreview{position:relative}
+#discardPreview.discard-ready{border-radius:7px;cursor:pointer;animation:discardDestination 1.2s ease-in-out 3;background:var(--accent-soft,rgba(214,174,62,.1));box-shadow:inset 0 0 0 1px var(--brass)}
+#discardPreview.discard-ready .card{filter:none;transform:translateY(-2px)}
+#discardPreview.discard-ready .discard-total{visibility:hidden}
+.discard-action-cue{
+  position:absolute;z-index:4;bottom:-2px;left:0;right:0;display:block;
+  padding:2px 0;border:0;border-radius:4px;background:var(--brass);color:var(--ink);
+  font-size:9px;line-height:12px;font-weight:700;white-space:nowrap;text-align:center;pointer-events:none;
+}
+@keyframes discardDestination{
+  0%,100%{box-shadow:inset 0 0 0 1px var(--brass),0 0 0 0 transparent}
+  50%{box-shadow:inset 0 0 0 1px var(--brass),0 0 0 3px var(--accent-soft,rgba(214,174,62,.18))}
+}
+@media(max-width:350px){.discard-action-cue{font-size:8px}.hand-head .hand-tools .btn{padding-inline:7px}}
+@media(prefers-reduced-motion:reduce){#discardPreview.discard-ready{animation:none}}
+html[data-card-motion="off"] #discardPreview.discard-ready{animation:none}
+
+/* Match the three-card meld while leaving a comfortable touch target. */
+#myMelds .new-meld-target::after{content:"";position:absolute;inset:-3px 0;border-radius:11px}
+
+/* One compact identity row and one consistent, thumb-level control strip. */
+#table .books-head{gap:6px;flex-wrap:wrap;min-height:24px}
+#table .books-identity{gap:7px;flex:none}
+#table .books-identity h3{font-size:13px}
+#myBookCounts{font-size:11px;line-height:16px;font-weight:400;color:var(--txt-2);white-space:nowrap}
+#table .books-head .chips{gap:3px;flex:none}
+#table .books-head .chip{font-size:9px;padding-inline:4px}
+#table .board .actions{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;margin-top:0}
+.table-status{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+#table .table-status #turnPill{align-self:flex-start;max-width:100%;padding:0;border:0;border-radius:0;background:none;box-shadow:none;animation:none;font-size:10px;line-height:13px;color:var(--brass-lt)}
+#table .actions .hint{font-size:10px;line-height:13px;min-height:13px;max-height:26px;height:auto}
+#table .actions .hand-tools{flex:none;display:flex;align-items:center;gap:4px}
+#table .actions .hand-tools .btn{
+  position:relative;flex:0 0 44px;min-width:44px;width:44px;height:40px;min-height:40px;
+  padding:0;border:1px solid var(--hair-2);border-radius:11px;background:var(--app-1);
+  box-shadow:none;color:var(--txt-2);font-size:11px;line-height:16px;font-weight:600;
+}
+#table .actions .hand-tools .btn:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+#table .actions .hand-tools #sortBtn::after{content:none}
+#table .actions .hand-tools #autoDrawBtn[data-mode]:not([data-mode="off"]){color:var(--brass-lt);border-color:var(--brass-dim);background:var(--accent-soft,rgba(214,174,62,.1))}
+#table .actions .hand-tools :is(#clearSel,#tableUndo){width:32px;min-width:32px;flex-basis:32px;border-color:transparent;background:none;font-size:9px}
+#table .actions .sort-popover{position:fixed;inset:auto 12px 12px auto;width:320px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}
+#table .actions .sort-popover .btn{flex:none;min-height:36px}
+#table .board:not([data-phase="playing"]) .actions{flex-wrap:wrap}
+#table .board:not([data-phase="playing"]) .table-status{flex-basis:100%}
+#table .board:not([data-phase="playing"]) .actions .hand-tools{margin-left:auto}
+#table .board[data-phase="lobby"] .actions .hand-tools{display:none}
+@media(max-width:350px){
+  #table .books-head{padding-inline:4px;gap:3px}
+  #table .books-identity{gap:5px}
+  #table .books-identity h3{font-size:12px}
+  #myBookCounts{font-size:10px}
+  #table .books-head .chip{font-size:8px;padding-inline:3px}
+  #table .actions .hand-tools{gap:3px}
+}
+
+/* An empty shelf uses exactly the same first slot as a played book. */
+#table #myMelds.empty{position:relative;align-items:flex-start;align-content:flex-start;justify-content:flex-start;padding:3px 8px}
+#table #myMelds.empty .note{
+  position:absolute;left:8px;right:8px;top:8px;max-width:none;
+  margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;
+  text-align:left;color:var(--txt-3);font-size:10px;line-height:16px;
+}
+#table #myMelds.empty .note b{display:none}
+#table #myMelds.empty:has(#newMeldTarget) .note{visibility:hidden}
+#myMelds[data-layout="tiles"] .new-meld-slot{width:40.66px;min-width:40.66px;flex-basis:40.66px;height:55.64px}
+#myMelds[data-layout="tiles"] .new-meld-target{border-radius:5px;font-size:9px;line-height:10px}
+#myMelds[data-layout="tiles"] .new-meld-target::before{content:'+';font-size:16px;line-height:14px}
+#myMelds[data-layout="tiles"] .new-meld-caption{display:none}
+
+/* Slimmer chrome, with the existing text size and usable controls intact. */
+#table .bar-in{padding-block:2px}
+#table .bar .btn.sm{min-height:40px;min-width:40px;padding-block:6px}
+
+/* All legal destinations share the same light, so discard is never presented
+   as the only place a selected card can go. Card faces and count lanes stay put. */
+#table #myMelds .meld.target{
+  outline:2px solid var(--brass);outline-offset:2px;border-color:var(--brass);
+  box-shadow:0 0 0 4px var(--accent-soft,rgba(214,174,62,.14));
+}

@@ -8,14 +8,16 @@ var sel = [];          // selected card ids, in click order
 var actionPending = false;
 var actionSentAt = 0;
 var actionUnlockTimer = null;
-var meldTargetId = null;
 var lastMeldTap = null;
+var meldTapTimer = null;
+var discardConfirmation = null, undoConfirmation = null;
 var selectMatchingOn = false; // a session-only selection aid; never plays cards
 var pileSel = [];      // chosen draw piles, in click order
 var sortMode = 'rank';
 var handLayout = 'spread';   // 'spread' = side by side, 'layered' = overlapped rows
 var opponentMeldStyle = 'cards'; // shared personal display for every player's public melds
 var finishedBookStyle = 'stacked';
+var interactionMode = 'buttons'; // personal preference; never changes the rules
 var meldExpanded = Object.create(null), meldDisplayContext = null;
 var PER_ROW = 6;             // cards per row when layered
 var notice = '', noticeBad = false;
@@ -24,7 +26,8 @@ var nudgeOn = true;      // announce the turn coming round to you
 var handSignature = null, handStructureSignature = null, mineSignature = null, expandedSeat = null;
 var connectionLastSeen = 0;
 var chatMessages = [], chatUnread = 0, chatRoom = null, chatPending = null;
-var rulesMode = 'rules', rulesReturnFocus = null;
+var chatKeyboardShift = false, chatKeyboardNumbers = false;
+var rulesMode = 'rules', rulesReturnFocus = null, rulesEditing = false;
 var rulesConfigRequest = null, rulesConfigTimer = null;
 var rulesConfigFeedback = '', rulesConfigFeedbackBad = false, rulesConfigFeedbackCode = null;
 var rulesFeedbackQueue = null, rulesDraft = null, rulesEditorBase = null, rulesEditorCode = null, rulesEditorPresetBase = null;
@@ -59,44 +62,44 @@ var THEMES = [
   {
     "id": "room",
     "name": "Card room",
-    "hi": "#1a352a",
-    "mid": "#284d3c",
-    "lo": "#10251e"
+    "hi": "#28584d",
+    "mid": "#506571",
+    "lo": "#12362b"
   },
   {
     "id": "midnight",
     "name": "Midnight",
-    "hi": "#1e3045",
-    "mid": "#2a415b",
-    "lo": "#121e2c"
+    "hi": "#314e6a",
+    "mid": "#525366",
+    "lo": "#1c2d43"
   },
   {
     "id": "claret",
     "name": "Claret",
-    "hi": "#3c2935",
-    "mid": "#503442",
-    "lo": "#291d25"
+    "hi": "#65424f",
+    "mid": "#505666",
+    "lo": "#34212c"
   },
   {
     "id": "graphite",
     "name": "Graphite",
-    "hi": "#303539",
-    "mid": "#3c454b",
-    "lo": "#232629"
+    "hi": "#46545c",
+    "mid": "#55534e",
+    "lo": "#252e35"
   },
   {
     "id": "mahogany",
     "name": "Mahogany",
-    "hi": "#3e3127",
-    "mid": "#52402e",
-    "lo": "#2a231d"
+    "hi": "#654b3b",
+    "mid": "#47574f",
+    "lo": "#33261f"
   },
   {
     "id": "ivory",
     "name": "Ivory",
-    "hi": "#fffdf7",
-    "mid": "#dde6d8",
-    "lo": "#f3f1e9"
+    "hi": "#fcfbf5",
+    "mid": "#cedbd6",
+    "lo": "#eee8da"
   }
 ];
 var cardStyle = 'classic';
@@ -120,6 +123,7 @@ function applyLook() {
   var el = document.documentElement;
   el.setAttribute('data-cards', cardStyle);
   el.setAttribute('data-theme', theme);
+  el.setAttribute('data-interactions', interactionMode);
   var meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
     meta.setAttribute('content',
@@ -133,6 +137,7 @@ function loadLook() {
   theme = t && has(THEMES, t) ? t : 'room';
   opponentMeldStyle = (get('hf_meld_style') || get('hf_opponent_melds')) === 'tiles' ? 'tiles' : 'cards';
   finishedBookStyle = get('hf_finished_books') === 'spread' ? 'spread' : 'stacked';
+  interactionMode = get('hf_interactions') === 'tap' ? 'tap' : 'buttons';
   applyLook();
 }
 loadLook();
@@ -152,7 +157,9 @@ function say(msg, bad) { notice = msg || ''; noticeBad = !!bad; render(); }
 /* ---------------- connection ---------------- */
 
 function connect() {
+  closeDrawPicker(false, false);
   resetCardMotion();
+  cancelMeldTap(); closeDiscardConfirmation(false); closeUndoDialog(false);
   autoDrawStateFresh = false;
   cancelAutoDraw();
   var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -176,6 +183,7 @@ function connect() {
     }
     if (msg.t === 'state') {
       var first = !view;
+      updateServerClock(msg.view);
       var motion = prepareCardMotion(msg.view);
       view = msg.view;
       acknowledgeRulesConfig();
@@ -254,11 +262,14 @@ function connect() {
   };
 
   ws.onclose = function () {
+    closeDrawPicker(false, false);
     resetCardMotion();
+    cancelMeldTap(); closeDiscardConfirmation(false); closeUndoDialog(false);
     if (closedByUs) return;
     autoDrawStateFresh = false; cancelAutoDraw();
     if (rulesConfigRequest) finishRulesConfig(false, 'Connection lost. Your edits are still here; reconnect before saving.');
     clearTimeout(actionUnlockTimer); actionPending = false;
+    renderDealChoice();
     $('connBar').hidden = false;
     $('connBar').textContent = 'Reconnecting…';
     if (chatPending !== null) {
@@ -292,7 +303,8 @@ function send(obj) {
 
 function syncActionPending() {
   if (!actionPending) return;
-  ['actionBar', 'myMelds', 'peekBody'].forEach(function (id) {
+  if ($('tableUndo')) $('tableUndo').disabled = true;
+  ['actionBar', 'playButtons', 'myMelds', 'centerRow', 'peekBody', 'drawPickerPiles', 'drawPickerActions', 'dealChoiceDialog'].forEach(function (id) {
     var area = $(id);
     if (area) area.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
   });
@@ -307,6 +319,7 @@ function acknowledgeAction() {
     actionPending = false; actionUnlockTimer = null;
     if (view) {
       renderCenter(); renderMine(); renderActions();
+      renderDealChoice();
       if (!$('peekSheet').hidden) showPeek();
       scheduleBoardSize();
       maybeAutoDraw();
@@ -314,13 +327,18 @@ function acknowledgeAction() {
   }, remaining);
 }
 
-function act(action, extra) {
-  if (actionPending) return false;
-  lastMeldTap = null;
+function act(action, extra, origin) {
+  if (actionPending || drawRevealActive()) return false;
+  if (view && view.phase === 'choosing' && action !== 'chooseHand') return false;
+  if (roundCountdownRemaining() > 0 && action !== 'configureRules') return false;
+  cancelMeldTap();
+  closeDiscardConfirmation(false); closeUndoDialog(false);
   var msg = { t: 'action', action: action, turnId: view && view.turnId };
   if (extra) for (var k in extra) msg[k] = extra[k];
   actionPending = true; actionSentAt = Date.now();
+  clearAutomaticDrawOrigin();
   if (!send(msg)) { actionPending = false; return false; }
+  if (action === 'draw' && origin === 'auto') rememberAutomaticDrawOrigin(extra && extra.piles);
   notice = ''; noticeBad = false;
   syncActionPending();
   return true;
@@ -335,6 +353,20 @@ function lobbyError(m) {
 
 function showTable() { $('lobby').hidden = true; $('table').hidden = false; }
 function showLobby() { $('table').hidden = true; $('lobby').hidden = false; }
+
+function syncWaitingTableBack() {
+  var button = $('waitingBackBtn');
+  if (!button) return;
+  button.hidden = !view || view.phase !== 'lobby';
+  var table = view && view.code;
+  button.onclick = function () {
+    if (!view || view.phase !== 'lobby' || view.code !== table) return false;
+    var leave = $('leaveBtn');
+    if (!leave || typeof leave.onclick !== 'function') return false;
+    leave.onclick();
+    return true;
+  };
+}
 
 function wire() {
   $('createBtn').onclick = function () {
@@ -357,8 +389,17 @@ function wire() {
     if (rulesReturnFocus && rulesReturnFocus.isConnected) rulesReturnFocus.focus({ preventScroll: true });
   };
   $('closePeek').onclick = function () { $('peekSheet').hidden = true; };
+  $('keepDiscardCard').onclick = function () { closeDiscardConfirmation(true); };
+  $('discardConfirmSheet').onclick = function (event) {
+    if (event.target === $('discardConfirmSheet')) closeDiscardConfirmation(true);
+  };
+  $('confirmDiscard').onclick = confirmDiscard;
+  document.addEventListener('keydown', handleDiscardConfirmationKey, true);
   $('leaveBtn').onclick = function () {
+    closeDealChoice(false);
+    closeDrawPicker(false, false); drawPickerShownContext = null;
     resetCardMotion();
+    cancelMeldTap(); closeDiscardConfirmation(false); closeUndoDialog(false);
     // WebSocket ordering delivers departure before its close frame.
     if (view) send({ t: 'leave' });
     closeSortPopover(false);
@@ -366,9 +407,10 @@ function wire() {
     autoDrawObservedBase = null; autoDrawObservedDiscard = null;
     autoDrawTurnContext = null; autoDrawAttemptedContext = null;
     del('hf_code'); myCode = null; view = null; lastTurn = null;
+    renderRoundCountdown();
     clearTimeout(rulesConfigTimer); rulesConfigTimer = null; rulesConfigRequest = null;
     sel = []; pileSel = []; notice = ''; noticeBad = false;
-    clearTimeout(actionUnlockTimer); actionPending = false; meldTargetId = null; lastMeldTap = null;
+    clearTimeout(actionUnlockTimer); actionPending = false; lastMeldTap = null;
     handSignature = null; handStructureSignature = null; mineSignature = null; expandedSeat = null;
     rulesDraft = null; rulesEditorBase = null; rulesEditorCode = null; rulesFeedbackQueue = null;
     chatMessages = []; chatUnread = 0; chatRoom = null; chatPending = null;
@@ -382,8 +424,10 @@ function wire() {
     renderChat(true);
     showLobby();
     syncTitle();
-    if (window.HFMenu && window.HFMenu.showHome) window.HFMenu.showHome();
-    var focus = $('lobby').querySelector('button:not([hidden]), summary');
+    var hasMenu = window.HFMenu && window.HFMenu.showHome;
+    if (hasMenu) window.HFMenu.showHome();
+    syncWaitingTableBack();
+    var focus = (hasMenu && $('homePlay')) || $('lobby').querySelector('button:not([hidden]), summary');
     if (focus) focus.focus({ preventScroll: true });
     clearTimeout(retryTimer); retryTimer = null; retry = 0;
     if (ws) {
@@ -405,7 +449,7 @@ function wire() {
   document.addEventListener('pointercancel', cancelDismissPointer, true);
   document.addEventListener('keydown', handleSortPopoverKey, true);
   document.addEventListener('pointerdown', function (event) {
-    if (!event.target.closest('#myMelds .meld.target')) lastMeldTap = null;
+    if (!event.target.closest('.meld')) cancelMeldTap();
   }, true);
   handLayout = get('hf_layout') === 'layered' ? 'layered' : 'spread';
   syncLayoutBtn();
@@ -418,8 +462,10 @@ function wire() {
   syncSelectMatching();
   $('selectMatching').onclick = toggleMatchingSelection;
   $('clearSel').onclick = function () { sel = []; notice = ''; noticeBad = false; render(); };
+  if ($('tableUndo')) $('tableUndo').onclick = undoTableTurn;
   wireChat();
   wireAutoDraw();
+  wireDrawPicker();
   document.addEventListener('click', function (ev) {
     if (expandedSeat !== null && !ev.target.closest('#opponentDetail, .seat-expand')) {
       ev.preventDefault(); ev.stopImmediatePropagation(); closeOpponentDetail();
@@ -456,13 +502,46 @@ function wireChat() {
   $('chatBtn').onclick = function () {
     closeSortPopover(false);
     closeAutoDrawPopover(false, false);
+    hideChatKeyboard(false);
     $('chatSheet').hidden = false; chatUnread = 0; renderChat(true);
-    $('chatInput').focus({ preventScroll: true });
+    // Opening the conversation must never summon an on-screen keyboard.
+    $('closeChat').focus({ preventScroll: true });
   };
   $('closeChat').onclick = function () {
+    hideChatKeyboard(false);
     $('chatSheet').hidden = true;
     $('chatBtn').focus({ preventScroll: true });
   };
+  $('chatInput').onclick = function () {
+    if (this.readOnly) showChatKeyboard();
+  };
+  $('chatInput').onkeydown = function (ev) {
+    // A real keyboard can type normally into the otherwise read-only field.
+    // Native mode keeps the browser's editing, composition and dictation.
+    if (!this.readOnly || ev.isComposing) return;
+    if (ev.key === 'Enter') { ev.preventDefault(); $('chatForm').onsubmit(ev); return; }
+    if (ev.key === 'Escape' && !$('chatKeyboard').hidden) {
+      ev.preventDefault(); ev.stopPropagation(); hideChatKeyboard(true); return;
+    }
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (ev.key === 'Backspace' || ev.key === 'Delete') {
+      ev.preventDefault(); editChatDraft('', ev.key === 'Backspace' ? 'backward' : 'forward');
+    } else if (ev.key.length === 1) {
+      ev.preventDefault(); editChatDraft(ev.key);
+    }
+  };
+  $('chatInput').onpaste = function (ev) {
+    if (!this.readOnly || !ev.clipboardData) return;
+    ev.preventDefault(); editChatDraft(ev.clipboardData.getData('text'));
+  };
+  $('hideChatKeyboard').onclick = function () { hideChatKeyboard(true); };
+  $('chatDeviceKeyboard').onclick = function () {
+    hideChatKeyboard(false);
+    $('chatInput').readOnly = false;
+    $('chatInput').setAttribute('inputmode', 'text');
+    $('chatInput').focus({ preventScroll: true });
+  };
+  renderChatKeyboard();
   $('chatForm').onsubmit = function (ev) {
     ev.preventDefault();
     if (chatPending !== null) return;
@@ -479,7 +558,132 @@ function wireChat() {
   };
 }
 
+function showChatKeyboard() {
+  $('chatKeyboard').hidden = false;
+  $('chatSheet').dataset.keyboard = 'open';
+  $('chatInput').setAttribute('aria-expanded', 'true');
+  renderChatKeyboard();
+}
+
+function hideChatKeyboard(restoreFocus) {
+  if ($('chatKeyboard')) $('chatKeyboard').hidden = true;
+  if ($('chatSheet')) $('chatSheet').dataset.keyboard = 'closed';
+  if (!$('chatInput')) return;
+  var wasNative = !$('chatInput').readOnly;
+  $('chatInput').readOnly = true;
+  $('chatInput').setAttribute('inputmode', 'none');
+  $('chatInput').setAttribute('aria-expanded', 'false');
+  // Blurring an explicitly opened device keyboard also dismisses it on close.
+  if (wasNative && document.activeElement === $('chatInput')) $('chatInput').blur();
+  if (restoreFocus) $('chatInput').focus({ preventScroll: true });
+}
+
+/* Keep the browser's selection so app keys, paste and physical keys can edit
+ * inside a draft instead of always appending. Never clear a draft before ACK. */
+function editChatDraft(text, erase) {
+  var input = $('chatInput'), value = input.value;
+  var start = typeof input.selectionStart === 'number' ? input.selectionStart : value.length;
+  var end = typeof input.selectionEnd === 'number' ? input.selectionEnd : start;
+  if (start === end && erase === 'backward' && start > 0) {
+    start -= Array.from(value.slice(0, start)).pop().length;
+  }
+  if (start === end && erase === 'forward' && end < value.length) {
+    end += Array.from(value.slice(end))[0].length;
+  }
+  text = String(text || '').replace(/[\r\n]+/g, ' ');
+  var available = 500 - (value.length - (end - start));
+  // Do not split a pasted emoji at the length limit.
+  var fitted = '';
+  Array.from(text).some(function (character) {
+    if (fitted.length + character.length > available) return true;
+    fitted += character; return false;
+  });
+  input.value = value.slice(0, start) + fitted + value.slice(end);
+  input.setSelectionRange(start + fitted.length, start + fitted.length);
+}
+
+function renderChatKeyboard() {
+  var keys = $('chatKeys');
+  if (!keys) return;
+  keys.innerHTML = '';
+  var rows = chatKeyboardNumbers
+    ? ['1234567890'.split(''), '-/:;()$&@'.split(''), ['?', '!', "'", '"', '#', '%', '+', '=', 'backspace']]
+    : ['qwertyuiop'.split(''), 'asdfghjkl'.split(''), ['shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'backspace']];
+  rows.push(['mode', ',', 'space', '.', 'left', 'right']);
+  rows.forEach(function (rowKeys, rowIndex) {
+    var row = document.createElement('div');
+    row.className = 'chat-key-row chat-key-row-' + rowIndex;
+    rowKeys.forEach(function (key) {
+      var button = document.createElement('button'); button.type = 'button';
+      button.className = 'chat-key'; button.dataset.chatKey = key;
+      var labels = { shift: 'Shift', backspace: 'Delete previous character', mode: chatKeyboardNumbers ? 'Letters' : 'Numbers and symbols', space: 'Space', left: 'Move cursor left', right: 'Move cursor right' };
+      var glyphs = { shift: '⇧', backspace: '⌫', mode: chatKeyboardNumbers ? 'ABC' : '123', space: 'space', left: '‹', right: '›' };
+      button.textContent = glyphs[key] || (chatKeyboardShift && !chatKeyboardNumbers ? key.toUpperCase() : key);
+      button.setAttribute('aria-label', labels[key] || button.textContent);
+      if (key === 'shift') button.setAttribute('aria-pressed', chatKeyboardShift ? 'true' : 'false');
+      if (key === 'space') button.className += ' chat-key-space';
+      if (labels[key]) button.className += ' chat-key-control';
+      // Pointer taps keep the draft's caret; keyboard users can still Tab into keys.
+      button.onpointerdown = function (ev) { ev.preventDefault(); };
+      button.onclick = function () {
+        var input = $('chatInput');
+        if (key === 'shift') { chatKeyboardShift = !chatKeyboardShift; renderChatKeyboard(); }
+        else if (key === 'mode') { chatKeyboardNumbers = !chatKeyboardNumbers; renderChatKeyboard(); }
+        else if (key === 'backspace') editChatDraft('', 'backward');
+        else if (key === 'left' || key === 'right') {
+          var cursor = key === 'left' ? input.selectionStart : input.selectionEnd;
+          if (input.selectionStart === input.selectionEnd) {
+            if (key === 'left' && cursor > 0) cursor -= Array.from(input.value.slice(0, cursor)).pop().length;
+            if (key === 'right' && cursor < input.value.length) cursor += Array.from(input.value.slice(cursor))[0].length;
+          }
+          input.setSelectionRange(cursor, cursor);
+        } else {
+          editChatDraft(key === 'space' ? ' ' : (chatKeyboardShift && !chatKeyboardNumbers ? key.toUpperCase() : key));
+          if (chatKeyboardShift && !chatKeyboardNumbers) { chatKeyboardShift = false; renderChatKeyboard(); }
+        }
+        // Focus only a read-only field, and only after an explicit typing action.
+        input.focus({ preventScroll: true });
+      };
+      row.appendChild(button);
+    });
+    keys.appendChild(row);
+  });
+}
+
+/* Only public seat names and the turn belong in chat. Keep these independent
+ * of message arrivals so the rail also follows a quiet, ongoing game. */
+function renderChatPlayers() {
+  var rail = $('chatPlayers');
+  if (!rail) return;
+  var players = view && Array.isArray(view.seats) ? view.seats : [];
+  var current = view && view.phase === 'playing' ? view.turn : -1;
+  var signature = JSON.stringify([players.map(function (seat) { return [seat.name, seat.seated]; }), current, meSeat()]);
+  if (rail.dataset.signature === signature) return;
+  rail.dataset.signature = signature;
+  rail.innerHTML = '';
+  players.forEach(function (seat, index) {
+    if (seat.seated === false) return;
+    var active = index === current;
+    var pill = document.createElement('li');
+    pill.className = 'chat-player' + (active ? ' current' : '');
+    pill.dataset.seat = String(index);
+    var name = document.createElement('span'); name.className = 'chat-player-name';
+    name.textContent = seat.name;
+    pill.appendChild(name);
+    pill.setAttribute('aria-label', seat.name + (index === meSeat() ? ', you' : '') + (active ? ', current turn' : ''));
+    pill.title = seat.name + (index === meSeat() ? ' (you)' : '');
+    if (active) {
+      pill.setAttribute('aria-current', 'true');
+      var turn = document.createElement('span'); turn.className = 'chat-player-turn';
+      turn.textContent = 'Turn'; pill.appendChild(turn);
+    }
+    rail.appendChild(pill);
+  });
+  rail.hidden = !rail.children.length;
+}
+
 function renderChat(forceBottom) {
+  renderChatPlayers();
   var list = $('chatMessages');
   if (!list) return;
   var nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
@@ -545,7 +749,8 @@ function toggleMatchingSelection() {
 }
 
 function toggleHandCard(card) {
-  meldTargetId = null; lastMeldTap = null;
+  if (roundCountdownRemaining() > 0) return false;
+  lastMeldTap = null;
   if (myHand().indexOf(card) === -1) return;
   var matches = selectMatchingOn
     ? myHand().filter(function (held) { return E.rankOf(held) === E.rankOf(card); })
@@ -821,7 +1026,7 @@ function autoDrawPlan() {
   if (autoDrawMode === 'off' || !view || !isMyTurn() || view.turnPhase !== 'draw') return null;
   if (!autoDrawStateFresh || !ws || ws.readyState !== 1 || actionPending || autoDrawUiBlocked()) return null;
   if (autoDrawAttemptedContext === autoDrawTurnContext) return null;
-  if (pileChance()) return { ok: false, reason: 'You can take the discard pile. Choose your draw manually.' };
+  if (pileChance()) return { ok: false, reason: 'Discard pile available. Tap it to take cards, or draw from the stocks.' };
   return chooseAutoDrawPiles(view.stocks, autoDrawMode, autoDrawPiles);
 }
 
@@ -834,6 +1039,7 @@ function reportAutoDrawPause(reason) {
 
 function maybeAutoDraw() {
   syncAutoDrawTurn();
+  syncDrawPicker();
   var plan = autoDrawPlan();
   if (!plan) { cancelAutoDraw(); return; }
   if (!plan.ok) { cancelAutoDraw(); reportAutoDrawPause(plan.reason); return; }
@@ -849,7 +1055,7 @@ function runAutoDraw() {
   // Record before sending: even a refused move or connection loss is one
   // attempt for this turn, not permission to retry in a state-update loop.
   autoDrawAttemptedContext = autoDrawTurnContext;
-  if (!act('draw', { piles: plan.piles.slice() })) {
+  if (!act('draw', { piles: plan.piles.slice() }, 'auto')) {
     reportAutoDrawPause('The draw was not sent. Draw manually when connected.');
     return false;
   }
@@ -859,6 +1065,8 @@ function runAutoDraw() {
 }
 
 function stopAutoDrawForTurn() {
+  if (newMeldFocusRequest) newMeldFocusRequest.rejected = true;
+  clearAutomaticDrawOrigin();
   cancelAutoDraw(); syncAutoDrawTurn();
   if (autoDrawMode !== 'off' && isMyTurn() && view.turnPhase === 'draw') {
     autoDrawAttemptedContext = autoDrawTurnContext;
@@ -890,6 +1098,7 @@ function syncAutoDrawControls() {
   $('closeAutoDraw').disabled = autoDrawDraftMode === 'chosen' && !validAutoDrawPiles(autoDrawDraftPiles);
   $('autoDrawStatus').textContent = singleStock ? (autoDrawStatus || 'Both cards come from the one stock.') : autoDrawDraftMode === 'chosen' && !validAutoDrawPiles(autoDrawDraftPiles)
     ? 'Choose two different piles, then Done.' : autoDrawStatus || 'Highest and lowest use cards remaining. Chosen empty piles pause for a manual draw.';
+  syncDiscardPickupCue();
 }
 
 function toggleAutoDrawPopover() {
@@ -987,18 +1196,200 @@ function wireAutoDraw() {
 function meSeat() { return view && view.you ? view.you.seat : -1; }
 function myHand() { return view && view.you ? view.you.hand : []; }
 
-/* Cards that came into the hand this turn, in the order they arrived. The
- * server only sends these to the seat holding them. */
+/* Cards that came into the hand this turn, displayed from low to high. The
+ * server's private pickup order stays intact for stock provenance. */
 function justPicked() {
   if (!view || !view.you || !view.you.picked) return [];
   var hand = myHand();
-  return view.you.picked.filter(function (c) { return hand.indexOf(c) !== -1; });
+  return sortArrivalCards(view.you.picked.filter(function (c) { return hand.indexOf(c) !== -1; }));
 }
 function myMelds() {
   var s = meSeat();
   return s >= 0 && view.seats[s] ? view.seats[s].melds : [];
 }
-function isMyTurn() { return view && view.phase === 'playing' && view.turn === meSeat(); }
+function isMyTurn() { return view && view.phase === 'playing' && view.turn === meSeat() && roundCountdownRemaining() === 0; }
+
+var serverClockOffset = 0, roundCountdownTimer = null;
+function updateServerClock(state) {
+  serverClockOffset = state && Number.isFinite(state.serverNow) ? state.serverNow - Date.now() : 0;
+}
+function roundCountdownRemaining() {
+  return view && view.phase === 'playing' && Number.isFinite(view.roundBeginsAt)
+    ? Math.max(0, view.roundBeginsAt - (Date.now() + serverClockOffset)) : 0;
+}
+function renderRoundCountdown() {
+  clearTimeout(roundCountdownTimer); roundCountdownTimer = null;
+  var shelf = $('myMelds'), overlay = $('roundCountdown'), remaining = roundCountdownRemaining();
+  if (!shelf) return;
+  shelf.dataset.countdown = remaining > 0 ? 'true' : 'false';
+  if (!remaining) {
+    if (overlay && shelf.contains(overlay)) shelf.removeChild(overlay);
+    return;
+  }
+  if (!overlay || !shelf.contains(overlay)) {
+    overlay = document.createElement('div'); overlay.id = 'roundCountdown'; overlay.className = 'round-countdown';
+    overlay.setAttribute('role', 'status'); overlay.setAttribute('aria-live', 'polite'); overlay.setAttribute('aria-atomic', 'true');
+    var label = document.createElement('span'); label.className = 'round-countdown-label'; label.textContent = 'Game begins';
+    var number = document.createElement('span'); number.className = 'round-countdown-number';
+    overlay.appendChild(label); overlay.appendChild(number); shelf.appendChild(overlay);
+  }
+  var seconds = Math.ceil(remaining / 1000);
+  if (overlay.dataset.seconds !== String(seconds)) {
+    overlay.dataset.seconds = String(seconds); overlay.querySelector('.round-countdown-number').textContent = String(seconds);
+  }
+  var stamp = JSON.stringify([view.code, view.round, view.roundBeginsAt, meSeat()]);
+  roundCountdownTimer = setTimeout(function () {
+    roundCountdownTimer = null;
+    if (!view || stamp !== JSON.stringify([view.code, view.round, view.roundBeginsAt, meSeat()])) return;
+    if (roundCountdownRemaining() > 0) renderRoundCountdown();
+    else render();
+  }, Math.max(1, remaining - (seconds - 1) * 1000));
+}
+
+/* The server explicitly gates a new deal. A resumed ordinary hand never
+ * acquires a choice screen merely because the client has not seen its round. */
+var dealChoice = null;
+function dealChoiceKey() {
+  return view && view.phase === 'choosing' && view.handChoice && view.you
+    ? JSON.stringify([view.code, view.round, view.turnId, view.you.seat]) : null;
+}
+function rememberDealChoice(key) {
+  var seen;
+  try { seen = JSON.parse(get('hf_seen_deals') || '[]'); } catch (e) { seen = []; }
+  if (!Array.isArray(seen)) seen = [];
+  var fresh = seen.indexOf(key) === -1;
+  if (fresh) { seen.push(key); set('hf_seen_deals', JSON.stringify(seen.slice(-24))); }
+  return fresh;
+}
+function closeDealChoice(restoreFocus) {
+  var active = dealChoice;
+  if (!active) return;
+  dealChoice = null; clearTimeout(active.timer);
+  if (active.dialog.open && typeof active.dialog.close === 'function') active.dialog.close();
+  if (active.dialog.parentNode) active.dialog.parentNode.removeChild(active.dialog);
+  active.inertNodes.forEach(function (record) { record.node.inert = record.inert; });
+  if (restoreFocus !== false) {
+    var focus = active.focus, visible = focus && focus.isConnected && !focus.disabled;
+    for (var parent = focus; visible && parent; parent = parent.parentNode) if (parent.hidden) visible = false;
+    if (!visible) focus = $('myHand') && $('myHand').querySelector('button') || $('sortBtn');
+    if (focus && typeof focus.focus === 'function') focus.focus({ preventScroll: true });
+  }
+}
+function submitDealFoot(key) {
+  var active = dealChoice, choice = view && view.handChoice;
+  if (!active || active.key !== key || dealChoiceKey() !== key || !choice.pending || actionPending || !ws || ws.readyState !== 1) return false;
+  if (choice.canSwap && active.selectedFoot !== 0 && active.selectedFoot !== 1) return false;
+  var handPile = choice.canSwap ? 1 - active.selectedFoot : 0;
+  var sent = act('chooseHand', { pile: handPile, seat: view.you.seat });
+  renderDealChoice();
+  return sent;
+}
+function pickDealFoot(pile, key) {
+  var active = dealChoice, choice = view && view.handChoice;
+  if (!active || active.key !== key || dealChoiceKey() !== key || !choice.pending || !choice.canSwap ||
+      actionPending || !ws || ws.readyState !== 1 || (pile !== 0 && pile !== 1)) return false;
+  active.selectedFoot = pile;
+  if (interactionMode === 'tap') return submitDealFoot(key);
+  renderDealChoice(); return true;
+}
+function renderDealChoice() {
+  var key = dealChoiceKey();
+  if (!key) { closeDealChoice(); return; }
+  var choice = view.handChoice, active = dealChoice, created = !active || active.key !== key;
+  if (created) {
+    var priorFocus = active ? active.focus : document.activeElement;
+    closeDealChoice(false); closeDrawReveal(); closeDrawPicker(false, false);
+    closeSortPopover(false); closeAutoDrawPopover(false, false); closeDiscardConfirmation(false); closeUndoDialog(false); closeOpponentDetail();
+    ['scoreSheet', 'rulesSheet', 'peekSheet', 'chatSheet'].forEach(function (id) { if ($(id)) $(id).hidden = true; });
+    var dialog = document.createElement('dialog'); dialog.id = 'dealChoiceDialog'; dialog.className = 'deal-choice';
+    dialog.setAttribute('aria-labelledby', 'dealChoiceTitle'); dialog.setAttribute('aria-describedby', 'dealChoiceSummary');
+    function part(parent, tag, className, id) {
+      var node = document.createElement(tag); node.className = className;
+      if (id) node.id = id;
+      parent.appendChild(node); return node;
+    }
+    var panel = part(dialog, 'div', 'deal-choice-panel');
+    var title = part(panel, 'h2', '', 'dealChoiceTitle'); title.tabIndex = -1;
+    var summary = part(panel, 'p', 'deal-choice-summary', 'dealChoiceSummary');
+    var stage = part(panel, 'div', 'deal-choice-stage');
+    var deck = part(stage, 'div', 'deal-choice-deck'); deck.setAttribute('aria-hidden', 'true');
+    for (var d = 0; d < 3; d++) {
+      var back = part(deck, 'span', 'deal-choice-card'); back.style.setProperty('--stack-index', d);
+    }
+    var piles = part(stage, 'div', 'deal-choice-piles');
+    var dealScale = Math.min(1, 21 / Math.max(1, Math.max.apply(null, choice.pileSizes) * 2 - 1));
+    active = { key: key, dialog: dialog, title: title, summary: summary, piles: [], selectedFoot: null,
+      mode: interactionMode, focus: priorFocus, timer: null, inertNodes: [], pending: choice.pending };
+    choice.pileSizes.forEach(function (count, index) {
+      var pile = part(piles, 'button', 'deal-choice-pile'); pile.type = 'button'; pile.dataset.pile = String(index);
+      pile.style.setProperty('--pile-index', index);
+      var stack = part(pile, 'span', 'deal-choice-stack'); stack.setAttribute('aria-hidden', 'true');
+      for (var i = 0; i < count; i++) {
+        var face = part(stack, 'span', 'deal-choice-card');
+        face.style.setProperty('--deal-index', (i * 2 + index) * dealScale); face.style.setProperty('--stack-index', i); face.style.setProperty('--pile-index', index);
+      }
+      var label = part(pile, 'span', 'deal-choice-pile-label');
+      var quantity = part(pile, 'span', 'deal-choice-pile-count'); quantity.textContent = count + ' cards';
+      pile.onclick = function () { if (pile.disabled) return false; return pickDealFoot(index, key); };
+      active.piles.push({ button: pile, label: label, count: count });
+    });
+    active.status = part(panel, 'p', 'deal-choice-status', 'dealChoiceStatus'); active.status.setAttribute('role', 'status');
+    active.confirm = part(panel, 'button', 'btn', 'confirmFootChoice'); active.confirm.type = 'button';
+    active.confirm.onclick = function () { if (active.confirm.disabled || active.confirm.hidden) return false; return submitDealFoot(key); };
+    dialog.oncancel = function (event) { event.preventDefault(); };
+    dialog.onkeydown = function (event) {
+      if (event.key !== 'Tab') return;
+      var controls = active.piles.map(function (pile) { return pile.button; }).concat(active.confirm)
+        .filter(function (control) { return !control.disabled && !control.hidden; });
+      event.preventDefault();
+      if (!controls.length) { active.title.focus({ preventScroll: true }); return; }
+      var at = controls.indexOf(document.activeElement), next = event.shiftKey ? (at <= 0 ? controls.length - 1 : at - 1) : (at + 1) % controls.length;
+      controls[next].focus({ preventScroll: true });
+    };
+    dealChoice = active; document.body.appendChild(dialog);
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else {
+      dialog.setAttribute('open', ''); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+      Array.prototype.forEach.call(document.body.children, function (node) {
+        if (node !== dialog) { active.inertNodes.push({ node: node, inert: node.inert }); node.inert = true; }
+      });
+    }
+    var fresh = rememberDealChoice(key);
+    if (choice.pending && fresh && cardMotionOn && !document.hidden &&
+        !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+      dialog.classList.add('is-dealing');
+      active.timer = setTimeout(function () { if (dealChoice === active) active.dialog.classList.remove('is-dealing'); }, 2200);
+    }
+  }
+  if (active.mode !== interactionMode) { active.mode = interactionMode; active.selectedFoot = null; }
+  var connected = !!(ws && ws.readyState === 1), pending = !!choice.pending;
+  var chosenFoot = pending ? (choice.canSwap ? active.selectedFoot : 1) : 1 - choice.chosenPile;
+  active.dialog.dataset.state = pending ? 'pending' : 'waiting'; active.dialog.dataset.interactions = interactionMode;
+  active.title.textContent = pending ? (choice.canSwap ? 'Choose your foot' : 'Your hand and foot') : 'Foot selected';
+  var seatName = view.solo && view.seats[view.you.seat] ? view.seats[view.you.seat].name + ': ' : '';
+  active.summary.textContent = seatName + (pending ? choice.canSwap
+    ? interactionMode === 'buttons' ? 'Choose a face-down pile for your foot, then select it. The other pile is your hand.'
+      : 'Tap a face-down pile to keep as your foot. The other pile is your hand.'
+    : 'This table uses different hand and foot sizes. Your piles are assigned below.'
+    : 'Your hand is ready. Play begins when everyone has chosen.');
+  active.piles.forEach(function (pile, index) {
+    var foot = chosenFoot === index, assigned = !pending || !choice.canSwap;
+    pile.button.disabled = !pending || !choice.canSwap || actionPending || !connected;
+    pile.button.classList.toggle('is-selected', pending && choice.canSwap && foot);
+    pile.button.classList.toggle('is-foot', assigned && foot); pile.button.classList.toggle('is-hand', assigned && !foot);
+    pile.button.setAttribute('aria-pressed', foot ? 'true' : 'false');
+    pile.label.textContent = assigned ? foot ? 'Foot' : 'Hand' : foot ? 'Your foot' : 'Pile ' + (index + 1);
+    pile.button.setAttribute('aria-label', (assigned ? pile.label.textContent : 'Choose pile ' + (index + 1) + ' as your foot') + ', ' + pile.count + ' cards');
+  });
+  active.confirm.hidden = !pending || (choice.canSwap && interactionMode === 'tap');
+  active.confirm.textContent = choice.canSwap ? 'Select foot' : 'Continue';
+  active.confirm.disabled = actionPending || !connected || (choice.canSwap && active.selectedFoot === null);
+  active.status.textContent = !connected ? 'Reconnecting… Your choice will remain available.' : actionPending ? 'Saving your choice…' : noticeBad ? notice :
+    !pending ? 'Waiting for ' + choice.remaining + ' player' + (choice.remaining === 1 ? '' : 's') + '.' : '';
+  if (created) active.title.focus({ preventScroll: true });
+  else if (active.pending && !pending) active.title.focus({ preventScroll: true });
+  active.pending = pending;
+}
 
 function selRank() {
   var nat = sel.filter(function (c) { return !E.isWild(c); });
@@ -1098,21 +1489,67 @@ var cardMotionOn = get('hf_card_motion') !== 'off';
 document.documentElement.setAttribute('data-card-motion', cardMotionOn ? 'on' : 'off');
 var motionHasState = false, motionLogId = 0, motionGeneration = 0;
 var motionFrame = null, motionFlights = [], motionLayer = null;
+var drawReveal = null;
+var DRAW_REVEAL_HOLD_MS = 1500;
+var automaticDrawOrigin = null;
+
+function clearAutomaticDrawOrigin() { automaticDrawOrigin = null; }
+function drawOriginContext(state) {
+  return state && state.phase === 'playing' && state.you
+    ? [state.code, state.round, state.you.seat, state.turn, state.turnId].join(':') : null;
+}
+function rememberAutomaticDrawOrigin(piles) {
+  // A preference being enabled is not proof that this draw was automatic.
+  // Only the successful runAutoDraw request records this one-use receipt.
+  if (!view || !view.you || view.turn !== view.you.seat || view.turnPhase !== 'draw' || !Array.isArray(piles)) return;
+  automaticDrawOrigin = { context: drawOriginContext(view), piles: piles.slice(),
+    logId: latestMotionLogId(view), sentAt: Date.now(), hand: (view.you.hand || []).slice() };
+}
+function consumeAutomaticDrawOrigin(before, after, seenId) {
+  var request = automaticDrawOrigin;
+  if (!request) return false;
+  var elapsed = Date.now() - request.sentAt;
+  var sameContext = drawOriginContext(before) === request.context && drawOriginContext(after) === request.context;
+  if (!sameContext || elapsed < 0 || elapsed > 45000 || !before.you || before.turnPhase !== 'draw') {
+    clearAutomaticDrawOrigin(); return false;
+  }
+  var event = acceptedOwnMotionEvent(before, after, seenId);
+  if (!event) {
+    // Presence/rule snapshots while a request is in flight do not acknowledge
+    // it. Any actual phase/hand change or unseen action does retire it.
+    var unchangedHand = (after.you.hand || []).length === request.hand.length &&
+      request.hand.every(function (card) { return after.you.hand.indexOf(card) !== -1; });
+    var actionSeen = (after.log || []).some(function (entry) {
+      return entry.id > request.logId && ['draw', 'pile', 'meld', 'discard'].indexOf(entry.t) !== -1;
+    });
+    if (after.turnPhase !== 'draw' || !unchangedHand || actionSeen) clearAutomaticDrawOrigin();
+    return false;
+  }
+  clearAutomaticDrawOrigin();
+  return event.t === 'draw' && event.id > request.logId && after.turnPhase === 'play' &&
+    Array.isArray(event.piles) && event.piles.length > 0 && event.piles.length <= request.piles.length &&
+    event.piles.every(function (pile, index) { return pile === request.piles[index] + 1; });
+}
 
 /* Motion planner: pure snapshot data; also exercised by motion.test.js. */
 function latestMotionLogId(state) {
   return (state && state.log || []).reduce(function (id, entry) { return Math.max(id, Number(entry.id) || 0); }, 0);
 }
-function planCardMotion(before, after, seenId) {
+function acceptedOwnMotionEvent(before, after, seenId) {
   if (!before || !after || before.phase !== 'playing' || after.phase !== 'playing' ||
       before.code !== after.code || before.round !== after.round || !before.you || !after.you ||
-      before.you.seat !== after.you.seat) return [];
+      before.you.seat !== after.you.seat) return null;
   var events = (after.log || []).filter(function (entry) { return entry.id > seenId; });
   var actions = events.filter(function (entry) { return ['draw', 'discard', 'meld', 'pile'].indexOf(entry.t) !== -1; });
   // Resume/catch-up and undone history must not look like a new physical play.
-  if (actions.length !== 1 || (seenId > 0 && events.length && events[0].id > seenId + 1)) return [];
-  var event = actions[0], seat = after.you.seat;
-  if (event.seat !== seat) return [];
+  if (actions.length !== 1 || (seenId > 0 && events.length && events[0].id > seenId + 1)) return null;
+  return actions[0].seat === after.you.seat ? actions[0] : null;
+}
+function planCardMotion(before, after, seenId) {
+  var event = acceptedOwnMotionEvent(before, after, seenId);
+  if (!event) return [];
+  var seat = after.you.seat;
+  var events = (after.log || []).filter(function (entry) { return entry.id > seenId; });
   var oldHand = before.you.hand || [], newHand = after.you.hand || [];
   var added = newHand.filter(function (card) { return oldHand.indexOf(card) === -1; });
   var removed = oldHand.filter(function (card) { return newHand.indexOf(card) === -1; });
@@ -1156,9 +1593,28 @@ function planCardMotion(before, after, seenId) {
   // A large custom pickup should never cover the table with twenty clones.
   return moves.slice(0, 8);
 }
+/* The reveal uses only cards newly received by this seat. Red-three replacement
+ * may obscure the exact source, but the resulting private hand is authoritative:
+ * show those real arrivals without inventing a route from a particular stock. */
+function planDrawReveal(before, after, seenId) {
+  var event = acceptedOwnMotionEvent(before, after, seenId);
+  if (!event || event.t !== 'draw' || before.you.inFoot !== after.you.inFoot) return null;
+  var oldHand = before.you.hand || [], newHand = after.you.hand || [];
+  var added = newHand.filter(function (card) { return oldHand.indexOf(card) === -1; });
+  var cards = (after.you.picked || []).filter(function (card) { return added.indexOf(card) !== -1; });
+  if (oldHand.some(function (card) { return newHand.indexOf(card) === -1; }) ||
+      cards.length < 1 || cards.length > 2 || cards.length !== event.n || cards.length !== added.length ||
+      new Set(cards).size !== cards.length) return null;
+  var routes = planCardMotion(before, after, seenId);
+  return { cards: cards, piles: cards.map(function (card) {
+    var route = routes.find(function (move) { return move.card === card && move.from.zone === 'stock'; });
+    return route ? route.from.pile : null;
+  }) };
+}
 /* End motion planner. */
 
 function cancelCardMotion() {
+  closeDrawReveal();
   motionGeneration++;
   if (motionFrame !== null && window.cancelAnimationFrame) window.cancelAnimationFrame(motionFrame);
   motionFrame = null;
@@ -1167,7 +1623,7 @@ function cancelCardMotion() {
   if (motionLayer && motionLayer.parentNode) motionLayer.parentNode.removeChild(motionLayer);
   motionLayer = null;
 }
-function resetCardMotion() { cancelCardMotion(); motionHasState = false; motionLogId = 0; }
+function resetCardMotion() { newMeldFocusRequest = null; clearAutomaticDrawOrigin(); cancelCardMotion(); clearArrivalFeedback(); motionHasState = false; motionLogId = 0; }
 function canAnimateCards() {
   return cardMotionOn && !document.hidden && window.requestAnimationFrame &&
     !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) &&
@@ -1178,8 +1634,12 @@ function motionCardIn(area, card) {
 }
 function motionElement(location, card) {
   if (location.zone === 'hand') return motionCardIn($('myHand'), card);
-  if (location.zone === 'stock') return $('drawPile' + location.pile) && $('drawPile' + location.pile).querySelector('.card');
-  if (location.zone === 'discard') return $('discardPreview') && $('discardPreview').querySelector('.card');
+  if (location.zone === 'stock' || location.zone === 'discard') {
+    var pickerOpen = $('drawPickerSheet') && !$('drawPickerSheet').hidden;
+    var source = pickerOpen ? $(location.zone === 'stock' ? 'drawPickerPile' + location.pile : 'drawPickerDiscard') : null;
+    if (!source) source = $(location.zone === 'stock' ? 'drawPile' + location.pile : 'discardPreview');
+    return source && source.querySelector('.card');
+  }
   if (location.zone === 'meld') {
     var box = Array.prototype.find.call($('myMelds').querySelectorAll('[data-meld-id]'), function (node) { return node.dataset.meldId === String(location.meld); });
     return motionCardIn(box, card) || (box && box.querySelector('.card')) || box;
@@ -1199,15 +1659,27 @@ function motionRect(element) {
 }
 function prepareCardMotion(next) {
   cancelCardMotion();
-  var planned = motionHasState && canAnimateCards() ? planCardMotion(view, next, motionLogId) : [];
+  var automatic = consumeAutomaticDrawOrigin(view, next, motionLogId);
+  var arrivals = motionHasState && !document.hidden ? planDrawReveal(view, next, motionLogId) : null;
+  var reveal = automatic ? arrivals : null;
+  var planned = motionHasState && canAnimateCards() && !reveal ? planCardMotion(view, next, motionLogId) : [];
   motionHasState = true;
   var newContext = !view || view.code !== next.code || view.round !== next.round ||
     !view.you || !next.you || view.you.seat !== next.you.seat;
+  if (newContext) clearArrivalFeedback();
   motionLogId = newContext ? latestMotionLogId(next) : Math.max(motionLogId, latestMotionLogId(next));
-  return planned.map(function (move) {
+  var prepared = planned.map(function (move) {
     var source = motionElement(move.from, move.card), bounds = motionRect(source);
     return bounds ? { move: move, source: bounds, face: move.from.zone === 'hand' ? motionClone(source) : null } : null;
   }).filter(Boolean);
+  prepared.arrivalCards = arrivals ? arrivals.cards.slice() : [];
+  if (reveal) {
+    reveal.sources = reveal.piles.map(function (pile) {
+      return pile === null ? null : motionRect(motionElement({ zone: 'stock', pile: pile }));
+    });
+    prepared.drawReveal = reveal;
+  }
+  return prepared;
 }
 function motionClone(source) {
   var clone = source.cloneNode(true);
@@ -1227,7 +1699,11 @@ function motionClone(source) {
   return clone;
 }
 function playCardMotion(prepared) {
-  if (!prepared.length || !canAnimateCards()) return;
+  if (prepared.drawReveal) { showDrawReveal(prepared.drawReveal); return; }
+  if (!prepared.length || !canAnimateCards()) { showArrivalFeedback(prepared.arrivalCards || []); return; }
+  showArrivalFeedback((prepared.arrivalCards || []).filter(function (card) {
+    return !prepared.some(function (item) { return item.move.card === card && item.move.to.zone === 'hand'; });
+  }));
   var generation = motionGeneration;
   // render() queued sizeBoard first, so this frame sees the final hand layout.
   motionFrame = window.requestAnimationFrame(function () {
@@ -1257,6 +1733,7 @@ function playCardMotion(prepared) {
       });
       motionFlights.push(animation);
       animation.onfinish = function () {
+        if (generation === motionGeneration && item.move.to.zone === 'hand') showArrivalFeedback([item.move.card]);
         if (clone.parentNode) clone.parentNode.removeChild(clone);
         motionFlights = motionFlights.filter(function (flight) { return flight !== animation; });
         if (!motionFlights.length && motionLayer && motionLayer.parentNode) {
@@ -1266,6 +1743,154 @@ function playCardMotion(prepared) {
     });
     if (!motionFlights.length && motionLayer && motionLayer.parentNode) { motionLayer.parentNode.removeChild(motionLayer); motionLayer = null; }
   });
+}
+/* The same four-second cue as a newly melded card, in sky blue. Translate is
+ * independent of the selection transform, so selected faces remain raised.
+ * Only accepted arrivals trigger it; sorting and repeated snapshots do not. */
+function showArrivalFeedback(cards) {
+  if (document.hidden) return;
+  cards.forEach(function (card) {
+    var node = motionElement({ zone: 'hand' }, card);
+    if (!node || typeof node.animate !== 'function') return;
+    if (node._arrivalFeedback) node._arrivalFeedback.cancel();
+    var blue = '#8bd6ff', moving = canAnimateCards();
+    var steady = { outline: '1px solid ' + blue, outlineOffset: '1px', boxShadow: '0 0 0 2px ' + blue };
+    var frames = moving ? [
+      { outline: '1px solid ' + blue, outlineOffset: '1px', boxShadow: '0 0 0 0 ' + blue, translate: '0 -2px' },
+      { offset: .6, outline: '1px solid ' + blue, outlineOffset: '1px', boxShadow: '0 0 7px 2px ' + blue, translate: '0 0' },
+      { outline: '1px solid ' + blue, outlineOffset: '1px', boxShadow: '0 0 0 0 rgba(139,214,255,0)', translate: '0 0' }
+    ] : [steady, steady];
+    var animation = node.animate(frames, {
+      duration: moving ? 1150 : FRESH_MS, iterations: moving ? FRESH_MS / 1150 : 1, easing: 'ease-out'
+    });
+    node._arrivalFeedback = animation;
+    animation.onfinish = function () { if (node._arrivalFeedback === animation) node._arrivalFeedback = null; };
+  });
+}
+function clearArrivalFeedback() {
+  var hand = $('myHand');
+  if (hand) Array.prototype.forEach.call(hand.querySelectorAll('[data-motion-card]'), function (node) {
+    if (node._arrivalFeedback) node._arrivalFeedback.cancel();
+    node._arrivalFeedback = null;
+  });
+}
+/* A short modal owns pointer/keyboard input while the cards are read. The game
+ * state is already accepted; only these two hand faces wait for the visual cue.
+ * Closing, resizing, reconnecting or receiving new state always restores them. */
+function drawRevealActive() { return !!drawReveal; }
+function syncDrawRevealCards() {
+  var hand = $('myHand');
+  if (!hand) return;
+  Array.prototype.forEach.call(hand.querySelectorAll('[data-motion-card]'), function (node) {
+    var hidden = !!drawReveal && drawReveal.cards.indexOf(node.dataset.motionCard) !== -1;
+    node.classList.toggle('draw-reveal-pending', hidden);
+  });
+}
+function closeDrawReveal(landed) {
+  var active = drawReveal;
+  if (!active) return;
+  drawReveal = null;
+  if (active.timer !== null) window.clearTimeout(active.timer);
+  active.animations.forEach(function (animation) { animation.cancel(); });
+  if (active.dialog.open && typeof active.dialog.close === 'function') active.dialog.close();
+  if (active.dialog.parentNode) active.dialog.parentNode.removeChild(active.dialog);
+  (active.inertNodes || []).forEach(function (record) { record.node.inert = record.inert; });
+  syncDrawRevealCards();
+  if (landed) showArrivalFeedback(active.cards);
+  if (!document.hidden && active.focus && active.focus.isConnected && typeof active.focus.focus === 'function') {
+    active.focus.focus({ preventScroll: true });
+  }
+}
+function finishDrawReveal() {
+  var active = drawReveal;
+  if (!active || active.phase === 'settling') return;
+  if (active.timer !== null) window.clearTimeout(active.timer);
+  active.timer = null;
+  if (!canAnimateCards()) { closeDrawReveal(true); return; }
+  active.phase = 'settling';
+  active.dialog.classList.add('is-settling');
+  active.animations.forEach(function (animation) { animation.cancel(); });
+  active.animations = [];
+  active.faces.forEach(function (face, index) {
+    var from = motionRect(face), to = motionRect(motionElement({ zone: 'hand' }, active.cards[index]));
+    if (!from || !to) return;
+    var end = 'translate(' + (to.left - from.left) + 'px,' + (to.top - from.top) + 'px) scale(' +
+      (to.width / from.width) + ',' + (to.height / from.height) + ')';
+    active.animations.push(face.animate([{ transform: 'none', opacity: 1 }, { transform: end, opacity: 1 }], {
+      duration: 240, easing: 'cubic-bezier(.3,0,.45,1)', fill: 'both'
+    }));
+  });
+  active.timer = window.setTimeout(function () { if (drawReveal === active) closeDrawReveal(true); }, 240);
+}
+function sortArrivalCards(cards) {
+  var ranks = '23456789TJQKAX';
+  return cards.slice().sort(function (a, b) {
+    return ranks.indexOf(E.rankOf(a)) - ranks.indexOf(E.rankOf(b));
+  });
+}
+function showDrawReveal(plan) {
+  // Never replace a settings/score/pile dialog the player intentionally opened.
+  if (document.hidden || document.querySelector('dialog[open], .sheet:not([hidden])')) return;
+  var displayCards = sortArrivalCards(plan.cards);
+  var sources = displayCards.map(function (card) { return plan.sources[plan.cards.indexOf(card)]; });
+  var dialog = document.createElement('dialog');
+  dialog.className = 'draw-reveal';
+  dialog.setAttribute('aria-labelledby', 'drawRevealTitle');
+  dialog.setAttribute('aria-describedby', 'drawRevealSummary');
+  var panel = document.createElement('div'); panel.className = 'draw-reveal-panel';
+  var title = document.createElement('h2'); title.id = 'drawRevealTitle'; title.textContent = 'You drew';
+  var summary = document.createElement('p'); summary.id = 'drawRevealSummary'; summary.className = 'draw-reveal-summary';
+  summary.textContent = displayCards.map(function (card) { return E.label(card); }).join(' and ');
+  var cards = document.createElement('div'); cards.className = 'draw-reveal-cards';
+  var faces = displayCards.map(function (card) {
+    var face = cardEl(card); face.removeAttribute('data-motion-card'); face.setAttribute('aria-hidden', 'true');
+    face.classList.add('draw-reveal-card'); cards.appendChild(face); return face;
+  });
+  var button = document.createElement('button'); button.type = 'button'; button.className = 'draw-reveal-continue';
+  button.textContent = 'Continue'; button.setAttribute('aria-label', 'Continue to your hand');
+  panel.appendChild(title); panel.appendChild(summary); panel.appendChild(cards); panel.appendChild(button); dialog.appendChild(panel);
+  var active = { cards: displayCards, faces: faces, dialog: dialog, focus: document.activeElement,
+    animations: [], timer: null, phase: 'arriving', inertNodes: [] };
+  drawReveal = active;
+  document.body.appendChild(dialog);
+  // Native dialog makes the rest of the app inert and contains focus. Fallback
+  // preserves those guarantees for an older embedded browser without showModal.
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else {
+    dialog.setAttribute('open', ''); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+    Array.prototype.forEach.call(document.body.children, function (node) {
+      if (node !== dialog) { active.inertNodes.push({ node: node, inert: node.inert }); node.inert = true; }
+    });
+  }
+  syncDrawRevealCards();
+  button.focus({ preventScroll: true });
+  function dismiss(event) { event.preventDefault(); event.stopPropagation(); closeDrawReveal(true); }
+  dialog.addEventListener('click', dismiss);
+  dialog.addEventListener('cancel', dismiss);
+  dialog.addEventListener('close', function () { if (drawReveal === active) closeDrawReveal(true); });
+  dialog.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') dismiss(event);
+    else if (event.key === 'Tab') { event.preventDefault(); button.focus({ preventScroll: true }); }
+  });
+  var arriving = canAnimateCards() && sources.some(Boolean);
+  if (arriving) {
+    faces.forEach(function (face, index) {
+      var start = sources[index], end = motionRect(face);
+      if (!start || !end) return;
+      var begin = 'translate(' + (start.left - end.left) + 'px,' + (start.top - end.top) + 'px) scale(' +
+        (start.width / end.width) + ',' + (start.height / end.height) + ')';
+      active.animations.push(face.animate([{ transform: begin, opacity: 1 }, { transform: 'none', opacity: 1 }], {
+        duration: 300, delay: index * 30, easing: 'cubic-bezier(.2,.7,.25,1)', fill: 'both'
+      }));
+    });
+  }
+  function hold() {
+    if (drawReveal !== active) return;
+    active.phase = 'reading';
+    active.timer = window.setTimeout(finishDrawReveal, DRAW_REVEAL_HOLD_MS);
+  }
+  if (arriving) active.timer = window.setTimeout(hold, 330);
+  else hold();
 }
 window.addEventListener('resize', cancelCardMotion);
 document.addEventListener('visibilitychange', function () { if (document.hidden) resetCardMotion(); });
@@ -1407,11 +2032,20 @@ var seenMelds = Object.create(null);
 
 function render() {
   if (!view) return;
+  renderChatPlayers();
+  if (!dealChoiceKey()) closeDealChoice();
+  syncWaitingTableBack();
+  syncDiscardConfirmation();
   document.querySelector('.board').dataset.phase = view.phase;
-  // The waiting room hides the hand toolbar, so keep chat in its header there.
-  var chatAnchor = $(view.phase === 'lobby' ? 'rulesBtn' : 'sortBtn');
-  if ($('chatBtn') && chatAnchor && chatAnchor.parentNode && $('chatBtn').nextSibling !== chatAnchor)
-    chatAnchor.parentNode.insertBefore($('chatBtn'), chatAnchor);
+  // The waiting room keeps chat in its header; play uses the same visual and
+  // keyboard order: Settings, Sort, Auto, Scores, Chat, Clear, Undo.
+  var chatAnchor = view.phase === 'lobby' ? null : $('clearSel');
+  var chatHost = chatAnchor ? chatAnchor.parentNode : document.querySelector('.bar-in');
+  if ($('chatBtn') && chatHost && ($('chatBtn').parentNode !== chatHost ||
+      (chatAnchor && $('chatBtn').nextSibling !== chatAnchor))) {
+    if (chatAnchor) chatHost.insertBefore($('chatBtn'), chatAnchor);
+    else chatHost.appendChild($('chatBtn'));
+  }
   var displayContext = view.code + ':' + view.round;
   if (meldDisplayContext !== displayContext) {
     meldDisplayContext = displayContext; meldExpanded = Object.create(null);
@@ -1449,6 +2083,9 @@ function render() {
     pill.textContent = mine ? 'Your turn' : '';
     // Opponent turns use the seat outline; this label belongs only to you.
     pill.className = 'pill' + (mine ? ' you' : '');
+  } else if (view.phase === 'choosing') {
+    pill.textContent = view.handChoice && view.handChoice.pending ? 'Choose your foot' : 'Waiting for choices';
+    pill.className = 'pill';
   } else {
     pill.textContent = view.phase === 'gameEnd' ? 'Game over' : 'Round over';
     pill.className = 'pill';
@@ -1461,13 +2098,19 @@ function render() {
   share.hidden = !(view.phase === 'lobby' && !view.solo);
   if (!share.hidden) {
     $('shareCode').textContent = view.code;
-    if ($('lobbyRuleSummary')) $('lobbyRuleSummary').textContent = rulesPresetName(E.rulePresetId(view.settings)) + ' · Individual scoring';
+    if ($('lobbyRuleSummary')) $('lobbyRuleSummary').textContent = rulesPresetName(E.rulePresetId(view.settings)) +
+      ' · ' + view.settings.requireRedBook + ' red / ' + view.settings.requireBlackBook + ' black · Pick up ' + (view.settings.pileTakeExtra + 1);
+    if ($('lobbyRulesBtn')) {
+      $('lobbyRulesBtn').textContent = view.canConfigureRules ? 'Edit table rules' : 'View table rules';
+      $('lobbyRulesBtn').onclick = function () { openRules(view && view.canConfigureRules ? 'edit' : 'rules'); };
+    }
   }
 
   notePlays();
   renderSeats();
   renderCenter();
   renderMine();
+  syncDrawRevealCards();
   renderActions();
   renderLog();
   scheduleBoardSize();
@@ -1480,6 +2123,7 @@ function render() {
     else $('peekSheet').hidden = true;
   }
   syncScoreSheet();
+  renderDealChoice();
   maybeAutoDraw();
 }
 
@@ -1572,13 +2216,13 @@ function meldWildTrims(el, wilds) {
 function meldDisplayElement(m, seat, own) {
   var st = meldStatsOf(m), ordered = orderMeldCards(m), wilds = ordered.filter(E.isWild);
   var expanded = isMeldExpanded(m, seat);
-  var presentation = expanded ? 'fan' : opponentMeldStyle === 'tiles' ? 'tile' : 'stack';
-  var target = own && !actionPending && canAddSelection(m);
+  var presentation = expanded ? 'fan' : 'stack';
+  var target = own && canTargetMeld(m);
   var nearly = m.cards.length === view.settings.bookSize - 1;
   var box = document.createElement('button'); box.type = 'button';
   box.className = 'meld ' + (st.wilds ? 'dirty' : 'clean') +
     (st.complete ? ' done' : '') + (nearly ? ' nearly-book' : '') +
-    (target ? ' target' : '') + (own && meldTargetId === m.id ? ' chosen-target' : '');
+    (target ? ' target' : '');
   box.dataset.meldId = m.id; box.dataset.presentation = presentation;
   box.setAttribute('aria-expanded', String(expanded));
   box.style.setProperty('--meld-count', ordered.length);
@@ -1600,8 +2244,8 @@ function meldDisplayElement(m, seat, own) {
     head.title += ' · ' + parts.join(', ');
   }
   box.setAttribute('aria-label', head.title + (target
-    ? '. Choose this book, then Add below, or double-tap to add selected cards.'
-    : expanded ? '. Collapse cards.' : '. Expand cards.'));
+    ? '. Tap to add selected cards. Keyboard: Enter adds; Shift+Enter changes the view. Double-tap to ' + (expanded ? 'collapse' : 'expand') + '.'
+    : '. Double-tap or press Enter to ' + (expanded ? 'collapse' : 'expand') + ' cards.'));
   if (own && st.isRedBook && sel.some(E.isWild)) box.title = 'A wild cannot be added to a red book.';
   var cards = document.createElement('div'); cards.className = 'meld-cards';
   cards.style.setProperty('--meld-count', ordered.length);
@@ -1616,12 +2260,14 @@ function meldDisplayElement(m, seat, own) {
     }
     cards.appendChild(el);
   });
-  if (presentation === 'tile') meldWildTrims(box, wilds);
   box.appendChild(head); box.appendChild(cards);
-  if (target) box.setAttribute('aria-pressed', String(meldTargetId === m.id));
   box.onclick = function (event) {
-    if (own && !actionPending && canAddSelection(m)) chooseMeldTarget(m.id, event);
-    else toggleMeldDisplay(m, seat, event);
+    handleMeldTap(m.id, seat, event);
+  };
+  box.onkeydown = function (event) {
+    if (event.shiftKey && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault(); cancelMeldTap(); toggleMeldDisplay(m, seat, { detail: 0 });
+    }
   };
   return box;
 }
@@ -1629,7 +2275,7 @@ function meldDisplayElement(m, seat, own) {
 function fillMelds(ms, s) {
   ms.innerHTML = '';
   ms.style.setProperty('--opponent-meld-count', s.melds.length);
-  ms.dataset.layout = opponentMeldStyle === 'tiles' ? 'tiles' : 'strips';
+  ms.dataset.layout = 'strips';
   var seat = view.seats.indexOf(s), fresh = false;
   orderMelds(s.melds).forEach(function (m) {
     ms.appendChild(meldDisplayElement(m, seat, false));
@@ -1640,9 +2286,9 @@ function fillMelds(ms, s) {
 
 function applyOpponentMeldStyle() {
   seatNodes.forEach(function (node) {
-    if (node.melds) node.melds.dataset.layout = opponentMeldStyle === 'tiles' ? 'tiles' : 'strips';
+    if (node.melds) node.melds.dataset.layout = 'strips';
   });
-  $('myMelds').dataset.layout = opponentMeldStyle;
+  $('myMelds').dataset.layout = 'cards';
 }
 
 function setOpponentMeldStyle(style) {
@@ -1678,8 +2324,11 @@ function renderSeats() {
       toggle.setAttribute('aria-controls', 'opponentDetail');
       toggle.onclick = function () {
         if (i === meSeat()) return;
-        expandedSeat = expandedSeat === i ? null : i;
+        if (expandedSeat === i) { closeOpponentDetail(true); return; }
+        expandedSeat = i;
         renderOpponentDetail();
+        var close = $('closeOpponentDetail');
+        if (close) close.focus({ preventScroll: true });
       };
       var top = document.createElement('div'); top.className = 'seat-top';
       var identity = document.createElement('div'); identity.className = 'seat-identity';
@@ -1691,8 +2340,8 @@ function renderSeats() {
       var points = document.createElement('span'); points.className = 'seat-points';
       stats.appendChild(points); identity.appendChild(meta);
       stats.hidden = true;
-      top.appendChild(identity); top.appendChild(chips);
-      d.appendChild(top); d.appendChild(stats); d.appendChild(toggle);
+      top.appendChild(identity); top.appendChild(chips); top.appendChild(toggle);
+      d.appendChild(top); d.appendChild(stats);
       wrap.appendChild(d);
       return { seat: d, name: nm, meta: meta, points: points, chips: chips, toggle: toggle, melds: null, sig: null };
     });
@@ -1754,12 +2403,25 @@ function renderSeats() {
   renderOpponentDetail();
 }
 
+var opponentDetailResumeTimer = null;
+
 function closeOpponentDetail(restoreFocus) {
   var previous = expandedSeat;
   expandedSeat = null;
   if ($('opponentDetail')) $('opponentDetail').hidden = true;
   seatNodes.forEach(function (node) { node.toggle.setAttribute('aria-expanded', 'false'); });
   if (restoreFocus && seatNodes[previous]) seatNodes[previous].toggle.focus({ preventScroll: true });
+  // Only an actual disclosure close can resume a deferred draw invitation.
+  // Defer until a same-click transfer to Sort/Auto or a render has completed,
+  // then re-check the turn and every other modal before inviting the player.
+  var drawContext = previous !== null && drawPickerTurnKey();
+  if (drawContext) {
+    clearTimeout(opponentDetailResumeTimer);
+    opponentDetailResumeTimer = setTimeout(function () {
+      opponentDetailResumeTimer = null;
+      if (expandedSeat === null && drawPickerTurnKey() === drawContext) maybeAutoDraw();
+    }, 0);
+  }
 }
 
 function positionOpponentDetail() {
@@ -1769,8 +2431,25 @@ function positionOpponentDetail() {
   var row = seatNodes[expandedSeat].seat.getBoundingClientRect();
   var bounds = board.getBoundingClientRect();
   var handTop = $('myHand').getBoundingClientRect();
-  panel.style.top = Math.round(row.bottom - bounds.top + board.scrollTop + 4) + 'px';
-  panel.style.maxHeight = Math.max(32, Math.floor(handTop.top - row.bottom - 10)) + 'px';
+  var visibleTop = Math.max(8, bounds.top);
+  var visibleBottom = (window.innerHeight || document.documentElement.clientHeight || bounds.bottom) - 8;
+  var top = row.bottom + 4;
+  var height = Math.floor(Math.min(handTop.top - 6, visibleBottom) - top);
+  // Preserve the normal anchor. On cramped boards, move this overlay rather
+  // than reducing its header and Close button to an unusable strip.
+  if (height < 140) {
+    var aboveBottom = Math.min(row.top - 4, visibleBottom);
+    var aboveHeight = Math.floor(aboveBottom - visibleTop);
+    if (aboveHeight >= 140) {
+      height = aboveHeight;
+      top = aboveBottom - Math.min(height, panel.scrollHeight + 2);
+    } else {
+      top = visibleTop;
+      height = Math.max(0, Math.floor(visibleBottom - visibleTop));
+    }
+  }
+  panel.style.top = Math.round(top - bounds.top + board.scrollTop) + 'px';
+  panel.style.maxHeight = height + 'px';
 }
 
 function renderOpponentDetail() {
@@ -1798,6 +2477,7 @@ function renderOpponentDetail() {
     document.querySelector('.board').appendChild(panel);
   }
   var seat = view.seats[expandedSeat];
+  var changedSeat = panel.dataset.seat !== String(expandedSeat);
   panel.hidden = false; panel.dataset.seat = String(expandedSeat);
   $('opponentDetailTitle').textContent = seat.name + '’s public books';
   // Private hand/foot contents are never used to build this panel.
@@ -1806,7 +2486,7 @@ function renderOpponentDetail() {
   var wrap = $('opponentMelds');
   var signature = expandedSeat + ':' + meldsSignature(seat);
   if (wrap.dataset.signature !== signature) {
-    var scroll = panel.scrollTop;
+    var scroll = changedSeat ? 0 : panel.scrollTop;
     wrap.innerHTML = ''; wrap.dataset.signature = signature;
     if (!seat.melds.length) {
       var empty = document.createElement('p'); empty.className = 'note';
@@ -1877,10 +2557,170 @@ function livePiles() {
   return out;
 }
 
+/* The compact table tray stays available throughout play. A turn gets one
+ * automatic invitation to choose piles; dismissing it never reopens that same
+ * invitation on an unrelated state update. */
+var drawPickerContext = null, drawPickerShownContext = null, drawPickerReturnFocus = null;
+
+function drawPickerTurnKey() {
+  if (!view || !isMyTurn() || view.turnPhase !== 'draw') return null;
+  return [view.code, view.round, view.turn, view.turnId == null ? autoDrawTurnContext : view.turnId].join(':');
+}
+
+function drawPickerConnected() {
+  return !!(autoDrawStateFresh && ws && ws.readyState === 1);
+}
+
+function drawPickerBlocked() {
+  return document.hidden || drawRevealActive() || expandedSeat !== null ||
+    !!document.querySelector('.sheet:not([hidden]):not(#drawPickerSheet), #sortPopover:not([hidden]), #autoDrawPopover:not([hidden])');
+}
+
+function drawPickerManualReason() {
+  if (autoDrawMode === 'off') return 'manual';
+  if (pileChance()) return 'pickup';
+  if (autoDrawAttemptedContext === autoDrawTurnContext) return 'retry';
+  return chooseAutoDrawPiles(view.stocks, autoDrawMode, autoDrawPiles).ok ? null : 'unavailable';
+}
+
+function drawPickerSelection() {
+  if (!view || !isMyTurn() || view.turnPhase !== 'draw') return null;
+  var live = livePiles(), S = view.settings;
+  if (!live.length) return null;
+  if (S.stockPiles === 1 || live.length < S.distinctDrawPiles) {
+    var repeated = [];
+    for (var i = 0; i < S.drawCount; i++) repeated.push(live[0]);
+    return repeated;
+  }
+  return pileSel.length === S.drawCount &&
+    new Set(pileSel).size >= Math.min(S.distinctDrawPiles, S.drawCount) &&
+    pileSel.every(function (index) { return live.indexOf(index) !== -1; }) ? pileSel.slice() : null;
+}
+
+function renderDrawPicker() {
+  var sheet = $('drawPickerSheet');
+  if (!sheet || sheet.hidden || !view) return;
+  var live = livePiles(), S = view.settings, chance = pileChance();
+  var autoPaused = autoDrawMode !== 'off' && !!chance;
+  $('drawPickerTitle').textContent = autoPaused ? 'Take the pile or draw' : 'Your draw';
+  if ($('drawPickerEyebrow')) $('drawPickerEyebrow').textContent = autoPaused ? 'Auto paused' : 'Your turn';
+  var hint = $('drawPickerHint');
+  if (actionPending) hint.textContent = 'Drawing…';
+  else if (noticeBad && notice) hint.textContent = notice;
+  else if (autoPaused) hint.textContent = 'You can take the discard pile. Review it, or choose two cards from the stocks.';
+  else if (!live.length) hint.textContent = 'No stock cards remain.';
+  else if (S.stockPiles === 1) hint.textContent = 'Draw ' + S.drawCount + ' cards from the stock.';
+  else if (live.length < S.distinctDrawPiles) hint.textContent = 'One stock remains. Both cards come from it.';
+  else if (autoDrawMode === 'chosen' && !chooseAutoDrawPiles(view.stocks, autoDrawMode, autoDrawPiles).ok)
+    hint.textContent = 'A chosen stock is empty. Pick two available stocks for this turn.';
+  else if (pileSel.length === S.drawCount) hint.textContent = 'Two stocks selected. Ready to draw.';
+  else hint.textContent = pileSel.length ? 'Choose one more stock.' : 'Choose two different stocks.';
+  renderPileChoices($('drawPickerPiles'), true);
+  var draw = $('drawPickerDraw');
+  draw.textContent = 'Draw ' + S.drawCount;
+  draw.disabled = actionPending || !drawPickerConnected() || !drawPickerSelection();
+  var take = $('drawPickerTake');
+  take.hidden = !chance;
+  take.textContent = chance ? 'View pile · ' + chance.take : 'View pile';
+  take.disabled = actionPending || !drawPickerConnected() || !chance;
+}
+
+function openDrawPicker(automatic) {
+  var sheet = $('drawPickerSheet');
+  syncAutoDrawTurn();
+  var key = drawPickerTurnKey();
+  if (!sheet || !key || !drawPickerConnected() || actionPending || drawPickerBlocked()) return false;
+  if (!sheet.hidden && drawPickerContext === key) { renderDrawPicker(); return true; }
+  if (automatic === true && drawPickerShownContext === key) return false;
+  cancelAutoDraw();
+  drawPickerReturnFocus = document.activeElement;
+  drawPickerContext = key; drawPickerShownContext = key;
+  sheet.hidden = false;
+  renderDrawPicker();
+  // Land on the neutral close control; opening a draw never selects a pile.
+  $('closeDrawPicker').focus({ preventScroll: true });
+  return true;
+}
+
+function closeDrawPicker(restoreFocus, dismissed) {
+  var sheet = $('drawPickerSheet');
+  if (!sheet || sheet.hidden) { drawPickerContext = null; return; }
+  if (dismissed) drawPickerShownContext = drawPickerContext || drawPickerTurnKey();
+  sheet.hidden = true; drawPickerContext = null;
+  var focus = drawPickerReturnFocus;
+  drawPickerReturnFocus = null;
+  if (restoreFocus) {
+    if (!focus || !focus.isConnected || focus.disabled || sheet.contains(focus))
+      focus = $('drawPile0') || $('rulesBtn');
+    if (focus && !focus.disabled) focus.focus({ preventScroll: true });
+  }
+}
+
+function syncDrawPicker() {
+  var sheet = $('drawPickerSheet');
+  if (!sheet) return;
+  var key = drawPickerTurnKey();
+  if (!key || !drawPickerConnected()) { closeDrawPicker(false, false); return; }
+  if (!sheet.hidden && drawPickerContext !== key) closeDrawPicker(false, false);
+  if (drawPickerBlocked()) { closeDrawPicker(false, false); return; }
+  if (!sheet.hidden) { renderDrawPicker(); return; }
+  if (!actionPending && drawPickerShownContext !== key && drawPickerManualReason()) openDrawPicker(true);
+}
+
+function confirmTableDraw() {
+  if (actionPending || !drawPickerConnected() || !drawPickerTurnKey() || drawPickerBlocked()) return false;
+  var piles = drawPickerSelection();
+  return piles ? act('draw', { piles: piles }) : false;
+}
+
+function confirmDrawPicker() {
+  if (actionPending || !drawPickerConnected() || drawPickerContext !== drawPickerTurnKey()) return false;
+  var piles = drawPickerSelection();
+  if (!piles || !$('drawPickerSheet') || $('drawPickerSheet').hidden) return false;
+  // Stay visible while pending so the accepted draw can animate from its actual
+  // source. A refused send leaves the selected stocks ready to retry manually.
+  var sent = act('draw', { piles: piles });
+  renderDrawPicker();
+  return sent;
+}
+
+function openDrawPickerTake() {
+  if (actionPending || !drawPickerConnected() || drawPickerContext !== drawPickerTurnKey() || !pileChance()) return false;
+  closeDrawPicker(false, true);
+  showPeek();
+  return true;
+}
+
+function handleDrawPickerKey(event) {
+  var sheet = $('drawPickerSheet');
+  if (!sheet || sheet.hidden) return;
+  if (event.key === 'Escape') {
+    event.preventDefault(); event.stopPropagation(); closeDrawPicker(true, true); maybeAutoDraw();
+  } else if (event.key === 'Tab') {
+    var controls = Array.prototype.filter.call(sheet.querySelectorAll('button'), function (button) { return !button.hidden && !button.disabled; });
+    if (!controls.length) return;
+    var first = controls[0], last = controls[controls.length - 1], active = document.activeElement;
+    if (event.shiftKey && (active === first || !sheet.contains(active))) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && (active === last || !sheet.contains(active))) { event.preventDefault(); first.focus(); }
+  }
+}
+
+function wireDrawPicker() {
+  var sheet = $('drawPickerSheet');
+  if (!sheet) return;
+  $('closeDrawPicker').onclick = function () { closeDrawPicker(true, true); maybeAutoDraw(); };
+  sheet.onclick = function (event) { if (event.target === sheet) { closeDrawPicker(true, true); maybeAutoDraw(); } };
+  $('drawPickerDraw').onclick = confirmDrawPicker;
+  $('drawPickerTake').onclick = openDrawPickerTake;
+  document.addEventListener('keydown', handleDrawPickerKey, true);
+}
+
 function selectDrawPile(index) {
   if (actionPending || !isMyTurn() || view.turnPhase !== 'draw' || !view.stocks[index]) return;
   notice = ''; noticeBad = false;
-  if (view.settings.stockPiles === 1) { pileSel = [index, index]; render(); return; }
+  if (view.settings.stockPiles === 1 || livePiles().length < view.settings.distinctDrawPiles) {
+    pileSel = Array(view.settings.drawCount).fill(index); render(); return;
+  }
   var at = pileSel.indexOf(index);
   if (at !== -1) pileSel.splice(at, 1);
   else if (pileSel.length < view.settings.drawCount) pileSel.push(index);
@@ -1888,17 +2728,43 @@ function selectDrawPile(index) {
   render();
 }
 
+function syncDiscardPickupCue() {
+  if (!view) return;
+  var available = !!(view.phase === 'playing' && isMyTurn() && view.turnPhase === 'draw' && !actionPending && pileChance());
+  var paused = available && autoDrawMode !== 'off';
+  var frozen = view.discardTop && (E.isWild(view.discardTop) || E.isBlackThree(view.discardTop) || E.isRedThree(view.discardTop));
+  ['discardPreview', 'drawPickerDiscard'].forEach(function (id) {
+  var box = $(id);
+  if (!box) return;
+  box.classList.toggle('takeable', available);
+  box.classList.toggle('auto-pickup-paused', paused);
+  var label = box.querySelector('.pickup-label');
+  if (label) label.textContent = available ? 'View pile' : frozen ? 'Frozen' : 'Discard';
+  var status = box.querySelector('.discard-status');
+  if (status) status.textContent = paused ? 'Auto paused' : available ? 'Available' : frozen ? 'Frozen' : view.discardTop ? 'Open pile' : 'Empty';
+  if (available) {
+    box.title = (paused ? 'Auto draw is paused. ' : '') + 'You can take the discard pile. Open it to confirm, or draw from the stocks.';
+    box.setAttribute('aria-label', (paused ? 'Auto draw paused. ' : '') + 'View discard pile, ' + view.discardCount + ' cards, ' + spokenCard(view.discardTop) + ' on top. Open to confirm pickup.');
+  }
+  });
+}
+
 function renderCenter() {
-  var row = $('centerRow');
+  renderPileChoices($('centerRow'), false);
+}
+
+/* Counts live on the cards in both the small table tray and the draw chooser.
+ * Keep spoken pile names even though the redundant visible labels are gone. */
+function renderPileChoices(row, picker) {
+  if (!row || !view) return;
   var focusedId = document.activeElement && row.contains(document.activeElement) ? document.activeElement.id : null;
-  row.innerHTML = ''; row.className = 'center pickup-zone';
+  row.innerHTML = ''; row.className = 'center pickup-zone ' + (picker ? 'pile-picker-grid' : 'compact-piles');
   row.style.setProperty('grid-template-columns', 'repeat(' + ((view.stocks || []).length + 1) + ', minmax(0, 1fr))');
-  var live = livePiles();
   var choosing = isMyTurn() && view.turnPhase === 'draw' && !actionPending;
   (view.stocks || []).forEach(function (count, index) {
     var box = document.createElement('button'); box.type = 'button';
     var selected = view.turnPhase === 'draw' && pileSel.indexOf(index) !== -1;
-    box.id = 'drawPile' + index;
+    box.id = (picker ? 'drawPickerPile' : 'drawPile') + index;
     box.className = 'stock-choice' + (selected ? ' selected' : '') + (!count ? ' empty-stock' : '');
     box.disabled = !choosing || !count;
     box.setAttribute('aria-pressed', selected ? 'true' : 'false');
@@ -1906,22 +2772,29 @@ function renderCenter() {
     var label = document.createElement('span'); label.className = 'pickup-label'; label.textContent = view.settings.stockPiles === 1 ? 'Stock' : 'Pile ' + (index + 1);
     var back = document.createElement('span'); back.className = count ? 'card back' : 'card empty';
     var number = document.createElement('span'); number.className = 'pile-index'; number.textContent = String(index + 1); back.appendChild(number);
+    var total = document.createElement('span'); total.className = 'stock-total'; total.textContent = String(count); total.setAttribute('aria-hidden', 'true'); back.appendChild(total);
     var quantity = document.createElement('span'); quantity.className = 'pickup-count'; quantity.textContent = count ? String(count) : 'Empty';
     box.appendChild(label); box.appendChild(back); box.appendChild(quantity);
     box.onclick = function () {
-      if (live.length < view.settings.distinctDrawPiles) {
-        notice = 'Only one pile remains. Press Draw 2 to draw from it.'; renderActions();
-      } else selectDrawPile(index);
+      if (!picker) drawPickerShownContext = drawPickerTurnKey();
+      selectDrawPile(index);
+      if (!picker && interactionMode === 'tap' && drawPickerSelection()) confirmTableDraw();
     };
     row.appendChild(box);
   });
   var top = view.discardTop;
   var frozen = top && (E.isWild(top) || E.isBlackThree(top) || E.isRedThree(top));
   var preview = view.settings.revealPileTake && view.discardPeek && view.discardPeek.length;
-  var box = document.createElement(top ? 'button' : 'div');
-  if (top) { box.type = 'button'; box.onclick = showPeek; }
-  box.className = 'discard-choice' + (frozen ? ' frozen' : '') + (top ? ' inspectable' : '');
-  box.id = 'discardPreview';
+  var discardCard = picker ? null : tableDiscardCard();
+  var discardStamp = discardCard ? discardContext(discardCard) : null;
+  var box = document.createElement(top || discardCard ? 'button' : 'div');
+  if (top || discardCard) {
+    box.type = 'button'; box.disabled = actionPending;
+    box.onclick = discardCard ? function () { return requestTableDiscard(discardCard, discardStamp); }
+      : picker ? function () { closeDrawPicker(false, true); showPeek(); } : showPeek;
+  }
+  box.className = 'discard-choice' + (frozen ? ' frozen' : '') + (top ? ' inspectable' : '') + (discardCard ? ' discard-ready' : '');
+  box.id = picker ? 'drawPickerDiscard' : 'discardPreview';
   var why = frozen ? E.label(top) + ' freezes the discard pile. It cannot be picked up until covered.'
     : 'Open the pile to inspect it and confirm a pickup. Matching cards are chosen automatically.';
   box.title = why;
@@ -1929,13 +2802,23 @@ function renderCenter() {
   var label = document.createElement('span'); label.className = 'pickup-label'; label.textContent = frozen ? 'Frozen' : 'Discard';
   var face = top ? cardEl(top, {}) : document.createElement('div');
   if (!top) face.className = 'card empty';
+  var faceCount = document.createElement('span'); faceCount.className = 'discard-total'; faceCount.setAttribute('aria-hidden', 'true');
+  var countValue = document.createElement('b'); countValue.textContent = String(view.discardCount);
+  var countLabel = document.createElement('span'); countLabel.textContent = frozen ? 'frozen' : view.discardCount === 1 ? 'card' : 'cards';
+  faceCount.appendChild(countValue); faceCount.appendChild(countLabel); face.appendChild(faceCount);
   var summary = document.createElement('span'); summary.className = 'discard-summary';
   var quantity = document.createElement('span'); quantity.className = 'discard-count'; quantity.textContent = view.discardCount + ' card' + (view.discardCount === 1 ? '' : 's');
   var status = document.createElement('span'); status.className = 'discard-status';
   status.textContent = frozen ? 'Frozen' : top ? (preview ? 'View cards' : 'Open pile') : 'Empty';
   summary.appendChild(quantity); summary.appendChild(status);
   box.appendChild(label); box.appendChild(discardPile(face, view.discardCount)); box.appendChild(summary);
+  if (discardCard) {
+    var cue = document.createElement('span'); cue.className = 'discard-action-cue'; cue.textContent = 'Tap to discard'; box.appendChild(cue);
+    box.title = 'Discard ' + E.label(discardCard) + '. Playable cards require confirmation.';
+    box.setAttribute('aria-label', 'Discard ' + spokenCard(discardCard) + '. Tap the discard pile to play it.');
+  }
   row.appendChild(box);
+  syncDiscardPickupCue();
   var replacement = focusedId && $(focusedId);
   if (replacement && !replacement.disabled && replacement.tagName.toLowerCase() === 'button') replacement.focus({ preventScroll: true });
 }
@@ -1948,22 +2831,23 @@ function spokenCard(card) {
 }
 
 function meldTapSignature(target) {
-  return JSON.stringify([view.code, view.round, view.turn, view.phase, view.turnPhase,
+  return JSON.stringify([view.code, view.round, view.turn, view.turnId, view.phase, view.turnPhase,
     view.you, view.turnState, view.settings, myMelds(), target.id, sel.slice().sort()]);
 }
 
-function quickMeldStopReason(target, rank) {
+function quickMeldStopReason(target, rank, cards) {
+  cards = cards || sel;
   var you = view.you, S = view.settings;
-  var remaining = myHand().length - sel.length;
+  var remaining = myHand().length - cards.length;
   if (!you.inFoot && remaining > 0) return '';
   if (!you.inFoot) remaining = you.footCount || 0;
   if (S.goOutWithDiscard && you.inFoot && remaining === 0) return 'Keep one card for your final discard.';
   if (remaining >= 2) return '';
   var red = 0, black = 0;
   var afterMelds = myMelds().map(function (meld) {
-    return target && meld.id === target.id ? { rank: meld.rank, cards: meld.cards.concat(sel) } : meld;
+    return target && meld.id === target.id ? { rank: meld.rank, cards: meld.cards.concat(cards) } : meld;
   });
-  if (!target) afterMelds.push({ rank: rank, cards: sel });
+  if (!target) afterMelds.push({ rank: rank, cards: cards });
   afterMelds.forEach(function (after) {
     var stats = E.meldStats(after, S);
     if (stats.isRedBook) red++;
@@ -1972,40 +2856,57 @@ function quickMeldStopReason(target, rank) {
   if (red < S.requireRedBook || black < S.requireBlackBook) return 'Keep two cards in your foot unless you can go out.';
   var laid = view.turnState ? view.turnState.melded || 0 : 0;
   if (!remaining && !you.hasInitialMeld &&
-      laid + sel.reduce(function (total, card) { return total + E.cardValue(card, S); }, 0) < view.minMeld) {
+      laid + cards.reduce(function (total, card) { return total + E.cardValue(card, S); }, 0) < view.minMeld) {
     return 'Reach the opening minimum before going out.';
   }
   return '';
 }
 
-function chooseMeldTarget(id, event) {
-  if (actionPending) { lastMeldTap = null; return; }
+function cancelMeldTap() {
+  clearTimeout(meldTapTimer); meldTapTimer = null; lastMeldTap = null;
+}
+
+function addSelectionToMeld(id) {
+  if (actionPending || meldInteractionBlocked()) return false;
   var target = myMelds().find(function (meld) { return meld.id === id; });
   if (!target || !canAddSelection(target) || new Set(sel).size !== sel.length ||
-      sel.some(function (card) { return myHand().indexOf(card) === -1; })) {
-    lastMeldTap = null; return;
-  }
-  var pointerTap = event && event.detail > 0;
-  var now = Date.now(), signature = meldTapSignature(target);
-  var quickRepeat = pointerTap && lastMeldTap && lastMeldTap.id === id &&
-    lastMeldTap.signature === signature && now >= lastMeldTap.at && now - lastMeldTap.at <= 400;
-  if (quickRepeat) {
-    lastMeldTap = null;
-    var reason = quickMeldStopReason(target);
-    if (reason) { say(reason, true); return; }
-    act('meldAdd', { meldId: target.id, cards: sel.slice() });
+      sel.some(function (card) { return myHand().indexOf(card) === -1; })) return false;
+  var reason = quickMeldStopReason(target);
+  if (reason) { say(reason, true); return false; }
+  return act('meldAdd', { meldId: target.id, cards: sel.slice() });
+}
+
+function handleMeldTap(id, seat, event) {
+  if (!view || !view.seats[seat] || meldInteractionBlocked()) { cancelMeldTap(); return; }
+  var meld = view.seats[seat].melds.find(function (item) { return item.id === id; });
+  if (!meld) return;
+  var own = seat === meSeat(), pointer = event && event.detail > 0;
+  if (own && actionPending) { cancelMeldTap(); return; }
+  if (!pointer) {
+    cancelMeldTap();
+    if (own && canAddSelection(meld)) addSelectionToMeld(id);
+    else toggleMeldDisplay(meld, seat, { detail: 0 });
     return;
   }
-  // Keep gesture state outside the DOM: selecting the destination rebuilds its
-  // button, and touch browsers need not dispatch a native dblclick afterward.
-  lastMeldTap = pointerTap ? { id: id, at: now, signature: signature } : null;
-  meldTargetId = id; renderMine(); renderActions(); scheduleBoardSize();
-  if (event && event.detail === 0) {
-    var replacement = Array.prototype.find.call($('myMelds').querySelectorAll('button'), function (button) {
-      return button.dataset.meldId === id;
-    });
-    if (replacement) replacement.focus({ preventScroll: true });
+  var now = Date.now(), key = meldDisplayKey(meld, seat);
+  var repeated = lastMeldTap && lastMeldTap.key === key && now >= lastMeldTap.at && now - lastMeldTap.at <= 320;
+  cancelMeldTap();
+  if (repeated) {
+    toggleMeldDisplay(meld, seat, event);
+    return;
   }
+  // A pointer double-tap only changes the view. Hold the single-tap action
+  // briefly so its first click can never play cards before the second click.
+  var pending = { key: key, at: now, signature: meldTapSignature(meld) };
+  lastMeldTap = pending;
+  meldTapTimer = setTimeout(function () {
+    if (lastMeldTap !== pending) return;
+    cancelMeldTap();
+    var current = myMelds().find(function (item) { return item.id === id; });
+    if (own && current && meldTapSignature(current) === pending.signature) {
+      addSelectionToMeld(id);
+    }
+  }, 320);
 }
 
 function canAddSelection(m) {
@@ -2016,23 +2917,316 @@ function canAddSelection(m) {
   return E.checkMeld(m.rank, m.cards.concat(sel), view.settings).ok;
 }
 
+function canTargetMeld(m) {
+  return !actionPending && sel.length > 0 && new Set(sel).size === sel.length &&
+    sel.every(function (card) { return myHand().indexOf(card) !== -1; }) &&
+    canAddSelection(m) && !quickMeldStopReason(m);
+}
+
+function meldInteractionBlocked() {
+  var revealing = typeof drawRevealActive === 'function' ? drawRevealActive()
+    : typeof drawRevealActive !== 'undefined' && drawRevealActive;
+  return roundCountdownRemaining() > 0 || !!revealing || !!discardConfirmation || !!document.hidden ||
+    !!document.querySelector('.sheet:not([hidden]), #sortPopover:not([hidden]), #autoDrawPopover:not([hidden])');
+}
+
+/* Find an actual legal play containing this card. Counting natural/wild
+ * combinations avoids an exponential search of a large hand. Within each
+ * count, keep the required card and prefer higher-value wilds so an opening
+ * that can legally go out is not missed. This never changes the selection. */
+function meldOpportunityFor(card) {
+  if (!isMyTurn() || view.turnPhase !== 'play' || myHand().indexOf(card) === -1 || E.rankOf(card) === '3') return null;
+  var S = view.settings, hand = myHand();
+  function candidate(rank, target) {
+    if (target) {
+      var stats = E.meldStats(target, S);
+      if (stats.complete && S.closedBooksLocked) return null;
+      if (stats.isRedBook && E.isWild(card)) return null;
+    } else if (myMelds().some(function (meld) { return meld.rank === rank && !meldStatsOf(meld).complete; })) return null;
+    var naturals = hand.filter(function (item) { return !E.isWild(item) && E.rankOf(item) === rank; });
+    var wilds = hand.filter(E.isWild).sort(function (a, b) { return E.cardValue(b, S) - E.cardValue(a, S); });
+    if (naturals.indexOf(card) === -1 && wilds.indexOf(card) === -1) return null;
+    // Put the card being discarded first without disturbing the other values.
+    [naturals, wilds].forEach(function (items) {
+      var at = items.indexOf(card); if (at > 0) { items.splice(at, 1); items.unshift(card); }
+    });
+    for (var n = 0; n <= naturals.length; n++) {
+      for (var w = 0; w <= wilds.length; w++) {
+        if (!n && !w) continue;
+        var cards = naturals.slice(0, n).concat(wilds.slice(0, w));
+        if (cards.indexOf(card) === -1) continue;
+        if (target && E.meldStats(target, S).isRedBook && w) continue;
+        var combined = (target ? target.cards : []).concat(cards);
+        if (!E.checkMeld(rank, combined, S).ok || quickMeldStopReason(target, rank, cards)) continue;
+        return { rank: rank, meldId: target ? target.id : null, cards: cards };
+      }
+    }
+    return null;
+  }
+  var found = null;
+  myMelds().some(function (meld) { found = candidate(meld.rank, meld); return !!found; });
+  if (found) return found;
+  var ranks = E.isWild(card) ? hand.filter(function (item) { return !E.isWild(item) && E.rankOf(item) !== '3'; }).map(E.rankOf) : [E.rankOf(card)];
+  if (E.isWild(card) && S.allowWildBooks) ranks.push('W');
+  Array.from(new Set(ranks)).some(function (rank) { found = candidate(rank, null); return !!found; });
+  return found;
+}
+
+function canDiscardCard(card) {
+  if (!isMyTurn() || view.turnPhase !== 'play' || !view.turnState || !view.turnState.drew ||
+      myHand().indexOf(card) === -1 || (view.settings.redThreeAutoLayOff && E.isRedThree(card))) return false;
+  if (!view.you.hasInitialMeld && view.turnState.melded > 0 && view.turnState.melded < view.minMeld) return false;
+  return !(view.you.inFoot && myHand().length === 1) ||
+    !!(view.settings.goOutWithDiscard && view.you.canGoOut.ok);
+}
+
+function discardContext(card) {
+  return view && JSON.stringify([view.code, view.round, view.turnId, view.turn, view.phase, view.turnPhase,
+    view.you, view.turnState, view.settings, myMelds(), sel, card, interactionMode]);
+}
+
+function closeDiscardConfirmation(restoreFocus) {
+  var previous = discardConfirmation;
+  discardConfirmation = null;
+  if ($('discardConfirmSheet')) $('discardConfirmSheet').hidden = true;
+  if (restoreFocus && previous && previous.returnFocus && previous.returnFocus.isConnected)
+    previous.returnFocus.focus({ preventScroll: true });
+}
+
+function syncDiscardConfirmation() {
+  if (discardConfirmation && (actionPending || discardContext(discardConfirmation.card) !== discardConfirmation.context ||
+      !canDiscardCard(discardConfirmation.card))) closeDiscardConfirmation(false);
+}
+
+function requestDiscard(card) {
+  if (actionPending || meldInteractionBlocked() || sel.length !== 1 || sel[0] !== card || !canDiscardCard(card)) return false;
+  cancelMeldTap();
+  var opportunity = meldOpportunityFor(card);
+  if (!opportunity) return act('discard', { card: card });
+  closeSortPopover(false); closeAutoDrawPopover(false, false);
+  discardConfirmation = { card: card, context: discardContext(card), returnFocus: document.activeElement };
+  $('discardConfirmTitle').textContent = 'Discard ' + (E.isJoker(card) ? 'joker' : E.rankOf(card) === 'T' ? '10' : E.rankOf(card)) + '? You can meld it';
+  var face = $('discardConfirmCard'); face.innerHTML = ''; face.appendChild(cardEl(card, {}));
+  $('discardConfirmDescription').textContent = opportunity.meldId
+    ? 'This card can go into your ' + E.rankName(opportunity.rank) + ' book. Keep it to play, or discard anyway.'
+    : 'You have the cards to start a ' + E.rankName(opportunity.rank) + ' meld with this card. Keep it to play, or discard anyway.';
+  $('discardConfirmSheet').hidden = false;
+  $('confirmDiscard').disabled = false;
+  $('keepDiscardCard').focus({ preventScroll: true });
+  return true;
+}
+
+function confirmDiscard() {
+  var pending = discardConfirmation;
+  if (!pending) return false;
+  if (actionPending || discardContext(pending.card) !== pending.context || !canDiscardCard(pending.card)) {
+    closeDiscardConfirmation(false); closeUndoDialog(false); return false;
+  }
+  $('confirmDiscard').disabled = true;
+  closeDiscardConfirmation(false); closeUndoDialog(false);
+  return act('discard', { card: pending.card });
+}
+
+function handleDiscardConfirmationKey(event) {
+  if (!discardConfirmation) return;
+  if (event.key === 'Escape') {
+    event.preventDefault(); event.stopImmediatePropagation(); closeDiscardConfirmation(true);
+  } else if (event.key === 'Tab') {
+    var keep = $('keepDiscardCard'), discard = $('confirmDiscard');
+    if (event.shiftKey ? document.activeElement !== discard : document.activeElement !== keep) {
+      event.preventDefault(); (event.shiftKey ? discard : keep).focus({ preventScroll: true });
+    }
+  }
+}
+
+/* Direct table targets share the same legality checks as the old action bar. */
+var newMeldRevealContext = null, newMeldFocusRequest = null;
+function newMeldOffer() {
+  if (!isMyTurn() || view.turnPhase !== 'play' || actionPending || sel.length < 3 ||
+      new Set(sel).size !== sel.length || sel.some(function (card) { return myHand().indexOf(card) === -1; })) return null;
+  var rank = selRank();
+  if (!rank || myMelds().some(function (meld) { return meld.rank === rank && !meldStatsOf(meld).complete; }) ||
+      !E.checkMeld(rank, sel, view.settings).ok || quickMeldStopReason(null, rank)) return null;
+  return { rank: rank, cards: sel.slice() };
+}
+
+function playNewMeld(context, event) {
+  if (actionPending || meldInteractionBlocked() || context !== discardContext('new-meld')) return false;
+  var offer = newMeldOffer();
+  if (!offer) return false;
+  var keyboard = event && event.detail === 0;
+  var request = keyboard ? { context: drawOriginContext(view), rank: offer.rank, cards: offer.cards.slice(),
+    logId: latestMotionLogId(view), target: interactionMode === 'buttons' ? $('playNewMeld') : $('newMeldTarget'), rejected: false } : null;
+  if (!act('meldNew', offer)) return false;
+  newMeldFocusRequest = request;
+  return true;
+}
+
+function restoreNewMeldFocus() {
+  var request = newMeldFocusRequest;
+  if (!request) return;
+  if (drawOriginContext(view) !== request.context || !view || view.turnPhase !== 'play' || meldInteractionBlocked()) {
+    newMeldFocusRequest = null; return;
+  }
+  if (actionPending) return;
+  var accepted = (view.log || []).some(function (entry) {
+    return entry.id > request.logId && entry.t === 'meld' && entry.seat === meSeat() && entry.rank === request.rank;
+  }) && request.cards.every(function (card) { return myHand().indexOf(card) === -1; });
+  if (!accepted && !request.rejected) return;
+  var active = document.activeElement;
+  if (active && active !== request.target && active.isConnected && active !== document.body &&
+      active !== document.documentElement) { newMeldFocusRequest = null; return; }
+  var target = null;
+  if (accepted) {
+    var meld = myMelds().find(function (item) {
+      return item.rank === request.rank && request.cards.every(function (card) { return item.cards.indexOf(card) !== -1; });
+    });
+    if (meld) target = Array.prototype.find.call($('myMelds').querySelectorAll('.meld'), function (node) {
+      return node.dataset.meldId === meld.id && !node.disabled;
+    });
+  } else {
+    target = interactionMode === 'buttons' ? $('playNewMeld') : $('newMeldTarget');
+    if (interactionMode === 'buttons' && target && target.disabled) return;
+  }
+  if (!target || !target.isConnected || target.disabled) target = $('myHand').querySelector('[data-card]');
+  newMeldFocusRequest = null;
+  if (target && !target.disabled) target.focus({ preventScroll: true });
+}
+
+function syncNewMeldTarget() {
+  var wrap = $('myMelds');
+  if (!wrap) return;
+  var slot = $('newMeldSlot');
+  if (!view || view.phase !== 'playing' || interactionMode === 'buttons') {
+    if (slot && wrap.contains(slot)) wrap.removeChild(slot);
+    newMeldRevealContext = null;
+    return;
+  }
+  if (!slot || !wrap.contains(slot)) {
+    slot = document.createElement('div'); slot.id = 'newMeldSlot'; slot.className = 'new-meld-slot'; wrap.appendChild(slot);
+  }
+  var offer = newMeldOffer();
+  slot.dataset.available = offer ? 'true' : 'false';
+  var signature = offer ? discardContext('new-meld') : '';
+  if (slot.dataset.signature === signature) return;
+  slot.dataset.signature = signature;
+  var restoreTargetFocus = document.activeElement && slot.contains(document.activeElement);
+  slot.innerHTML = '';
+  newMeldRevealContext = offer ? signature : null;
+  if (!offer) return; // The reserved slot remains; selection never repacks books.
+  var target = document.createElement('button'); target.type = 'button'; target.id = 'newMeldTarget';
+  target.className = 'new-meld-target';
+  target.setAttribute('aria-label', 'New meld: play ' + offer.cards.length + ' ' + E.rankName(offer.rank) + 's');
+  target.title = 'Play the selected cards as a new ' + E.rankName(offer.rank) + ' meld.';
+  var label = document.createElement('span'); label.className = 'new-meld-label'; label.textContent = 'New meld';
+  var cards = document.createElement('span'); cards.className = 'new-meld-caption'; cards.textContent = offer.cards.length + ' × ' + (offer.rank === 'T' ? '10' : offer.rank);
+  target.appendChild(label); target.appendChild(cards);
+  target.onclick = function (event) { return playNewMeld(signature, event); };
+  slot.appendChild(target);
+  if (restoreTargetFocus) target.focus({ preventScroll: true });
+}
+
+function revealNewMeldTarget() {
+  if (!newMeldRevealContext) return;
+  var wrap = $('myMelds'), slot = $('newMeldSlot');
+  if (!wrap || !slot || !wrap.contains(slot) || slot.dataset.signature !== newMeldRevealContext || !newMeldOffer()) {
+    newMeldRevealContext = null; return;
+  }
+  var shelf = wrap.getBoundingClientRect(), target = slot.getBoundingClientRect();
+  if (shelf.height < 8) return;
+  // Move only the shelf's internal scroll position; the table and hand remain
+  // still, and keyboard focus stays on the card the player just selected.
+  if (target.top < shelf.top) wrap.scrollTop = Math.max(0, wrap.scrollTop + target.top - shelf.top);
+  else if (target.bottom > shelf.bottom) wrap.scrollTop += target.bottom - shelf.bottom;
+  newMeldRevealContext = null;
+}
+
+function tableDiscardCard() {
+  return interactionMode === 'tap' && !actionPending && sel.length === 1 && canDiscardCard(sel[0]) ? sel[0] : null;
+}
+
+function requestTableDiscard(card, context) {
+  if (context !== discardContext(card) || tableDiscardCard() !== card) return false;
+  return requestDiscard(card);
+}
+
+function canUndoTurn() {
+  return !!(isMyTurn() && view.turnPhase === 'play' && view.turnState && view.turnState.melded > 0);
+}
+
+function syncTableUndo() {
+  var undo = $('tableUndo');
+  if (!undo) return;
+  undo.hidden = false; undo.disabled = actionPending || !canUndoTurn();
+  undo.textContent = 'Undo';
+  var label = view && view.turnState && view.turnState.tookPile ? 'Undo pickup' : 'Undo melds';
+  undo.title = label; undo.setAttribute('aria-label', label);
+}
+
+function closeUndoDialog(restore) {
+  undoConfirmation = null;
+  if ($('undoSheet')) $('undoSheet').hidden = true;
+  if (restore && $('tableUndo') && !$('tableUndo').disabled) $('tableUndo').focus({ preventScroll: true });
+}
+function finishUndoAction(action, data) {
+  if (!undoConfirmation || actionPending || undoConfirmation !== discardContext('undo') || !canUndoTurn()) {
+    closeUndoDialog(false); return false;
+  }
+  closeUndoDialog(false);
+  return act(action, data);
+}
+function undoTableTurn() {
+  if (actionPending || meldInteractionBlocked() || !canUndoTurn()) return false;
+  var options = (view.you && view.you.returnableWilds) || [];
+  var risk = sel.length === 1 && canDiscardCard(sel[0]);
+  if (!risk && !options.length) return act('undo');
+  undoConfirmation = discardContext('undo');
+  $('undoTitle').textContent = risk ? 'Are you sure you want to reset melds?' : 'Take back a wild or reset melds';
+  $('undoDescription').textContent = 'Reset removes all melds and additions you made this turn. Earlier turns stay unchanged.' +
+    (view.turnState.tookPile ? ' Your pile pickup will also be reversed.' : ' Your draw stays in your hand.') +
+    (options.length ? ' Or return one wild below and keep your other plays.' : '');
+  var list = $('undoWildOptions'); list.innerHTML = '';
+  options.forEach(function (option) {
+    var button = document.createElement('button'); button.type = 'button'; button.className = 'btn ghost';
+    button.textContent = 'Return ' + E.label(option.card) + ' from ' + E.rankName(option.rank) + 's';
+    button.onclick = function () { finishUndoAction('returnWild', { meldId: option.meldId, card: option.card }); };
+    list.appendChild(button);
+  });
+  $('undoSheet').hidden = false;
+  $('cancelUndo').onclick = function () { closeUndoDialog(true); };
+  $('confirmUndo').onclick = function () { finishUndoAction('undo'); };
+  $('undoSheet').onclick = function (event) { if (event.target === $('undoSheet')) closeUndoDialog(true); };
+  $('undoSheet').onkeydown = function (event) {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeUndoDialog(true); }
+    if (event.key === 'Tab') {
+      var controls = Array.prototype.filter.call($('undoSheet').querySelectorAll('button'), function (b) { return !b.disabled; });
+      var first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  };
+  $('cancelUndo').focus({ preventScroll: true });
+  return false;
+}
+
 function renderMine() {
   var wrap = $('myMelds');
   var melds = myMelds();
   var canTarget = isMyTurn() && view.turnPhase === 'play' && sel.length > 0 && !actionPending;
-  if (!melds.some(function (meld) { return meld.id === meldTargetId && canAddSelection(meld); })) meldTargetId = null;
 
   // Only tables using automatic layoff have a separate red-three pile.
   var threes = (view.you && view.you.redThrees) || [];
   var me = meSeat() >= 0 ? view.seats[meSeat()] : null;
   var signature = JSON.stringify([view.code, view.round, view.phase, view.turn, view.turnPhase,
-    view.settings, actionPending, sel, meldTargetId, melds, threes, opponentMeldStyle, finishedBookStyle, meldExpanded,
+    view.settings, actionPending, roundCountdownRemaining() > 0, sel, melds, threes, opponentMeldStyle, finishedBookStyle, interactionMode, meldExpanded,
     me && [me.redBooks, me.blackBooks, me.inFoot], Object.keys(freshPlays).filter(function (card) {
       return melds.some(function (meld) { return meld.cards.indexOf(card) !== -1; });
     })]);
   if (signature === mineSignature) {
-    renderHand(); $('clearSel').hidden = sel.length === 0; return;
+    renderHand(); renderRoundCountdown(); $('clearSel').hidden = false; $('clearSel').disabled = sel.length === 0; restoreNewMeldFocus(); return;
   }
+  var focusedMeld = document.activeElement;
+  if (!focusedMeld || !wrap.contains(focusedMeld) || !focusedMeld.dataset.meldId) focusedMeld = null;
   mineSignature = signature;
   wrap.innerHTML = '';
   if (threes.length) {
@@ -2074,8 +3268,8 @@ function renderMine() {
     wrap.appendChild(box);
   });
 
-  $('meldHint').textContent = canTarget && melds.some(canAddSelection)
-    ? (meldTargetId ? 'Book selected. Add below, or double-tap the book.' : 'Choose a book, then Add below. Double-tap a book to add directly.')
+  $('meldHint').textContent = canTarget && melds.some(canTargetMeld)
+    ? 'Tap a highlighted book to add. Double-tap to open or close its cards.'
     : '';
 
   var mc = $('myChips'); mc.innerHTML = '';
@@ -2088,9 +3282,23 @@ function renderMine() {
     });
   }
 
+  syncNewMeldTarget();
   renderHand();
-  $('clearSel').hidden = sel.length === 0;
+  $('clearSel').hidden = false; $('clearSel').disabled = sel.length === 0;
+  // Highlight expiry and other table updates replace these buttons. Preserve
+  // an existing keyboard destination without moving focus away from a dialog.
+  if (focusedMeld && !actionPending && !meldInteractionBlocked()) {
+    var active = document.activeElement;
+    if (!active || active === focusedMeld || !active.isConnected || active === document.body || active === document.documentElement) {
+      var replacement = Array.prototype.find.call(wrap.querySelectorAll('.meld'), function (node) {
+        return node.dataset.meldId === focusedMeld.dataset.meldId && !node.disabled;
+      });
+      if (replacement) replacement.focus({ preventScroll: true });
+    }
+  }
+  restoreNewMeldFocus();
   minePainted = true;
+  renderRoundCountdown();
 }
 
 /* CSS packs each book by its actual fan width. Only measure overflow here:
@@ -2106,15 +3314,16 @@ function fitMine() {
 
 /* The hand, in whichever arrangement this player prefers.
  *
- * Cards picked up this turn are held back and shown last — their own row when
- * layered, set apart by a gap when spread — so you can always tell at a glance
- * what just arrived, whatever the sort is doing to everything else. */
+ * Cards picked up this turn stay in a separate group above the existing hand.
+ * Both layouts keep that boundary: sorting or selecting cannot blend fresh
+ * cards back into an ordinary row before the turn's pickup markers clear. */
 function renderHand() {
   var wrap = $('myHand');
   wrap.dataset.count = String(myHand().length);
   var fresh = justPicked();
+  wrap.dataset.freshCount = String(fresh.length);
   var structure = [view.code, view.round, meSeat(), myHand().join(','), fresh.join(','),
-    sortMode, handLayout, view.you && view.you.inFoot, view.you && view.you.footCount, redThreePenalty()].join('|');
+    sortMode, handLayout, roundCountdownRemaining() > 0, view.you && view.you.inFoot, view.you && view.you.footCount, redThreePenalty()].join('|');
   var signature = structure + '|' + sel.join(',');
   if (signature === handSignature && !dealPending) return;
   if (structure === handStructureSignature && !dealPending && wrap.querySelectorAll('[data-card]').length === myHand().length) {
@@ -2141,7 +3350,7 @@ function renderHand() {
   var dealing = dealPending;
   var dealt = 0;
 
-  var make = function (c, isFresh, firstFresh) {
+  var make = function (c, isFresh) {
     var el = cardEl(c, {
       click: function () {
         notice = ''; noticeBad = false;
@@ -2153,8 +3362,8 @@ function renderHand() {
         (E.isRedThree(c) ? num(redThreePenalty()) + ' if you are still holding it — discard it' : E.cardValue(c, view ? view.settings : E.DEFAULTS) + ' points') +
         (isFresh ? ' · just picked up' : ''),
     });
+    el.disabled = roundCountdownRemaining() > 0;
     if (isFresh) el.classList.add('fresh');
-    if (firstFresh) el.classList.add('fresh-first');
     /* Dealt: the whole hand arrives, staggered in the order it is laid out.
        Otherwise only a card you have not been shown before slides in, which is
        what makes the two you just drew move while the rest sit still. */
@@ -2168,39 +3377,35 @@ function renderHand() {
     return el;
   };
 
-  if (handLayout === 'layered') {
-    var row = null;
-    sortHand(settled).forEach(function (c, i) {
-      if (i % PER_ROW === 0) {
-        row = document.createElement('div');
-        row.className = 'hand-row';
-        wrap.appendChild(row);
-      }
-      row.appendChild(make(c, false, false));
-    });
-    if (fresh.length) {
-      var freshRow;
-      fresh.forEach(function (c, index) {
+  function appendHandGroup(cards, isFresh) {
+    if (!cards.length) return;
+    var group = document.createElement('div');
+    group.className = isFresh ? 'hand-arrivals' : 'hand-settled';
+    group.dataset.count = String(cards.length);
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', isFresh ? 'Newly picked up cards' : 'Cards already in hand');
+    if (handLayout === 'layered') {
+      var row;
+      cards.forEach(function (card, index) {
         if (index % PER_ROW === 0) {
-          freshRow = document.createElement('div');
-          freshRow.className = 'hand-row' + (index === 0 ? ' fresh-row' : '');
-          wrap.appendChild(freshRow);
+          row = document.createElement('div');
+          row.className = 'hand-row' + (isFresh ? ' fresh-row' : '');
+          group.appendChild(row);
         }
-        freshRow.appendChild(make(c, true, false));
+        row.appendChild(make(card, isFresh));
       });
-    }
-  } else {
-    sortHand(settled).forEach(function (c) { wrap.appendChild(make(c, false, false)); });
-    fresh.forEach(function (c, i) { wrap.appendChild(make(c, true, i === 0)); });
+    } else cards.forEach(function (card) { group.appendChild(make(card, isFresh)); });
+    wrap.appendChild(group);
   }
+  appendHandGroup(fresh, true);
+  appendHandGroup(sortHand(settled), false);
 
   // A deal is spent once it has been drawn; the next paint is an ordinary one.
   dealPending = false;
 
-  /* The hand builds upwards from the bottom edge, so when it is deep enough to
-   * scroll the rows worth seeing are the last ones — the cards nearest your
-   * thumb, including whatever you just picked up. */
-  wrap.scrollTop = arriving ? wrap.scrollHeight : oldScroll;
+  // New arrivals live at the top; ordinary selection/sort updates preserve
+  // the reader's position instead of yanking a scrolled hand around.
+  wrap.scrollTop = arriving ? 0 : oldScroll;
   if (focusedCard) {
     var replacement = Array.prototype.find.call(wrap.querySelectorAll('[data-card]'), function (el) {
       return el.dataset.card === focusedCard;
@@ -2215,7 +3420,7 @@ function renderHand() {
     ' cards in foot' + (fresh.length ? ', ' + fresh.length + ' newly drawn' : ''));
   $('handPill').title = fresh.length
     ? 'The ' + fresh.length + ' card' + (fresh.length > 1 ? 's' : '') +
-      ' you just picked up sit last, outlined in mint. Selected cards have a gold outline.'
+      ' you just picked up sit in a separate row above your other cards. Selected cards are raised with a dark border.'
     : '';
 }
 
@@ -2263,7 +3468,8 @@ function hideTurnBanner() {
  * with the game in a background tab. */
 function syncTitle() {
   var mine = view && view.phase === 'playing' && isMyTurn();
-  document.title = (mine ? '▶ Your turn · ' : '') + 'Hand & Foot';
+  var choosing = view && view.phase === 'choosing' && view.handChoice && view.handChoice.pending;
+  document.title = (choosing ? 'Choose your foot · ' : mine ? '▶ Your turn · ' : '') + 'Hand & Foot';
 }
 
 function btn(label, fn, ghost) {
@@ -2281,7 +3487,111 @@ function esc(s) {
   });
 }
 
+function setInteractionMode(mode) {
+  interactionMode = mode === 'buttons' ? 'buttons' : 'tap';
+  set('hf_interactions', interactionMode);
+  document.documentElement.setAttribute('data-interactions', interactionMode);
+  cancelMeldTap(); closeDiscardConfirmation(false); closeUndoDialog(false);
+  newMeldFocusRequest = null;
+  renderRules();
+  if (view) render();
+  scheduleBoardSize();
+}
+
+/* Buttons mode reserves both slots throughout play. Selection only changes
+ * labels and availability; it never inserts a row or moves the hand. */
+function renderPlayButtons() {
+  var region = $('playButtons');
+  if (!region) return;
+  var visible = interactionMode === 'buttons' && view && view.phase === 'playing';
+  var available = visible && isMyTurn() && !actionPending;
+  var stamp = visible ? discardContext('play-buttons') : '';
+  var actions = [];
+  if (visible) {
+    var primary = { id: view.turnPhase === 'draw' ? 'playChooseDraw' : 'playNewMeld',
+      label: view.turnPhase === 'draw' ? 'Select piles' : 'New meld', disabled: true };
+    var discard = { id: 'playDiscard', label: view.turnPhase === 'draw' ? 'View pile' : 'Discard', secondary: true, disabled: true, viewing: view.turnPhase === 'draw' };
+    actions = [primary, discard];
+  }
+  if (available) {
+    if (view.turnPhase === 'draw') {
+      var chosen = drawPickerSelection();
+      primary.label = chosen ? (view.settings.stockPiles === 1 ? 'Draw ' + view.settings.drawCount : 'Draw piles ' + chosen.map(function (n) { return n + 1; }).join(' & '))
+        : pileSel.length ? 'Select ' + (view.settings.drawCount - pileSel.length) + ' more pile' + (view.settings.drawCount - pileSel.length === 1 ? '' : 's') : 'Select piles';
+      primary.disabled = !drawPickerConnected() || !chosen;
+      primary.run = confirmTableDraw;
+      discard.disabled = !drawPickerConnected() || !view.discardTop;
+      discard.run = showPeek;
+      discard.pickup = !!pileChance();
+    } else if (view.turnPhase === 'play') {
+      var offer = newMeldOffer();
+      if (offer) {
+        var newStamp = discardContext('new-meld');
+        primary.label = 'New meld · ' + offer.cards.length + ' ' + E.rankName(offer.rank) + 's';
+        primary.disabled = false;
+        primary.run = function (event) { return playNewMeld(newStamp, event); };
+      }
+      if (sel.length === 1 && canDiscardCard(sel[0])) {
+        var card = sel[0];
+        discard.label = 'Discard ' + (E.isJoker(card) ? 'joker' : E.label(card));
+        discard.accessible = 'Discard ' + spokenCard(card);
+        discard.disabled = false;
+        discard.run = function () { return requestDiscard(card); };
+      }
+    }
+  }
+  region.dataset.context = stamp;
+  region.hidden = !actions.length;
+  region.setAttribute('aria-hidden', actions.length ? 'false' : 'true');
+  if (!actions.length) {
+    region.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
+    // Once the server accepts a keyboard play, its action may disappear. Keep
+    // focus on a visible control instead of leaving it in the collapsed strip.
+    if (!actionPending && region.contains(document.activeElement) && !meldInteractionBlocked()) {
+      var hand = $('myHand');
+      var next = hand && hand.querySelector('[data-card]') || $('rulesBtn');
+      if (next && !next.disabled) next.focus({ preventScroll: true });
+    }
+    return;
+  }
+  var destinations = $('playDestinations');
+  if (!destinations || !region.contains(destinations)) {
+    destinations = document.createElement('div'); destinations.id = 'playDestinations';
+    destinations.className = 'play-destinations';
+    destinations.setAttribute('role', 'group');
+    region.appendChild(destinations);
+  }
+  destinations.setAttribute('aria-label', actions.some(function (action) { return action.id === 'playChooseDraw'; })
+    ? 'Draw action' : 'New meld action');
+  destinations.hidden = !actions.some(function (action) { return action.id !== 'playDiscard'; });
+  var wanted = actions.map(function (action) { return action.id; });
+  Array.prototype.slice.call(region.querySelectorAll('button')).forEach(function (child) {
+    if (wanted.indexOf(child.id) === -1) child.parentNode.removeChild(child);
+  });
+  actions.forEach(function (action) {
+    var parent = action.id === 'playDiscard' ? region : destinations;
+    var button = $(action.id);
+    if (!button || !region.contains(button)) {
+      button = document.createElement('button'); button.type = 'button'; button.id = action.id;
+      parent.appendChild(button);
+    } else if (button.parentNode !== parent) {
+      button.parentNode.removeChild(button); parent.appendChild(button);
+    }
+    button.className = 'btn' + (action.secondary ? ' ghost' : '') + (action.viewing ? ' view-pile-action' : '') + (action.pickup ? ' pickup-available' : '');
+    button.textContent = action.label; button.disabled = !!action.disabled;
+    button.setAttribute('aria-label', action.accessible || action.label);
+    button.onclick = function (event) {
+      if (button.disabled || !action.run || interactionMode !== 'buttons' || !isMyTurn() || actionPending || stamp !== discardContext('play-buttons')) return false;
+      return action.run(event);
+    };
+  });
+  syncTableScrollHints();
+  restoreNewMeldFocus();
+}
+
 function renderActions() {
+  if (undoConfirmation && (actionPending || undoConfirmation !== discardContext('undo') || !canUndoTurn())) closeUndoDialog(false);
+  syncNewMeldTarget(); syncTableUndo(); renderPlayButtons();
   var bar = $('actionBar');
   var persistent = $('actionHint');
   if (!persistent || !bar.contains(persistent)) {
@@ -2315,6 +3625,17 @@ function renderActions() {
     bar.appendChild(btn('Next round', function () {
       $('scoreSheet').hidden = true; act('nextRound');
     }));
+    return;
+  }
+
+  if (view.phase === 'choosing') {
+    hint._format = 'textContent'; hint.textContent = view.handChoice && view.handChoice.pending
+      ? 'Choose a pile for your foot.' : 'Waiting for everyone to choose their foot.';
+    return;
+  }
+
+  if (roundCountdownRemaining() > 0) {
+    hint._format = 'textContent'; hint.textContent = '';
     return;
   }
 
@@ -2355,16 +3676,18 @@ function renderActions() {
     else if (!live.length) {
       hint._format = 'textContent'; hint.textContent = 'No stock cards left.';
     } else if (singleStock) {
-      hint._format = 'textContent'; hint.textContent = 'Draw two from the stock.';
+      hint._format = 'textContent'; hint.textContent = 'Tap the stock to draw two.';
     } else if (!spread) {
-      hint._format = 'innerHTML'; hint.innerHTML = 'Only pile <b>' + (live[0] + 1) + '</b> left — both cards come from it.';
+      hint._format = 'innerHTML'; hint.innerHTML = 'Tap the remaining stock to draw.';
     } else if (left > 0) {
       hint._format = 'innerHTML'; hint.innerHTML = pileSel.length
-        ? 'Pick <b>1 more pile</b>.'
-        : 'Pick <b>2 different piles</b>.';
+        ? 'Select one more pile on the table.'
+        : 'Select two piles on the table.';
     } else {
-      hint._format = 'innerHTML'; hint.innerHTML = 'Drawing from piles <b>' +
-        pileSel.map(function (i) { return i + 1; }).join('</b> and <b>') + '</b>.';
+      hint._format = 'innerHTML'; hint.innerHTML = interactionMode === 'buttons' ? 'Press Draw piles to draw your selected cards.' : 'Tap your selected piles to draw.';
+    }
+    if (!notice && interactionMode === 'buttons' && live.length && drawPickerConnected() && drawPickerManualReason()) {
+      hint._format = 'textContent'; hint.textContent = drawPickerSelection() ? 'Press Draw piles to draw your selected cards.' : 'Select ' + Math.max(0, left) + ' pile' + (left === 1 ? '' : 's') + ' on the table.';
     }
 
     /* You are holding what the pile costs. Say so, and say what to tap — a
@@ -2372,29 +3695,10 @@ function renderActions() {
     if (!notice && chance) {
       var cards = chance.take + ' card' + (chance.take === 1 ? '' : 's');
       hint._format = 'innerHTML';
-      hint.innerHTML += ' Or open <b>Take pile</b> for ' + cards + '.';
+      hint.innerHTML += ' Or view the discard pile (' + cards + ').';
     }
 
 
-    var validDraw = live.length && (!spread || (left === 0 &&
-      new Set(pileSel).size >= Math.min(S.distinctDrawPiles, S.drawCount) &&
-      pileSel.every(function (index) { return live.indexOf(index) !== -1; })));
-    if (validDraw) {
-      var d = btn('Draw ' + S.drawCount, function () {
-        act('draw', { piles: singleStock ? [live[0], live[0]] : spread ? pileSel.slice() : [] });
-      });
-      d.id = 'drawAction'; d.classList.add('action-primary'); d.disabled = actionPending;
-      d.title = singleStock ? 'Draw both cards from the stock.' : spread
-        ? 'Your two cards must come from two different draw piles.'
-        : 'One pile left, so the two-different-piles rule relaxes.';
-      bar.appendChild(d);
-    }
-    if (chance) {
-      var take = btn('Take pile · ' + chance.take + ' card' + (chance.take === 1 ? '' : 's'), showPeek, true);
-      take.id = 'takePileAction'; take.classList.add('action-secondary'); take.disabled = actionPending;
-      take.title = 'Open the pile, then confirm. The matching natural cards are chosen automatically.';
-      bar.appendChild(take);
-    }
     return;
   }
 
@@ -2440,31 +3744,16 @@ function renderActions() {
   var have = myMelds().some(function (m) { return m.rank === r && !meldStatsOf(m).complete; });
   var ownedSelection = sel.length > 0 && new Set(sel).size === sel.length &&
     sel.every(function (card) { return myHand().indexOf(card) !== -1; });
-  var eligible = ownedSelection ? myMelds().filter(function (meld) {
-    return canAddSelection(meld) && !quickMeldStopReason(meld);
-  }) : [];
-  var target = eligible.find(function (meld) { return meld.id === meldTargetId; });
+  var eligible = ownedSelection ? myMelds().filter(canTargetMeld) : [];
   var chk = r && sel.length >= 3 && !have && ownedSelection ? E.checkMeld(r, sel, S) : null;
   var newMeldStop = chk && chk.ok ? quickMeldStopReason(null, r) : '';
-  if (chk && chk.ok && !newMeldStop && !target) {
-    var mb = btn('Meld ' + sel.length + ' ' + E.rankName(r) + 's', function () {
-      act('meldNew', { rank: r, cards: sel.slice() });
-    });
-    mb.id = 'meldAction'; mb.classList.add('action-primary');
-    mb.disabled = actionPending;
-    bar.appendChild(mb);
+  if (newMeldOffer()) {
     hint.dataset.phase = 'Meld';
+    if (!notice) hint.innerHTML += interactionMode === 'buttons' ? ' Use New meld below your hand.' : ' Tap New meld on your table.';
   }
 
-  if (target) {
-    var add = btn('Add ' + sel.length + ' to ' + E.rankName(target.rank) + 's', function () {
-      act('meldAdd', { meldId: target.id, cards: sel.slice() });
-    });
-    add.id = 'addToBookAction'; add.classList.add('action-primary'); add.disabled = actionPending;
-    bar.appendChild(add);
-    hint.dataset.phase = 'Meld';
-  } else if (eligible.length && !notice) {
-    hint.innerHTML += ' Choose a book to add the selected cards.';
+  if (eligible.length && !notice) {
+    hint.innerHTML += ' Tap a highlighted book to add.';
   } else if (newMeldStop && !notice) {
     hint._format = 'textContent'; hint.textContent = newMeldStop;
   }
@@ -2479,24 +3768,11 @@ function renderActions() {
         : S.goOutWithDiscard ? 'Complete your required books before your final discard.' : 'Your last foot card must be melded, never discarded.';
       hint._format = 'textContent'; hint.textContent = why;
     } else if (view.turnState && view.turnState.drew && !(S.redThreeAutoLayOff && E.isRedThree(sel[0]))) {
-      var discard = btn('Discard ' + E.label(sel[0]), function () {
-        act('discard', { card: sel[0] });
-      });
-      discard.id = 'discardAction'; discard.classList.add('action-discard'); discard.disabled = actionPending;
-      bar.appendChild(discard);
-      if (!target) hint.dataset.phase = 'Discard';
+      if (!notice) hint.innerHTML += interactionMode === 'buttons' ? ' Use Discard below your hand.' : ' Tap the discard pile to discard ' + esc(E.label(sel[0])) + '.';
+      hint.dataset.phase = 'Discard';
     }
   }
 
-  /* Undoing a pile take hands the whole pile back and returns you to the draw,
-   * which is the only way out of taking it and then falling short of the
-   * minimum. Say which one the button is about to do. */
-  if (view.turnState && view.turnState.melded > 0) {
-    var undo = btn(view.turnState.tookPile ? 'Undo pickup' : 'Undo melds',
-      function () { act('undo'); }, true);
-    undo.id = 'undoAction'; undo.classList.add('action-undo'); undo.disabled = actionPending;
-    bar.appendChild(undo);
-  }
   } finally {
     persistent.className = hint.className;
     if (hint.dataset.phase) persistent.dataset.phase = hint.dataset.phase;
@@ -2516,6 +3792,7 @@ function renderLog() {
         (e.piles && e.piles.length === 2 && e.piles[0] !== e.piles[1]
           ? ' from piles ' + e.piles[0] + ' and ' + e.piles[1] : '');
       case 'pile': return names[e.seat] + ' took ' + e.n + ' from the pile on ' + E.rankName(e.rank) + 's';
+      case 'returnWild': return names[e.seat] + ' returned ' + E.label(e.card) + ' from ' + E.rankName(e.rank) + 's';
       case 'meld': return names[e.seat] + ' laid ' + e.n + ' ' + E.rankName(e.rank) + (e.n > 1 ? 's' : '');
       case 'discard': return names[e.seat] + ' discarded ' + E.label(e.card);
       case 'foot': return names[e.seat] + ' picked up their foot';
@@ -2531,6 +3808,7 @@ function renderLog() {
 /* Inspect the discard and confirm a pickup. A closed-pile table reveals only
  * its public top card and the number of hidden cards, never their identities. */
 function showPeek() {
+  closeDrawPicker(false, true);
   var sheet = $('peekSheet');
   if (!view || !view.discardTop) { sheet.hidden = true; delete sheet.dataset.takePending; return; }
   // An accepted pickup moves out of draw. A refused pickup stays open so its
@@ -2695,11 +3973,6 @@ function themeSample(t) {
 }
 
 function renderLook(body) {
-  var h = document.createElement('h3');
-  h.className = 'rule-head';
-  h.textContent = 'Appearance';
-  body.appendChild(h);
-
   var intro = document.createElement('div');
   intro.className = 'note';
   intro.style.marginBottom = '12px';
@@ -2721,7 +3994,9 @@ function renderLook(body) {
     },
     themeSample
   ));
+}
 
+function renderTurnAlerts(body) {
   /* Also yours alone, and for the same reason it does not go through setRule. */
   var nbox = document.createElement('div');
   nbox.className = 'rule-toggle';
@@ -2748,10 +4023,15 @@ function renderLook(body) {
 function openRules(mode) {
   closeSortPopover(false);
   closeAutoDrawPopover(false, false);
+  var wasEditing = rulesEditing;
   if ($('rulesSheet').hidden) rulesReturnFocus = document.activeElement;
-  rulesMode = mode === 'settings' ? 'settings' : 'rules';
+  rulesEditing = mode === 'edit' && !!(view && view.canConfigureRules);
+  rulesMode = mode === 'settings' || mode === 'appearance' ? mode : 'rules';
   $('rulesSheet').hidden = false;
   renderRules();
+  $('rulesBody').scrollTop = 0;
+  if (rulesEditing && $('rulesEditorTitle')) $('rulesEditorTitle').focus({ preventScroll: true });
+  else if (wasEditing && mode === 'rules' && $('editTableRules')) $('editTableRules').focus({ preventScroll: true });
 }
 
 /* One schema serves setup and the host's queued rule editor. Presets also
@@ -2824,11 +4104,31 @@ function lockRulesEditor(locked) {
     form.querySelectorAll(tag).forEach(function (field) { field.disabled = locked; });
   });
   form.setAttribute('aria-busy', locked ? 'true' : 'false');
+  if ($('saveRulesConfig')) $('saveRulesConfig').disabled = locked;
 }
 
 function finishRulesConfig(ok, message) {
+  var request = rulesConfigRequest;
   clearTimeout(rulesConfigTimer); rulesConfigTimer = null; rulesConfigRequest = null;
   lockRulesEditor(false); setRulesConfigStatus(message, !ok);
+  // Disabling a submitting control may move focus to body before the server
+  // replies. Restore the initiating control only if the user has not moved on.
+  var active = document.activeElement;
+  var idleFocus = !active || active === document.body || active === document.documentElement;
+  var form = $('rulesEditor'), saveBar = $('rulesSaveBar');
+  if (request && request.focusId && idleFocus && rulesEditing && view && view.canConfigureRules &&
+      view.code === request.code && !$('rulesSheet').hidden && form && !form.hidden) {
+    var target = $(request.focusId);
+    var visible = target && !target.disabled && (form.contains(target) || (saveBar && !saveBar.hidden && saveBar.contains(target)));
+    for (var parent = target; visible && parent; parent = parent.parentNode) {
+      if (parent.hidden) visible = false;
+      if (String(parent.tagName).toLowerCase() === 'details' && !parent.open) {
+        var summary = parent.querySelector('summary');
+        if (!summary || !summary.contains(target)) visible = false;
+      }
+    }
+    if (visible) target.focus({ preventScroll: true });
+  }
 }
 
 function acknowledgeRulesConfig() {
@@ -2880,7 +4180,9 @@ function submitRulesConfig(event) {
     if (JSON.stringify(base[key]) !== JSON.stringify(checked.settings[key])) changed[key] = checked.settings[key];
   });
   if (!Object.keys(changed).length) { setRulesConfigStatus('No rule changes to save.', false); return false; }
-  var request = { code: view.code, rules: changed };
+  var active = document.activeElement, form = $('rulesEditor'), saveBar = $('rulesSaveBar');
+  var focusId = active && ((form && form.contains(active)) || (saveBar && saveBar.contains(active))) ? active.id : null;
+  var request = { code: view.code, rules: changed, focusId: focusId || null };
   rulesConfigRequest = request;
   if (!act('configureRules', { rules: changed })) {
     finishRulesConfig(false, 'Rules were not sent. Reconnect and try again.'); return false;
@@ -2940,8 +4242,9 @@ function renderRulesEditor(body) {
     body.appendChild(owner); return;
   }
   var form = document.createElement('form'); form.id = 'rulesEditor'; form.className = 'menu-form';
+  form.hidden = !rulesEditing; form.noValidate = true;
   form.onsubmit = submitRulesConfig;
-  var title = document.createElement('h3'); title.className = 'rule-head'; title.textContent = 'Change table rules'; form.appendChild(title);
+  var title = document.createElement('h3'); title.className = 'rule-head'; title.id = 'rulesEditorTitle'; title.tabIndex = -1; title.textContent = 'Change table rules'; form.appendChild(title);
   var intro = document.createElement('p'); intro.className = 'note';
   intro.textContent = view.phase === 'lobby' ? 'Choose the rules for the first deal. Everyone at this table uses them.' :
     'Changes apply next round (or the next game), never to the current hand. The editor shows queued values when present.';
@@ -2953,9 +4256,12 @@ function renderRulesEditor(body) {
   presetNote.textContent = 'House Rules is the default. Real Rules uses Bicycle’s rules with individual scoring. Choosing a set replaces every rule in this editor.'; form.appendChild(presetNote);
   rulesEditorBase = JSON.parse(JSON.stringify(base)); rulesEditorCode = view.code;
   function groupHeading(title) {
+    var section = document.createElement('details'); section.className = 'rules-edit-group';
+    var savedGroups = rulesDraft && rulesDraft.code === view.code && rulesDraft.openGroups;
+    section.open = savedGroups && Object.prototype.hasOwnProperty.call(savedGroups, title) ? savedGroups[title] : title === 'Deal';
+    var summary = document.createElement('summary'); summary.id = 'ruleGroup-' + title.toLowerCase().replace(/\W+/g, '-'); summary.textContent = title; section.appendChild(summary);
     group = document.createElement('div'); group.className = 'look-row rules-fields';
-    var heading = document.createElement('h3'); heading.className = 'rule-head'; heading.textContent = title;
-    group.appendChild(heading); form.appendChild(group);
+    section.appendChild(group); form.appendChild(section);
   }
   RULE_CONFIG_FIELDS.forEach(function (field) {
     if (field.group) groupHeading(field.group);
@@ -2997,9 +4303,14 @@ function renderRulesEditor(body) {
   if (rulesConfigFeedbackCode === view.code) {
     status.textContent = rulesConfigFeedback; if (rulesConfigFeedbackBad) status.classList.add('warn');
   }
-  form.appendChild(status);
   var save = btn(view.phase === 'lobby' ? 'Save rules for first deal' : 'Save for next round', function () {});
-  save.type = 'submit'; save.id = 'saveRulesConfig'; form.appendChild(save);
+  save.type = 'submit'; save.id = 'saveRulesConfig'; save.setAttribute('form', 'rulesEditor');
+  var saveBar = $('rulesSaveBar');
+  if (saveBar) {
+    saveBar.innerHTML = ''; saveBar.hidden = !rulesEditing;
+    var read = btn('Read rules', function () { openRules('rules'); }, true); read.id = 'readTableRules';
+    saveBar.appendChild(status); saveBar.appendChild(read); saveBar.appendChild(save);
+  } else { form.appendChild(status); form.appendChild(save); }
   body.appendChild(form);
   if (rulesDraft && rulesDraft.code === view.code) Object.keys(rulesDraft.values).forEach(function (id) {
     var field = $(id);
@@ -3022,31 +4333,147 @@ function renderRulesEditor(body) {
   lockRulesEditor(!!rulesConfigRequest);
 }
 
+/* Samples share the game's card renderer and colors without creating live
+ * meld buttons or changing the player's table preferences. */
+function preferenceBookSample(mode, finished) {
+  var sample = document.createElement('span'); sample.className = 'preference-book-sample';
+  sample.setAttribute('aria-hidden', 'true');
+  var count = finished ? (view ? view.settings.bookSize : E.DEFAULTS.bookSize) : 3;
+  var compact = mode === 'tiles' || mode === 'stacked';
+  sample.dataset.presentation = compact ? 'stacked' : mode;
+  for (var i = 0; i < (compact ? 1 : count); i++) {
+    var face = cardEl('7' + ['H', 'D', 'S', 'C'][i % 4] + Math.floor(i / 4), { tiny: true, book: finished ? 'book-red' : null });
+    sample.appendChild(face);
+  }
+  var number = document.createElement('span'); number.className = 'preference-book-count'; number.textContent = String(count); sample.appendChild(number);
+  return sample;
+}
+
+function preferenceInteractionSample(mode) {
+  var sample = document.createElement('span'); sample.className = 'interaction-preview';
+  sample.dataset.mode = mode; sample.setAttribute('aria-hidden', 'true');
+  function part(parent, className, text) {
+    var element = document.createElement('span'); element.className = className;
+    if (text) element.textContent = text;
+    parent.appendChild(element); return element;
+  }
+  function card(parent, selected) {
+    var face = part(parent, 'interaction-preview-card' + (selected ? ' is-selected' : ''));
+    part(face, 'interaction-preview-rank', '7'); part(face, 'interaction-preview-suit', '♥');
+  }
+  var hand = part(sample, 'interaction-preview-hand');
+  if (mode === 'buttons') card(hand, false);
+  card(hand, true);
+  if (mode === 'buttons') {
+    card(hand, false);
+    var actions = part(sample, 'interaction-preview-actions');
+    part(actions, 'interaction-preview-action', 'New meld');
+    part(actions, 'interaction-preview-action', 'Discard');
+  } else {
+    part(sample, 'interaction-preview-arrow', '→');
+    var targets = part(sample, 'interaction-preview-targets');
+    [['is-book', 'Book'], ['is-discard', 'Pile']].forEach(function (target) {
+      var destination = part(targets, 'interaction-preview-target ' + target[0]);
+      card(destination, false); part(destination, 'interaction-preview-caption', target[1]);
+    });
+  }
+  return sample;
+}
+
+function preferenceHeading(body, text) {
+  var heading = document.createElement('h3'); heading.className = 'preference-section-title'; heading.textContent = text; body.appendChild(heading);
+}
+
+function renderPersonalSettings(body) {
+  var intro = document.createElement('p'); intro.className = 'note preference-intro';
+  intro.textContent = 'Only on this device. Table rules stay the same for everyone.'; body.appendChild(intro);
+  preferenceHeading(body, 'How you play');
+  body.appendChild(lookPicker('Interactions', 'Buttons handle drawing, new melds, and discards. In either mode, tap an existing book to add selected cards.',
+    [{ id: 'tap', name: 'Tap' }, { id: 'buttons', name: 'Buttons' }], interactionMode, setInteractionMode,
+    function (option) { return preferenceInteractionSample(option.id); }));
+  var motion = document.createElement('div'); motion.className = 'rule-toggle preference-switch';
+  var input = document.createElement('input'); input.type = 'checkbox'; input.id = 'cardMotionToggle'; input.checked = cardMotionOn;
+  input.setAttribute('role', 'switch');
+  input.onchange = function () {
+    cardMotionOn = input.checked; set('hf_card_motion', cardMotionOn ? 'on' : 'off');
+    document.documentElement.setAttribute('data-card-motion', cardMotionOn ? 'on' : 'off');
+    cancelCardMotion(); renderRules();
+  };
+  var label = document.createElement('label'); label.setAttribute('for', input.id);
+  var title = document.createElement('div'); title.className = 'rule-title'; title.textContent = 'Card movement';
+  var note = document.createElement('div'); note.className = 'note'; note.textContent = 'Respects your device’s Reduce Motion setting.';
+  label.appendChild(title); label.appendChild(note); motion.appendChild(input); motion.appendChild(label); body.appendChild(motion);
+  renderTurnAlerts(body);
+  preferenceHeading(body, 'How books look');
+  body.appendChild(lookPicker('Meld display', 'Your melds and opponents’ melds.',
+    [{ id: 'cards', name: 'Cards' }, { id: 'tiles', name: 'Tiles' }], opponentMeldStyle,
+    setOpponentMeldStyle, function (option) { return preferenceBookSample(option.id, false); }));
+  body.appendChild(lookPicker('Finished books', 'Double-tap a book to change its view during play.',
+    [{ id: 'stacked', name: 'Stacked' }, { id: 'spread', name: 'Spread' }], finishedBookStyle,
+    setFinishedBookStyle, function (option) { return preferenceBookSample(option.id, true); }));
+}
+
 var rulesSignature = null;
 function renderRules() {
-  var signature = JSON.stringify([rulesMode, !!view, view ? view.settings : E.DEFAULTS,
+  // Losing hosting permission also leaves edit mode, so neither hidden fields
+  // nor the edit-only footer can remain the current interaction target.
+  if (rulesEditing && !(view && view.canConfigureRules)) rulesEditing = false;
+  var signature = JSON.stringify([rulesMode, rulesEditing, !!view, view ? view.settings : E.DEFAULTS,
     view && view.code, view && view.phase, view && view.pendingSettings, view && view.canConfigureRules,
-    view && view.reshufflesRemaining, cardStyle, theme, nudgeOn, handLayout, sortMode, opponentMeldStyle, finishedBookStyle, cardMotionOn]);
+    view && view.reshufflesRemaining, cardStyle, theme, nudgeOn, handLayout, sortMode, opponentMeldStyle, finishedBookStyle, cardMotionOn, interactionMode]);
   if (signature === rulesSignature) return;
   var body = $('rulesBody');
+  var saveBar = $('rulesSaveBar');
   var active = document.activeElement;
-  var focusId = active && body.contains(active) ? active.id : null;
+  var focusId = active && (body.contains(active) || (saveBar && saveBar.contains(active))) ? active.id : null;
+  var oldForm = $('rulesEditor'), openGroups = null;
+  if (oldForm && body.contains(oldForm) && view && rulesEditorCode === view.code) {
+    openGroups = {};
+    oldForm.querySelectorAll('.rules-edit-group').forEach(function (section) {
+      openGroups[section.querySelector('summary').textContent] = section.open;
+    });
+  }
   captureRulesDraft();
+  if (openGroups) {
+    // An accepted save resets values, but must not collapse the section being
+    // read. Keep disclosure state separate from whether there are dirty fields.
+    if (!rulesDraft || rulesDraft.code !== view.code) rulesDraft = { code: view.code, values: {}, presetBase: rulesConfigBase() };
+    rulesDraft.openGroups = openGroups;
+  }
   buildRules();
   rulesSignature = signature;
   // A preference or incoming rule change must not drop keyboard focus to the
   // page. Unrelated state messages leave the settings DOM untouched entirely.
-  if (focusId && $(focusId)) $(focusId).focus({ preventScroll: true });
+  if (focusId) {
+    var target = $(focusId);
+    var visible = target && (body.contains(target) || (saveBar && saveBar.contains(target)));
+    for (var parent = target; visible && parent; parent = parent.parentNode) {
+      if (parent.hidden) visible = false;
+      if (String(parent.tagName).toLowerCase() === 'details' && !parent.open) {
+        var summary = parent.querySelector('summary');
+        if (!summary || !summary.contains(target)) visible = false;
+      }
+    }
+    if (visible && !target.disabled) target.focus({ preventScroll: true });
+    else {
+      var fallback = $('rules-tab-' + rulesMode);
+      if (fallback) fallback.focus({ preventScroll: true });
+    }
+  }
 }
 
 function buildRules() {
   var body = $('rulesBody'); body.innerHTML = '';
+  body.dataset.section = rulesMode;
+  body.dataset.editing = rulesEditing && view && view.canConfigureRules ? 'true' : 'false';
+  if ($('rulesSaveBar')) { $('rulesSaveBar').innerHTML = ''; $('rulesSaveBar').hidden = true; }
   var S = Object.assign({}, E.DEFAULTS, view ? view.settings : {});
-  if ($('rulesTitle')) $('rulesTitle').textContent = rulesMode === 'settings' ? 'Settings' : 'Rules';
-  if ($('leaveBtn')) $('leaveBtn').hidden = !view;
+  var sectionNames = { rules: 'Rules', settings: 'Settings', appearance: 'Appearance' };
+  if ($('rulesTitle')) $('rulesTitle').textContent = sectionNames[rulesMode];
+  if ($('leaveBtn')) $('leaveBtn').hidden = !view || rulesEditing;
   var tabs = document.createElement('div'); tabs.className = 'rules-tabs';
-  ['rules', 'settings'].forEach(function (mode) {
-    var tab = btn(mode === 'rules' ? 'Rules' : 'Settings', function () { openRules(mode); }, mode !== rulesMode);
+  ['rules', 'settings', 'appearance'].forEach(function (mode) {
+    var tab = btn(sectionNames[mode], function () { openRules(mode); }, mode !== rulesMode);
     tab.id = 'rules-tab-' + mode;
     tab.classList.add('sm'); tab.setAttribute('aria-pressed', mode === rulesMode ? 'true' : 'false');
     tabs.appendChild(tab);
@@ -3054,25 +4481,16 @@ function buildRules() {
   body.appendChild(tabs);
 
   if (rulesMode === 'settings') {
-    body.appendChild(lookPicker('Card movement', 'Cards travel between piles, your hand and melds. Your device’s Reduce Motion setting is always respected.',
-      [{ id: 'on', name: 'On' }, { id: 'off', name: 'Off' }], cardMotionOn ? 'on' : 'off',
-      function (id) { cardMotionOn = id !== 'off'; set('hf_card_motion', cardMotionOn ? 'on' : 'off'); document.documentElement.setAttribute('data-card-motion', cardMotionOn ? 'on' : 'off'); cancelCardMotion(); renderRules(); }));
-    body.appendChild(lookPicker('Meld display', 'Cards shows each card in unfinished melds; Tiles uses one rank and count. Applies to you and opponents.',
-      [{ id: 'cards', name: 'Cards' }, { id: 'tiles', name: 'Tiles' }], opponentMeldStyle,
-      setOpponentMeldStyle));
-    var finishedPicker = lookPicker('Finished books', 'Stacked keeps completed books compact. Spread shows every card, in either meld view. Tap any book to open or close it.',
-      [{ id: 'stacked', name: 'Stacked' }, { id: 'spread', name: 'Spread' }], finishedBookStyle, setFinishedBookStyle);
-    body.appendChild(finishedPicker);
-    renderLook(body);
-    body.appendChild(lookPicker('Hand layout', null,
-      [{ id: 'spread', name: 'Spread' }, { id: 'layered', name: 'Layered' }], handLayout,
-      function (id) { handLayout = id; set('hf_layout', id); syncLayoutBtn(); renderRules(); render(); }));
-    body.appendChild(lookPicker('Sort cards', null,
-      [{ id: 'rank', name: 'By rank' }, { id: 'group', name: 'By count' }], sortMode,
-      function (id) { sortMode = id; set('hf_sort', id); syncSortBtn(); renderRules(); render(); }));
+    renderPersonalSettings(body);
   }
 
-  if (rulesMode === 'settings') return;
+  if (rulesMode === 'appearance') renderLook(body);
+  if (rulesMode !== 'rules') return;
+
+  var rulesRoot = body;
+  var referenceBody = document.createElement('div'); referenceBody.id = 'rulesReference';
+  referenceBody.hidden = !!(rulesEditing && view && view.canConfigureRules);
+  rulesRoot.appendChild(referenceBody); body = referenceBody;
 
   var h = document.createElement('h3');
   h.className = 'rule-head';
@@ -3120,6 +4538,10 @@ function buildRules() {
     cell.appendChild(label); cell.appendChild(value); overview.appendChild(cell);
   });
   body.appendChild(overview);
+  if (view && view.canConfigureRules) {
+    var edit = btn('Edit table rules', function () { openRules('edit'); }, true); edit.id = 'editTableRules';
+    body.appendChild(edit);
+  }
   [
     ['Dealing and taking cards', [0, 1, 2, 3, 4, 12]],
     ['Melds, books and going out', [5, 6, 7, 10, 11]],
@@ -3150,7 +4572,7 @@ function buildRules() {
     openingDifference.textContent = 'Opening minimums: ' + S.minMelds.join(' / '); differences.appendChild(openingDifference); changedCount++;
   }
   if (changedCount) body.appendChild(differences);
-  renderRulesEditor(body);
+  renderRulesEditor(rulesRoot);
 }
 
 /* ---------------- the scorepad ----------------
@@ -3315,6 +4737,7 @@ function dismissScores() {
 function syncScoreSheet() {
   var sheet = $('scoreSheet');
   if (!sheet || !view) return;
+  if (view.phase === 'choosing') sheet.hidden = true;
   var completed = scoreRoundKey(view);
   if (completed === null) {
     // Starting another round or a rematch rearms even an identical score.
@@ -3376,45 +4799,115 @@ function styleValue(element, key, value) {
   if (element.style.getPropertyValue ? element.style.getPropertyValue(key) === String(value) : element.style[key] === String(value)) return;
   element.style.setProperty(key, String(value));
 }
+/* Overflow hints describe the current visible portion; they never resize a
+ * card or reserve another row. Scroll listeners only update those flags. */
+function syncScrollHints(element, horizontal) {
+  if (!element) return;
+  function update() {
+    var extent = horizontal ? element.scrollWidth : element.scrollHeight;
+    var viewport = horizontal ? element.clientWidth : element.clientHeight;
+    var maximum = element.hidden ? 0 : Math.max(0, (extent || 0) - (viewport || 0));
+    var offset = Math.max(0, horizontal ? element.scrollLeft || 0 : element.scrollTop || 0);
+    element.dataset.scrollStart = maximum > 1 && offset > 1 ? 'true' : 'false';
+    element.dataset.scrollEnd = maximum > 1 && offset < maximum - 1 ? 'true' : 'false';
+  }
+  update();
+  if (!element._scrollHintsBound && element.addEventListener) {
+    element.addEventListener('scroll', update, { passive: true });
+    element._scrollHintsBound = true;
+  }
+}
+function syncTableScrollHints() {
+  var shelf = $('myMelds'), region = $('playButtons'), destinations = $('playDestinations');
+  syncScrollHints(shelf, false); syncScrollHints(destinations, true);
+  if (shelf && shelf.parentNode) {
+    styleValue(shelf.parentNode, '--meld-shelf-bottom',
+      (shelf.getBoundingClientRect().bottom - shelf.parentNode.getBoundingClientRect().top) + 'px');
+  }
+  if (region) {
+    var discard = $('playDiscard');
+    var width = !region.hidden && discard && region.contains(discard) ? discard.getBoundingClientRect().width : 0;
+    styleValue(region, '--play-discard-space', (width ? width + 8 : 0) + 'px');
+  }
+}
 function sizeBoard() {
   var bar = document.querySelector('.actions'), board = document.querySelector('.board');
   if (!bar || !board) return;
   var hand = $('myHand'), top = document.querySelector('.bar');
   var fixed = getComputedStyle(bar).position === 'fixed';
   var barHeight = bar.offsetHeight, topHeight = top && top.offsetHeight;
+  var playRegion = $('playButtons');
+  var boardGap = parseFloat(getComputedStyle(board).rowGap) || 0;
+  var playHeight = playRegion && interactionMode === 'buttons' && view && view.phase === 'playing' ? 44 + boardGap : 0;
+  var footer = $('tableFooter');
+  var footerHeight = footer && !footer.hidden ? (footer.offsetHeight || 0) : 0;
+  if (footerHeight) footerHeight += boardGap;
+  styleValue(board, '--play-buttons-gap', boardGap + 'px');
+  styleValue(board, '--play-buttons-height', playHeight + 'px');
   var width = hand && hand.clientWidth;
   var shortPhone = window.matchMedia && window.matchMedia('(max-width: 600px) and (max-height: 700px)').matches;
   var mobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
   var padding = fixed ? (barHeight + 8) + 'px' : '';
   if (board.style.paddingBottom !== padding) board.style.paddingBottom = padding;
-  styleValue(board, '--scroll-clearance', fixed ? (barHeight + 32) + 'px' : '0px');
+  styleValue(board, '--scroll-clearance', fixed ? (barHeight + playHeight + footerHeight + 32) + 'px' : (playHeight + footerHeight) + 'px');
   if (width) {
     var dense = handLayout === 'spread' && (shortPhone || (mobile && myHand().length > 21));
     if (hand.dataset.dense !== String(!!dense)) hand.dataset.dense = dense ? 'true' : 'false';
-    var columns = dense ? 10
-      : mobile && width >= 340 && myHand().length > 12 && myHand().length <= 16 ? 8
-      : Math.max(1, Math.min(10, Math.floor((width + 4) / 48)));
+    var freshCount = justPicked().length, settledCount = myHand().length - freshCount;
+    // Narrower faces fit nine across a typical phone. Keep space between
+    // their extended hit areas, and size each fresh/settled group separately.
+    var columns = dense ? 10 : Math.max(1, Math.min(10, Math.floor(width / 40)));
     styleValue(hand, '--hand-cols', columns);
-    var rows = handLayout === 'layered' ? hand.querySelectorAll('.hand-row').length : Math.ceil(myHand().length / columns);
-    styleValue(hand, '--hand-rows', Math.max(1, rows));
+    var rowCapacity = handLayout === 'layered' ? PER_ROW : columns;
+    var freshRows = Math.ceil(freshCount / rowCapacity), settledRows = Math.ceil(settledCount / rowCapacity);
+    styleValue(hand, '--hand-fresh-rows', freshRows);
+    styleValue(hand, '--hand-settled-rows', settledRows);
+    styleValue(hand, '--hand-rows', Math.max(1, freshRows + settledRows));
   }
   if (top) styleValue(document.documentElement, '--bar-h', topHeight + 'px');
   board.dataset.largeHand = myHand().length > 20 ? 'true' : 'false';
   // On crowded screens constrain extra opponent detail before the player's
-  // cards can slip behind the actions. Selection never toggles this mode.
-  var context = view && JSON.stringify([window.innerWidth, window.innerHeight, handLayout, opponentMeldStyle, finishedBookStyle, meldExpanded,
-    view.code, view.round, view.phase, myHand().length,
+  // cards can slip behind the actions. Measure the strip's destination, not
+  // an intermediate animation frame, so revealing a button never falsely
+  // switches a roomy table into the crowded layout.
+  var context = view && JSON.stringify([window.innerWidth, window.innerHeight, handLayout, opponentMeldStyle, finishedBookStyle, meldExpanded, interactionMode, playHeight,
+    view.code, view.round, view.phase, myHand().length, justPicked().length, width, footerHeight,
     view.seats.map(function (seat) { return seat.melds.map(function (meld) { return meld.cards.length; }); })]);
   if (context !== boardOverflowContext) {
     boardOverflowContext = context;
     delete board.dataset.overflow;
+    delete board.dataset.compactPiles;
     fitMine();
-    if (window.innerHeight && hand && fixed && hand.getBoundingClientRect().bottom > bar.getBoundingClientRect().top + 1) {
+    var boardStyle = getComputedStyle(board);
+    var bottomPadding = parseFloat(boardStyle.paddingBottom) || 0;
+    var toolbarBelowHand = hand && hand.nextElementSibling === bar;
+    var toolbarAboveHand = hand && bar.parentNode && bar.parentNode === hand.parentNode && !toolbarBelowHand;
+    var utilityGap = toolbarBelowHand ? (parseFloat(getComputedStyle(hand.parentNode).rowGap) || 0) : 0;
+    var handBoundary = (fixed ? bar.getBoundingClientRect().top : window.innerHeight - (toolbarAboveHand ? 0 : barHeight) - bottomPadding) - playHeight - footerHeight - utilityGap;
+    var livePlayHeight = playRegion ? Math.max(0, (playRegion.getBoundingClientRect().height || 0) +
+      (parseFloat(getComputedStyle(playRegion).marginTop) || 0) + boardGap) : 0;
+    var finalHandBottom = hand ? hand.getBoundingClientRect().bottom - (playHeight - livePlayHeight) : 0;
+    var roomyPortrait = mobile && window.innerHeight >= 760 && window.innerHeight > window.innerWidth;
+    var shelf = $('myMelds');
+    var handClipped = roomyPortrait && hand && hand.scrollHeight > hand.clientHeight + 1;
+    // The hand keeps its complete rows; the flexible shelf gives up unused
+    // height first. If that still clips cards, reclaim just the tray padding
+    // before applying the stronger crowded-table fallback. Re-evaluate only
+    // when the layout context changes, so this flag cannot oscillate on resize.
+    if (roomyPortrait && (handClipped || finalHandBottom > handBoundary + 1 ||
+        (shelf && shelf.scrollHeight > shelf.clientHeight + 1))) {
+      board.dataset.compactPiles = 'true';
+      finalHandBottom = hand ? hand.getBoundingClientRect().bottom - (playHeight - livePlayHeight) : 0;
+      handClipped = hand && hand.scrollHeight > hand.clientHeight + 1;
+    }
+    if (window.innerHeight && hand && (finalHandBottom > handBoundary + 1 || handClipped)) {
       board.dataset.overflow = 'true';
     }
   }
   // This final dependent measurement retains the existing stable book fit.
   fitMine();
+  revealNewMeldTarget();
+  syncTableScrollHints();
   positionOpponentDetail();
   positionCardPopover($('sortPopover'), $('sortBtn'));
   positionCardPopover($('autoDrawPopover'), $('autoDrawBtn'));
@@ -3424,6 +4917,8 @@ if (window.ResizeObserver) {
   var ro = new ResizeObserver(scheduleBoardSize);
   ro.observe(document.querySelector('.actions'));
   ro.observe(document.querySelector('.bar'));
+  if ($('playButtons')) ro.observe($('playButtons'));
+  if ($('tableFooter')) ro.observe($('tableFooter'));
 }
 // A height-only change can switch compact card rows without resizing the
 // header or footer, so this is needed even when ResizeObserver is available.
@@ -3465,7 +4960,7 @@ function isIOS() {
 function checkConnection() {
   if (!ws || ws.readyState !== 1) return;
   if (connectionLastSeen && Date.now() - connectionLastSeen > 45000) {
-    autoDrawStateFresh = false; cancelAutoDraw();
+    autoDrawStateFresh = false; cancelAutoDraw(); closeDrawPicker(false, false); clearAutomaticDrawOrigin();
     ws.close(); return;
   }
   send({ t: 'ping' });

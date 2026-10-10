@@ -1,0 +1,200 @@
+/* Buttons mode reserves one stable row throughout play. New meld/draw and
+   discard keep their places; adding to existing books happens on the books. */
+#table .board > #playButtons{position:relative;overflow:visible}
+#playButtons .play-destinations{
+  display:flex;flex:1 1 0;align-items:center;gap:8px;min-width:0;height:44px;
+  overflow:visible;
+}
+#playButtons .play-destinations[hidden]{display:none}
+#playButtons > #playDiscard{flex:0 0 112px;width:112px;min-width:112px}
+#playButtons .play-destinations > .btn{width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* A measured, paint-only cue stays at the shelf edge while its cards scroll.
+   The shelf's reserved space, card sizes and wrapping are untouched. */
+#table .mine{position:relative}
+#table .mine:has(> #myMelds[data-scroll-start="true"])::after,
+#table .mine:has(> #myMelds[data-scroll-end="true"])::after{
+  position:absolute;right:-2px;top:calc(var(--meld-shelf-bottom,0px) - 17px);
+  z-index:3;width:14px;height:16px;display:grid;place-items:center;
+  border-radius:4px;background:var(--app-2);color:var(--txt);box-shadow:0 0 0 1px var(--hair-2);
+  font-size:13px;line-height:16px;pointer-events:none;
+}
+#table .mine:has(> #myMelds[data-scroll-start="true"])::after{content:'↑'}
+#table .mine:has(> #myMelds[data-scroll-end="true"])::after{content:'↓'}
+#table .mine:has(> #myMelds[data-scroll-start="true"][data-scroll-end="true"])::after{content:'↕'}
+#table > .board[data-phase]:not([data-phase="lobby"]) #myMelds .meld:not([data-presentation="tile"]) .meld-count{
+  font-size:11px;font-weight:600;line-height:12px;
+}
+
+/* A single inset utility rail below the hand; unavailable actions stay visible and disabled. */
+#table .board .actions .hand-tools{
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:44px;
+  gap:0;width:100%;position:relative;
+  border:1px solid var(--hair-2);border-radius:10px;
+  background:linear-gradient(170deg,var(--app-2),var(--app-1));
+  box-shadow:inset 0 1px 0 var(--hair);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .actions .hand-tools :is(.btn,#clearSel,#tableUndo){
+  grid-row:1;width:100%;min-width:0;height:44px;min-height:44px;padding:0;
+  font-size:11px;font-weight:600;
+  color:var(--txt);border:0;border-radius:8px;
+  background:transparent;box-shadow:none;
+}
+#table .hand-tools #sortBtn{grid-column:1}
+#table .hand-tools #autoDrawBtn{grid-column:2}
+#table .hand-tools #scoresBtn{grid-column:3}
+#table .hand-tools #chatBtn{grid-column:4}
+#table .hand-tools #clearSel{grid-column:5}
+#table .hand-tools #tableUndo{grid-column:6}
+#table .board .actions .hand-tools :is(#clearSel,#tableUndo){width:100%;min-width:0}
+#table > .board[data-phase]:not([data-phase="lobby"]) .actions .hand-tools #clearSel{
+  border-left:1px solid var(--hair-2);border-radius:0;
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .actions .hand-tools .btn:disabled{
+  opacity:.4;cursor:default;
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .actions .hand-tools #autoDrawBtn[data-mode]:not([data-mode="off"]){
+  box-shadow:inset 0 -2px 0 var(--turn-line);
+}
+#table #chatBtn .chat-unread{
+  position:absolute;top:-3px;right:-3px;margin:0;min-width:14px;height:14px;
+  padding:0 3px;font-size:9px;line-height:14px;
+}
+/* A restrained five-percent reduction in public card artwork. Keep rank and
+   count type readable, and leave the player's hand and books untouched. */
+#table #seats .seat .meld:not([data-presentation="tile"]) {
+  height:34.5px;
+  width:calc(20.9px + (min(var(--meld-count,3),6) - 1)*9.5px + 16px);
+}
+#table #seats .seat .meld .meld-cards{height:28.5px}
+#table #seats .seat .meld .card.tiny{--card-w:20.9px;--card-h:28.5px;width:20.9px;height:28.5px}
+#table #seats .seat .meld .meld-cards.closed-book-stack{width:20.9px}
+#table #seats .seat .meld.nearly-book:not([data-presentation="tile"]) .card.tiny:first-child{
+  width:28.5px;height:20.9px;margin-top:3.8px;
+}
+#table #seats .seat .meld[data-presentation="stack"]{width:38.9px;max-width:38.9px}
+#table #seats .seat .meld.nearly-book[data-presentation="stack"]{width:46.5px;max-width:46.5px}
+#table #seats .seat .meld.nearly-book[data-presentation="stack"] .meld-cards.closed-book-stack{width:28.5px}
+#table #seats .seat .meld[data-presentation="tile"]{width:30.4px;max-width:30.4px;height:41.8px}
+/* Four full fan rows, rather than every spare pixel on a roomy phone. Buttons
+   mode makes a constant reservation here, independent of card selection. */
+@media (max-width:600px) and (min-height:760px) and (orientation:portrait) {
+  #table > .board[data-phase]:not([data-phase="lobby"]):not([data-overflow="true"]) > .mine{
+    flex:1 1 0;
+  }
+  #table > .board[data-phase]:not([data-phase="lobby"]):not([data-overflow="true"]) .mine > #myHand{
+    /* Spare room sits between books and hand, not between cards and controls. */
+    margin-top:auto;
+  }
+  #table > .board[data-phase]:not([data-phase="lobby"]):not([data-overflow="true"]) .mine > #myHand{
+    /* Reclaim spare shelf space before squeezing any complete hand row. */
+    flex:0 0 auto;
+  }
+  #table > .board[data-phase]:not([data-phase="lobby"]):not([data-overflow="true"]) #myMelds{
+    --own-row-height:calc(var(--bk-h) + 10px);
+    --own-shelf-limit:calc(4 * var(--own-row-height) + 3 * 9px + 6px);
+    flex:0 1 auto;
+    height:max(96px,calc(var(--own-shelf-limit) - var(--play-buttons-height,0px)));
+    max-height:var(--own-shelf-limit);
+    transition:height .18s ease;
+  }
+  #table > .board[data-phase]:not([data-phase="lobby"]):not([data-overflow="true"]) #myMelds[data-layout="tiles"]{
+    /* Three complete tile rows fit within the four-fan-row height budget. */
+    --own-shelf-limit:190.92px;
+  }
+  #table > .board[data-phase]:not([data-phase="lobby"]):not([data-overflow="true"]) > .seats{
+    flex:0 0 auto;min-height:min-content;max-height:none;grid-auto-rows:min-content;
+  }
+  #table > .board[data-phase]:not([data-phase="lobby"]):not([data-overflow="true"]) > .seats .seat{
+    justify-content:flex-start;
+    align-self:start;
+    min-height:0;
+  }
+  #table > .board[data-compact-piles="true"] #centerRow.compact-piles{
+    /* Scale the artwork with the tray, while retaining 44 px hit areas. */
+    height:48px;min-height:48px;padding-block:2px;flex:none;
+  }
+  #table > .board[data-compact-piles="true"] #centerRow :is(.stock-choice,.discard-choice){
+    height:44px;min-height:44px;padding:2px;
+  }
+  #table > .board[data-compact-piles="true"] #centerRow .card{
+    --card-w:29px;--card-h:38px;width:29px;height:38px;
+  }
+  #table > .board[data-compact-piles="true"] #centerRow .stock-total{inset:2px;font-size:14px}
+  #table > .board[data-compact-piles="true"] #centerRow .discard-choice .card{padding:1px}
+  #table > .board[data-compact-piles="true"] #centerRow .discard-choice .card .r{font-size:14px;line-height:15px}
+  #table > .board[data-compact-piles="true"] #centerRow .discard-choice .card .s{font-size:8px;line-height:8px}
+  #table > .board[data-compact-piles="true"] #centerRow .discard-total{bottom:1px;font-size:6.5px;line-height:9px}
+  #table > .board[data-compact-piles="true"] #centerRow .discard-total b{font-size:9px}
+  /* Keep every public fan and its card faces. Reclaim wrapper padding and
+     row spacing only when the normal allocation would hide own melds. */
+  #table > .board[data-compact-piles="true"] #seats .seat{padding-block:4px;gap:3px}
+  #table > .board[data-compact-piles="true"] #seats .seat .melds{row-gap:3px;padding-block:0}
+  #table > .board[data-compact-piles="true"] #seats .seat .meld:not([data-presentation="tile"]){height:31px}
+  #table > .board[data-compact-piles="true"] #myMelds{row-gap:5px;padding-block:2px}
+  #table > .board[data-compact-piles="true"] #myHand{gap:6px}
+}
+@media (prefers-reduced-motion:reduce){#table > .board #myMelds{transition:none}}
+
+/* Utilities stay immediately below the hand. Only the selected
+   faces lift; the hand, toolbar and reserved Buttons row stay in place. */
+#table .mine > .actions{flex:none;border:0;padding:0}
+#table .mine > #myHand{margin-top:0;border-top:0}
+/* One quiet, fixed-height header: text never changes the table geometry. */
+#table:has(> .board:not([data-phase="lobby"])) > .bar{
+  display:block;background:var(--app-1);backdrop-filter:none;
+  border-bottom:1px solid var(--hair-2);box-shadow:inset 0 1px 0 var(--hair);
+}
+#table:has(> .board:not([data-phase="lobby"])) > .bar .bar-in{
+  flex-wrap:nowrap;gap:8px;height:44px;padding-block:0;
+}
+#table:has(> .board:not([data-phase="lobby"])) .bar-table{display:none}
+#table .bar #rulesBtn{
+  display:flex;align-items:center;justify-content:center;flex:none;
+  width:44px;height:44px;min-width:44px;min-height:44px;padding:0;
+  margin-left:auto;border:0;border-left:1px solid var(--hair-2);
+  border-radius:0;background:transparent;box-shadow:none;color:var(--txt-2);
+}
+#table .bar #rulesBtn:hover{background:var(--hair)}
+#table > .board:not([data-phase="lobby"]){padding-top:6px}
+#table .table-footer{flex:none;min-width:0}
+#table .board[data-phase="playing"] .table-footer{height:26px;display:flex;flex-direction:column;gap:0}
+#table .round-summary{display:flex;align-items:center;gap:8px;min-height:14px;color:var(--txt-3);font-size:11px;line-height:16px;white-space:nowrap}
+#table .round-summary #roundLabel{color:var(--txt);font-weight:600}
+#table .round-summary #minLabel{color:var(--txt-2)}
+#table .bar .round-cell{gap:4px;margin:0}
+#table:has(> .board[data-phase="lobby"]) .bar .round-summary{display:none}
+#table .table-footer #turnPill{position:absolute;width:1px;height:1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#table .board[data-phase="playing"] #actionBar{display:block;min-width:0;width:100%}
+#table .board[data-phase="playing"] #actionHint{
+  padding:0;margin:0;min-height:0;max-height:26px;overflow-y:auto;
+  font-size:11px;line-height:13px;scrollbar-width:thin;color:var(--txt-2);
+}
+#table .board[data-phase="playing"] #actionHint.warn{color:var(--rouge-lt)}
+#table .board[data-phase="lobby"] :is(.mine,.round-summary){display:none}
+
+/* Final v2 controls: hand, play actions, utilities, then instruction. */
+#table > .board > .actions{
+  position:relative;inset:auto;flex:none;width:100%;margin:0;padding:0;
+  background:none;backdrop-filter:none;box-shadow:none;border:0;
+}
+#table > .board[data-phase="lobby"] > .actions{display:none}
+#table .board > #playButtons{padding-inline:0;align-items:stretch}
+#table #playButtons :is(#playChooseDraw,#playNewMeld,#playDiscard){
+  box-sizing:border-box;height:44px;min-height:44px;max-height:44px;
+  margin:0;display:flex;align-items:center;justify-content:center;line-height:18px;
+}
+
+#table > .board #playButtons #playDiscard.view-pile-action{
+  color:var(--txt);background:var(--app-2);border-color:var(--hair-2);text-shadow:none;
+}
+#table > .board #playButtons #playDiscard.view-pile-action.pickup-available{
+  color:#f5fbff;background:#315d79;border-color:#91cbe9;
+}
+
+#undoSheet .undo-panel{max-width:380px;border:1px solid var(--hair-2);border-radius:16px}
+#undoTitle{font-family:inherit;font-size:20px;line-height:1.25;margin:0 0 12px}
+#undoDescription{font-size:14px;line-height:1.5;color:var(--txt-2)}
+#undoWildOptions,.undo-actions{display:grid;gap:8px;margin-top:16px}
+#undoSheet .btn{min-height:44px;width:100%}
+#undoSheet #confirmUndo{background:linear-gradient(170deg,#793e41,#613034);color:#fff3de;border-color:#96585a}

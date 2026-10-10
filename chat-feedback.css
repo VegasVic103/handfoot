@@ -1,0 +1,67 @@
+/* Chat has its own usable phone-sized surface. Keys take space inside it;
+   they never cover the conversation or request a device keyboard on open. */
+#chatSheet{padding:12px}
+#chatSheet .chat-panel{width:100%;max-width:620px;height:min(820px,calc(100dvh - 24px));max-height:calc(100dvh - 24px);min-height:0;padding:16px;overflow:hidden;gap:0;background:var(--app-1);border:1px solid var(--hair-2)}
+#chatSheet .chat-heading{flex:0 0 auto;min-height:44px;margin:0 0 8px}
+#chatSheet .chat-heading h2{font-size:22px}
+#chatSheet #closeChat{min-height:44px;padding-inline:12px}
+.chat-players{display:flex;flex:0 0 auto;align-items:center;gap:6px;min-height:34px;margin:0 0 8px;padding:2px 0;list-style:none;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
+.chat-player{display:flex;align-items:center;justify-content:center;gap:5px;flex:1 0 0;min-width:0;min-height:30px;padding:5px 8px;border:1px solid var(--hair);border-radius:999px;background:var(--app-2);color:var(--txt-2);font-size:12px;line-height:18px;white-space:nowrap}
+.chat-player-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.chat-player.current{flex-grow:1.35;border-color:var(--brass);color:var(--txt)}
+.chat-player-turn{flex:none;color:var(--brass-lt);font-size:10px;font-weight:600}
+.chat-conversation{display:flex;flex-direction:column;flex:1;min-width:0;min-height:72px;overflow:hidden}
+#chatSheet .chat-status{flex:0 0 auto;min-height:17px;margin:0 0 8px;font-size:12px;line-height:1.4}
+#chatSheet .chat-messages{min-height:0;padding-bottom:10px}
+#chatSheet .chat-message{padding:11px 12px;margin-bottom:10px}
+#chatSheet .chat-name{font-size:12px}
+#chatSheet .chat-meta{font-size:11px}
+#chatSheet .chat-text{font-size:15px;line-height:1.5}
+.chat-composer{flex:0 0 auto;min-width:0;min-height:0}
+#chatSheet .chat-form{padding-top:10px;gap:8px;align-items:center}
+#chatInput{width:100%;min-height:48px;caret-color:var(--txt);cursor:text}
+#chatInput[readonly]{opacity:1}
+#chatSheet #chatSend{min-height:48px}
+#chatSheet .chat-keyboard[hidden]{display:none}
+.chat-keyboard{margin:8px -4px 0;padding:0 0 2px;border-top:1px solid var(--hair);user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.chat-keyboard-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+.chat-keyboard-option{border:0;background:none;color:var(--txt-2);font:inherit;font-size:12px;padding:10px 4px;min-height:44px;border-radius:6px;cursor:pointer}
+.chat-keyboard-option:active{background:var(--app-3)}
+.chat-key-row{display:flex;justify-content:center;gap:4px;margin-top:6px}
+.chat-key-row-1{padding:0 4%}
+.chat-key{appearance:none;-webkit-appearance:none;min-width:0;flex:1 1 0;min-height:52px;padding:0;border:1px solid var(--hair-2);border-radius:7px;background:var(--app-3);color:var(--txt);font:inherit;font-size:21px;line-height:1;box-shadow:0 2px 0 var(--hair);touch-action:manipulation;cursor:pointer}
+.chat-key:active{background:var(--accent-soft);border-color:var(--accent-line)}
+.chat-key-control{font-size:16px;background:var(--app-2)}
+.chat-key[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.chat-key-space{flex-grow:3.4;font-size:15px}
+.chat-key-row-3{margin-bottom:2px}
+@media(max-width:600px){
+  #chatSheet{padding:max(6px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
+  #chatSheet .chat-panel{max-width:none;height:100%;max-height:100%;padding:12px;border-radius:16px}
+}
+@media(max-height:660px){
+  #chatSheet .chat-panel{padding:8px 10px}
+  #chatSheet .chat-heading{margin-bottom:4px}
+  #chatSheet .chat-heading h2{font-size:20px}
+  #chatSheet .chat-players{margin-bottom:5px;gap:4px}
+  #chatSheet .chat-player{padding-inline:6px}
+  #chatSheet .chat-status{margin-bottom:4px}
+  #chatSheet .chat-form{padding-top:8px}
+  .chat-keyboard{margin-top:6px}
+  .chat-key{min-height:46px;font-size:20px}
+  .chat-key-control{font-size:15px}
+  .chat-key-row{gap:3px;margin-top:5px}
+}
+/* In landscape the history and keyboard sit side by side. At exceptionally
+   short heights the composer scrolls rather than shrinking its tap targets. */
+@media(min-width:480px) and (orientation:landscape) and (max-height:500px){
+  #chatSheet{padding:max(6px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}
+  #chatSheet .chat-panel{max-width:1000px;height:100%;max-height:100%}
+  #chatSheet[data-keyboard="open"] .chat-panel{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr);grid-template-rows:44px minmax(0,1fr);gap:6px 16px}
+  #chatSheet[data-keyboard="open"] .chat-heading{grid-column:1;grid-row:1;margin:0}
+  #chatSheet[data-keyboard="open"] .chat-players{grid-column:2;grid-row:1;margin:0}
+  #chatSheet[data-keyboard="open"] .chat-conversation{grid-column:1;grid-row:2;min-height:0}
+  #chatSheet[data-keyboard="open"] .chat-composer{grid-column:2;grid-row:2;overflow-y:auto;overscroll-behavior:contain;padding:0 4px 3px;scrollbar-width:thin}
+  #chatSheet[data-keyboard="open"] .chat-form{padding-top:0;border-top:0}
+  #chatSheet[data-keyboard="open"] .chat-keyboard{margin-top:4px}
+}

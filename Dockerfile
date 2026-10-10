@@ -7,8 +7,8 @@ RUN npm install --omit=dev
 COPY . .
 
 ENV PORT=3000
-# Tables are saved here so a restart doesn't lose a game in progress.
-# Mount a volume at /data if your host offers one; otherwise this is fine.
+# This default save path is ephemeral unless covered by persistent storage.
+# If mounting a volume at /data, also set SAVE_FILE=/data/tables.json.
 ENV SAVE_FILE=/app/tables.json
 
 EXPOSE 3000

@@ -1,0 +1,95 @@
+/* Automatic stock draws get one clear, brief view before the actual hand is revealed.
+   Geometry stays in a top-layer dialog; no board sizing is involved. */
+#myHand .card.draw-reveal-pending{visibility:hidden!important;animation:none!important}
+.draw-reveal{
+  position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;
+  max-width:none;max-height:none;padding:20px;margin:0;border:0;
+  box-sizing:border-box;background:transparent;color:var(--txt);
+  overflow:hidden;overscroll-behavior:contain;touch-action:manipulation;
+}
+.draw-reveal[open]{display:flex;align-items:center;justify-content:center}
+.draw-reveal::backdrop{background:rgba(0,0,0,.38)}
+.draw-reveal-panel{
+  width:min(290px,100%);padding:22px 18px 10px;box-sizing:border-box;
+  background:var(--app-1);border:1px solid var(--hair-2);border-radius:20px;
+  box-shadow:var(--sh-3);text-align:center;overflow:visible;
+}
+.draw-reveal h2{margin:0;font-size:20px;line-height:1.25;font-weight:700;letter-spacing:-.02em}
+.draw-reveal-summary{
+  position:absolute;width:1px;height:1px;padding:0;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0;
+}
+.draw-reveal-cards{display:flex;justify-content:center;gap:16px;margin:20px 0 12px;overflow:visible}
+.draw-reveal .draw-reveal-card{
+  width:86px;height:120px;min-width:86px;min-height:120px;border-radius:9px;
+  transform-origin:0 0;transition:none;animation:none;will-change:transform;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 4px 12px rgba(0,0,0,.25);
+}
+.draw-reveal .draw-reveal-card .r{font-size:38px!important;line-height:1.05}
+.draw-reveal .draw-reveal-card.joker .r{font-size:25px!important}
+.draw-reveal .draw-reveal-card .s{font-size:26px;line-height:1.1;margin-top:4px}
+.draw-reveal .draw-reveal-card.wild::before{height:7px}
+.draw-reveal .draw-reveal-card.wild::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:7px;background:var(--wc);
+}
+.draw-reveal-continue{
+  display:block;width:100%;min-height:44px;margin:0;padding:10px;
+  border:0;border-radius:9px;background:transparent;color:var(--txt-2);
+  font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+}
+.draw-reveal-continue:focus-visible{outline:2px solid var(--brass);outline-offset:0}
+.draw-reveal.is-settling::backdrop{background:transparent}
+.draw-reveal.is-settling .draw-reveal-panel{background:transparent;border-color:transparent;box-shadow:none}
+.draw-reveal.is-settling h2,.draw-reveal.is-settling .draw-reveal-continue{visibility:hidden}
+@media(max-height:500px){
+  .draw-reveal-panel{padding-top:12px}
+  .draw-reveal-cards{margin-top:12px;margin-bottom:4px}
+  .draw-reveal .draw-reveal-card{width:68px;height:94px;min-width:68px;min-height:94px}
+}
+
+/* Arrivals get their own first row, so their position carries the meaning. */
+#myHand{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;align-content:normal;gap:8px}
+#myHand .hand-arrivals,#myHand .hand-settled{display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;flex:none;min-width:0;width:100%}
+#myHand.layered .hand-arrivals,#myHand.layered .hand-settled{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:9px}
+#myHand .fresh-row{margin-top:0}
+#myHand .card.fresh{outline:none;border-color:var(--f-edge);box-shadow:var(--sh-1)}
+#myHand .card.fresh:not(.wild)::after{display:none}
+#myHand .card.fresh.sel{outline:2px solid var(--brass);outline-offset:-2px;box-shadow:0 8px 12px -4px rgba(0,0,0,.5)}
+
+@media(max-width:600px){
+  #myHand:not(.layered) .hand-arrivals,#myHand:not(.layered) .hand-settled{
+    display:grid;grid-template-columns:repeat(var(--hand-cols,8),minmax(0,1fr));gap:5px 4px;
+  }
+}
+@media(min-width:601px){#myHand{padding-inline:2px;padding-bottom:2px}}
+
+/* A modest hand-only size reduction; row counts adapt to the available width.
+   Selection never changes these dimensions. */
+#myHand:not(.layered) .card{--card-w:34px;--card-h:54.56px;width:34px;height:54.56px}
+#myHand:not(.layered) .card .r{font-size:17.6px}
+#myHand:not(.layered) .card .s{font-size:9.7px}
+#myHand:not(.layered) .card.joker .r{font-size:9.7px!important}
+#myHand.layered .card{--card-w:40.48px;--card-h:58.08px;width:40.48px;height:58.08px;padding:5px 0 0 3.5px}
+#myHand.layered .hand-row .card + .card{margin-left:-24.64px}
+#myHand.layered .card .r{font-size:12.3px}
+#myHand.layered .card .s{font-size:10.6px}
+#myHand.layered .hand-row .card:last-child{padding:0}
+#myHand.layered .hand-row .card:last-child .r{font-size:15px}
+#myHand.layered .hand-row .card:last-child .s{font-size:13.2px}
+#myHand.layered .card.joker .r{font-size:9.7px!important}
+@media(max-width:600px){
+  #myHand:not(.layered) .card{width:100%;max-width:34px;height:41.36px;overflow:visible}
+  /* The face is narrower, but the transparent hit area keeps the old width.
+     This sits within the grid gaps, including when the selected face lifts. */
+  #myHand:not(.layered) .card::before{
+    content:'';display:block;position:absolute;inset:-2.32px -3.36px;
+    width:auto;height:auto;background:none;border:0;pointer-events:auto;
+  }
+  #myHand[data-dense="true"]:not(.layered) .card::before{inset:-2px}
+  #myHand[data-dense="true"]:not(.layered) .card{height:38.72px}
+  #myHand[data-dense="true"]:not(.layered) .card .r{font-size:14.1px}
+  #myHand[data-dense="true"]:not(.layered) .card .s{font-size:7.9px}
+}
+@media(max-width:600px) and (max-height:700px){
+  #myHand[data-dense="true"]:not(.layered) .card{height:34.32px}
+}

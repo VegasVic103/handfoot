@@ -18,8 +18,17 @@ for (const code of ['ABCD', 'abcd', 'AbCd']) {
 for (const code of ['ABC', 'ABCDE', 'AB1D', 'AB D']) {
   assert(!acceptsCode.test(code), 'native validation rejects malformed codes: ' + code);
 }
-assert(html.indexOf('src="engine.js"') < html.indexOf('src="app.js"') &&
-  html.indexOf('src="app.js"') < html.indexOf('src="menu.js"'), 'shared rules load before the setup controller');
+assert(html.includes('src="startup.js"'), 'the startup guard loads the game scripts');
+assert(!/<script\b[^>]*\bsrc="(?:engine|app|menu)\.js"/.test(html),
+  'direct game script tags cannot bypass the startup guard');
+const playPage = html.match(/<section\b[^>]*id="menu-play"[\s\S]*?<\/section>/)[0];
+assert.deepEqual([...playPage.matchAll(/data-menu-to="([^"]+)"/g)].map(match => match[1]),
+  ['home', 'host', 'computer', 'join'], 'Play leads directly to every task without a friends submenu');
+for (const page of ['host', 'join', 'computer']) {
+  const section = html.match(new RegExp('<section\\b[^>]*id="menu-' + page + '"[\\s\\S]*?<\\/section>'))[0];
+  assert(section.includes('data-menu-to="play"'), page + ' returns to the same choice screen');
+  assert(section.includes(' Back</button>'), page + ' has a visible Back label');
+}
 const ids = new Map(), nodes = [], sent = [], storage = new Map();
 let document;
 class Element {
@@ -30,7 +39,7 @@ class Element {
   }
   set id(value) { assert(!ids.has(value), 'no duplicate editor id: ' + value); this._id = value; ids.set(value, this); }
   get id() { return this._id; }
-  appendChild(child) { child.parentNode = this; this.children.push(child); return child; }
+  appendChild(child) { if (child.parentNode) child.parentNode.removeChild(child); child.parentNode = this; this.children.push(child); return child; }
   removeChild(child) { this.children = this.children.filter(node => node !== child); child.parentNode = null; return child; }
   setAttribute(key, value) { this[key] = value; }
   getAttribute(key) { return this[key]; }
@@ -65,6 +74,12 @@ for (const match of html.matchAll(/<([a-z][a-z0-9]*)\b([^>]*\bid="([^"]+)"[^>]*)
 for (const [select, value] of [['seatCount', '3'], ['botCount', '2']]) ids.get(select).value = value;
 ids.get('hostForm').appendChild(ids.get('hostSetupRules'));
 ids.get('computerForm').appendChild(ids.get('botSetupRules'));
+for (const [prefix, form, button] of [['host', 'hostForm', 'createBtn'], ['bot', 'computerForm', 'vsBotBtn']]) {
+  const revealLabel = new Element('label'); revealLabel.appendChild(ids.get(prefix + 'Reveal'));
+  ids.get(form).appendChild(revealLabel);
+  ids.get(form).appendChild(ids.get(prefix + 'RulesError'));
+  ids.get(form).appendChild(ids.get(button));
+}
 document = {
   activeElement: null,
   createElement: tag => new Element(tag), getElementById: id => ids.get(id) || null,
@@ -89,12 +104,28 @@ const defaultsBefore = JSON.stringify(E.DEFAULTS);
 
 for (const prefix of ['host', 'bot']) {
   for (const suffix of ['ruleDeckCount', 'ruleRequireRedBook', 'ruleRequireBlackBook', 'rulePickupTotal']) {
-    assert.equal(input(prefix + '-' + suffix).closest('details'), null, 'main setup rule stays visible: ' + prefix + '-' + suffix);
+    assert.equal(input(prefix + '-' + suffix).closest('details'), input(prefix + 'CustomizeRules'), 'primary rule editing is disclosed intentionally: ' + prefix + '-' + suffix);
   }
-  assert(input(prefix + '-ruleHandSize').closest('details'), 'additional rule controls live under More rules');
+  assert.equal(input(prefix + 'RuleOverview').closest('details'), null, 'current rule values stay visible outside the editor');
+  assert.equal(input(prefix + '-summary-deckCount').textContent, 'Auto · 5');
+  assert.equal(input(prefix + '-summary-requireRedBook').textContent, '1');
+  assert.equal(input(prefix + '-summary-requireBlackBook').textContent, '1');
+  assert.equal(input(prefix + '-summary-pileTakeExtra').textContent, '7 cards');
+  assert.equal(input(prefix + '-ruleHandSize').closest('details'), input(prefix + 'CustomizeRules'), 'all rule controls are directly available in Customize');
+  assert.equal(input(prefix + 'CustomizeRules').querySelectorAll('details').length, 0, 'no nested Advanced rules disclosure');
+  assert.equal(input(prefix + 'CustomizeRules').querySelectorAll('.setup-editor-group').length, 5, 'rules have five readable groups');
+  assert.equal(input(prefix + 'Reveal').closest('details'), input(prefix + 'CustomizeRules'), 'discard preview remains editable inside Customize');
+  assert.equal(input(prefix === 'host' ? 'createBtn' : 'vsBotBtn').closest('details'), null, 'submit is never hidden with the rule editor');
+  assert.equal(input(prefix === 'host' ? 'createBtn' : 'vsBotBtn').parentNode, input(prefix + 'SetupFooter'));
   assert.equal(input(prefix + '-rulePickupTotal').value, '7', 'pickup shows total, not hidden extra count');
   assert.equal(input(prefix + '-ruleReshuffleOnce').checked, true);
+  assert.equal(input(prefix + 'ResetRules').hidden, true, 'unchanged defaults do not present an unnecessary reset');
+  assert.equal(input(prefix + 'CustomizationCount').textContent, 'Optional');
 }
+assert.equal(input('hostSeatsHint').textContent, 'You + 2 friends');
+assert.equal(input('botSeatsHint').textContent, '3 players, including you');
+assert.equal(input('hostSubmitSummary').textContent, 'Next: share your code with 2 friends.');
+assert.equal(input('botSubmitSummary').textContent, 'You + 2 computers. Choose your foot, then play.');
 assert.equal(input('joinForm').querySelectorAll('.setup-rules').length, 0, 'joining never offers host rule controls');
 
 input('hostName').value = '  Vic  '; input('seatCount').value = '4';
@@ -103,12 +134,17 @@ input('host-ruleRequireBlackBook').value = '2'; input('host-rulePickupTotal').va
 input('hostForm').emit('submit');
 assert.equal(sent.length, 0, 'insufficient decks are rejected before sending create');
 assert.equal(input('hostRulesError').hidden, false);
+assert.equal(input('hostCustomizeRules').open, true, 'invalid rule combinations reveal the editor');
 assert.match(input('hostRulesError').textContent, /more decks|smaller deal/i);
 assert.equal(input('host-rulePickupTotal').value, '5', 'invalid submission preserves all chosen values');
 assert.equal(input('createBtn').disabled, false, 'invalid choices do not lock setup');
 input('host-ruleDeckCount').value = '5'; input('hostForm').emit('input');
 assert.equal(input('hostRulesError').hidden, true, 'editing a choice clears the stale inline error');
 assert.equal(input('host-automaticDecks').textContent, 'Auto · 6 decks', 'automatic deck label follows reserved seats');
+assert.equal(input('host-summary-requireRedBook').textContent, '2', 'visible rule summary follows custom edits');
+assert.equal(input('hostSubmitSummary').textContent, 'Next: share your code with 3 friends.');
+assert.equal(input('hostSeatsHint').textContent, 'You + 3 friends');
+assert.equal(input('hostResetRules').hidden, false, 'a customized draft offers an explicit reset');
 input('host-opening0').value = '60'; input('hostReveal').checked = false;
 input('hostForm').emit('submit');
 assert.equal(sent.length, 1);
@@ -132,6 +168,8 @@ assert.equal(input('botRulesError').hidden, false);
 input('botCount').value = '1'; input('computerForm').emit('change');
 assert.equal(input('botRulesError').hidden, true);
 assert.equal(input('bot-automaticDecks').textContent, 'Auto · 4 decks');
+assert.equal(input('botSeatsHint').textContent, '2 players, including you');
+assert.equal(input('botSubmitSummary').textContent, 'You + 1 computer. Choose your foot, then play.');
 input('computerForm').emit('submit');
 assert.equal(sent.length, 2);
 assert.equal(sent[1].t, 'vsbot'); assert.equal(Number(sent[1].bots), 1);
@@ -169,7 +207,8 @@ for (const [prefix, form, name] of [['host', 'hostForm', 'hostName'], ['bot', 'c
   assert.equal(input(prefix + '-ruleHighEightNine').checked, true);
   assert.equal(input(prefix + '-ruleGoOutWithDiscard').checked, true);
   assert.equal(input(prefix + 'Reveal').checked, false);
-  assert(input(prefix + 'PresetDifferences').children.some(line => line.textContent.includes('final discard')));
+  assert.equal(input(prefix + '-ruleGoOutWithDiscard').closest('label').getAttribute('data-changed'), 'true');
+  assert.match(input(prefix + 'CustomizationCount').textContent, /changes$/);
   assert.equal(input(other + '-ruleDeckCount').value, otherBefore, 'preset changes stay in their own form');
   input(name).value = 'Rules test'; input(form).emit('submit');
   assert.deepEqual(sent.at(-1).rules, E.rulesForPreset('real'), 'full real preset reaches the server');
@@ -188,6 +227,33 @@ for (const [prefix, form, name] of [['host', 'hostForm', 'hostName'], ['bot', 'c
 }
 input('hostRulePreset').value = 'real'; input('hostRulePreset').emit('change');
 context.HFMenu.goTo('host', false);
-assert.equal(input('hostRulePreset').value, 'christine', 'fresh table setup starts with Christine’s Rules');
+assert.equal(input('hostRulePreset').value, 'real', 'navigation does not reset the rule draft');
+input('host-ruleRequireRedBook').value = '2'; input('hostForm').emit('input');
+input('hostCustomizeRules').open = true;
+context.HFMenu.goTo('friends', false);
+assert.equal(input('lobby').getAttribute('data-menu-page'), 'play', 'legacy friends navigation resolves to the direct choices');
+context.HFMenu.goTo('host', false);
+assert.equal(input('hostRulePreset').value, 'custom');
+assert.equal(input('host-ruleRequireRedBook').value, '2', 'Back preserves custom primary rules');
+assert.equal(input('host-ruleGoOutWithDiscard').checked, true, 'Back preserves the entire Real Rules base');
+assert.equal(input('hostCustomizeRules').open, true, 'editor retains its draft inspection state');
+input('hostRulesDone').onclick();
+assert.equal(input('hostCustomizeRules').open, false, 'Done closes the editor');
+assert.equal(document.activeElement, input('hostCustomizeTitle'), 'Done returns focus to the editor entry');
+assert.equal(input('host-ruleRequireRedBook').value, '2', 'Done preserves rule changes');
+input('bot-rulePickupTotal').value = '5'; input('computerForm').emit('input');
+context.HFMenu.goTo('computer', false); context.HFMenu.goTo('play', false); context.HFMenu.goTo('computer', false);
+assert.equal(input('bot-rulePickupTotal').value, '5', 'CPU draft also survives Back');
+assert.equal(input('host-ruleRequireRedBook').value, '2', 'CPU navigation cannot reset friend setup');
+input('hostResetRules').onclick();
+assert.equal(input('hostRulePreset').value, 'christine', 'reset is explicit');
+assert.equal(input('host-ruleRequireRedBook').value, '1');
+assert.equal(input('host-ruleGoOutWithDiscard').checked, false);
+assert.equal(input('hostResetRules').hidden, true, 'reset disappears again when the default preset is restored');
+assert.equal(input('bot-rulePickupTotal').value, '5', 'reset affects only its own form');
+input('botCustomizeRules').open = false;
+input('computerForm').emit('invalid', input('bot-ruleHandSize'));
+assert.equal(input('botCustomizeRules').open, true, 'native invalid inputs are visible before browser focus');
+assert.equal(input('bot-ruleHandSize').closest('details'), input('botCustomizeRules'));
 assert.equal(JSON.stringify(E.DEFAULTS), defaultsBefore);
-console.log('Game setup: visible primary rules, independent forms, complete create/CPU payloads, validation, error recovery, duplicate guard, and unchanged join tests passed.');
+console.log('Game setup: visible summaries, disclosed editors, reachable submit, preserved drafts, explicit reset, complete create/CPU payloads, validation, error recovery, duplicate guard and unchanged join tests passed.');

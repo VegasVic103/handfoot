@@ -1,0 +1,96 @@
+/* Personal preferences and table rules share the cover's materials, with
+   independent scrolling so Close and Save never disappear below the form. */
+/* Utility headings use the same sans serif as the game. The title's important
+   shorthand replaces the earlier menu heading shorthand, including its family. */
+#rulesSheet #rulesTitle {
+  font:600 22px/1.25 Archivo,"Helvetica Neue",Arial,sans-serif!important;
+  letter-spacing:-.015em;
+}
+#rulesSheet .rule-head,
+#rulesSheet #rulesEditor .rule-head {
+  font:600 16px/1.35 Archivo,"Helvetica Neue",Arial,sans-serif;
+  letter-spacing:0;
+}
+#rulesSheet #rulesEditor > .rule-head { font-size:18px; }
+#rulesSheet > .sheet-in {
+  display:flex; flex-direction:column; overflow:hidden;
+  max-height:calc(100dvh - 24px);
+}
+#rulesSheet > .sheet-in > .sect-head:first-child { flex:0 0 auto; padding-block:14px; }
+#rulesSheet #rulesBody { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding-bottom:18px; }
+#rulesSheet .rules-tabs { margin-block:12px 18px; }
+#rulesSheet .rules-tabs .btn { min-height:44px; }
+#rulesSheet .settings-footer { flex:0 0 auto; }
+#rulesSheet .settings-footer:has(#leaveBtn[hidden]) { display:none; }
+#rulesSheet .preference-intro { margin:0 0 20px; }
+#rulesSheet .preference-section-title { margin:22px 0 0; font-size:16px; font-weight:600; line-height:1.35; letter-spacing:0; text-transform:none; color:var(--txt); }
+#rulesSheet [data-section="settings"] .look-row { padding-block:14px; }
+#rulesSheet [data-section="settings"] .rule-toggle { padding-block:14px; min-height:44px; }
+#rulesSheet [data-section="settings"] .look-opts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:10px; }
+#rulesSheet [data-section="settings"] .look-opt { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px; }
+#rulesSheet .preference-book-sample { display:flex; align-items:flex-end; justify-content:center; height:40px; position:relative; padding-right:12px; }
+#rulesSheet .preference-book-sample .card { --card-w:25px; --card-h:36px; width:25px; height:36px; min-width:25px; flex:none; border-radius:4px; box-shadow:0 2px 2px #0003; padding:3px; }
+#rulesSheet .preference-book-sample .card + .card { margin-left:-17px; }
+#rulesSheet .preference-book-sample .card .rank { font-size:12px; }
+#rulesSheet .preference-book-sample .card .suit { font-size:10px; }
+#rulesSheet .preference-book-sample .card .mini { display:none; }
+#rulesSheet .preference-book-sample[data-presentation="stacked"] .card { box-shadow:2px 2px 0 var(--bone),3px 3px 0 var(--hair-2); }
+#rulesSheet .preference-tile { display:grid; place-items:center; width:28px; height:36px; border:1px solid #bcaf95; border-radius:4px; background:var(--bone); color:var(--ink); font-weight:700; font-size:15px; }
+#rulesSheet .preference-book-count { position:absolute; right:0; bottom:0; font-size:11px; color:var(--txt-2); }
+/* Small, noninteractive examples explain where a selected card is played. */
+#rulesSheet .interaction-preview {
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  width:100%;height:76px;max-width:156px;padding:5px 0;
+}
+#rulesSheet .interaction-preview-hand {display:flex;align-items:center;gap:3px}
+#rulesSheet .interaction-preview-card {
+  position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  width:20px;height:29px;border:1px solid #b9ae9c;border-radius:3px;
+  background:var(--bone);color:#242523;box-shadow:0 1px 2px #0003;
+}
+#rulesSheet .interaction-preview-rank {font-size:11px;font-weight:700;line-height:12px}
+#rulesSheet .interaction-preview-suit {font-size:7px;line-height:8px}
+#rulesSheet .interaction-preview-card.is-selected {outline:1.5px solid #303637;outline-offset:-2px;transform:translateY(-3px)}
+#rulesSheet .interaction-preview-check {
+  position:absolute;right:-2px;top:-2px;display:grid;place-items:center;
+  width:10px;height:10px;border-radius:50%;background:#303637;color:white;
+  font-size:8px;line-height:1;box-shadow:0 0 0 1px var(--bone);
+}
+#rulesSheet .interaction-preview-arrow {font-size:16px;color:var(--txt-2)}
+#rulesSheet .interaction-preview-targets {display:flex;align-items:center;gap:6px}
+#rulesSheet .interaction-preview-target {display:flex;flex-direction:column;align-items:center;gap:4px}
+#rulesSheet .interaction-preview-caption {font-size:8px;font-weight:500;color:var(--txt-2)}
+#rulesSheet .interaction-preview[data-mode="buttons"] {flex-direction:column;gap:8px}
+#rulesSheet .interaction-preview-actions {display:flex;justify-content:center;gap:4px;width:100%}
+#rulesSheet .interaction-preview-action {
+  padding:5px 6px;border-radius:4px;background:#e4cf9c;color:#302515;
+  font-size:8px;font-weight:600;line-height:10px;white-space:nowrap;
+}
+#rulesSheet .interaction-preview-action:last-child {background:#713b40;color:#fff3de}
+#rulesSheet #editTableRules { min-height:44px; width:100%; margin-bottom:12px; }
+#rulesSheet #rulesEditor { margin:0; padding:0; border:0; }
+#rulesSheet #rulesEditor > .rule-head { margin-top:0; }
+#rulesSheet #rulesEditor .field { min-width:0; }
+#rulesSheet #rulesEditor input,#rulesSheet #rulesEditor select { max-width:100%; min-height:44px; }
+#rulesSheet #rulesEditor input[type="checkbox"] { min-height:24px; }
+#rulesSheet .rules-edit-group { border-bottom:1px solid var(--hair-2); }
+#rulesSheet .rules-edit-group > summary { display:flex; align-items:center; justify-content:space-between; min-height:48px; cursor:pointer; list-style:none; font-size:14px; font-weight:600; }
+#rulesSheet .rules-edit-group > summary::-webkit-details-marker { display:none; }
+#rulesSheet .rules-edit-group > summary::after { content:'+'; color:var(--accent-hi); font-size:20px; font-weight:400; }
+#rulesSheet .rules-edit-group[open] > summary::after { content:'−'; }
+#rulesSheet #rulesEditor .rules-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:4px 0 16px; border:0; }
+#rulesSheet .rules-fields .rule-toggle { grid-column:1/-1; padding-block:8px; border:0; }
+#rulesSheet #rulesSaveBar { flex:0 0 auto; display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px; padding:12px 21px; border-top:1px solid var(--hair-2); background:var(--app-0); }
+#rulesSheet #rulesSaveBar .btn { min-height:44px; font-size:12px; padding:10px; }
+#rulesSheet #rulesConfigStatus { grid-column:1/-1; margin:0; }
+#rulesSheet #rulesConfigStatus:empty { display:none; }
+#rulesSheet #rulesConfigStatus.warn { color:var(--red-hi,#ed958a); }
+#shareBox #lobbyRulesBtn { min-height:44px; justify-self:start; }
+@media(max-width:360px) {
+  #rulesSheet #rulesSaveBar { padding-inline:16px; }
+  #rulesSheet .preference-book-sample .card + .card { margin-left:-19px; }
+}
+@media(max-height:520px) {
+  #rulesSheet > .sheet-in { max-height:calc(100dvh - 12px); }
+  #rulesSheet > .sheet-in > .sect-head:first-child { padding-block:8px; }
+}

@@ -1,144 +1,130 @@
 # Hand & Foot 2.0
 
-An update to Vic’s original Hand & Foot game: the original table design, with clearer setup, adjustable table rules, chat, computer opponents, and more reliable play controls. Scoring is individual, without partnerships.
+An update to Vic’s original Hand & Foot game, with clearer setup, configurable table rules, chat, computer opponents, and more reliable play controls. Scoring is individual, without partnerships. This version builds on Vic’s table design; both the original styles and the added styles have been edited.
 
-This package preserves the original `style.css`, with added controls in `enhancements.css` and refreshed theme colors in `menu.css`. Choose Card room, Midnight, Claret, Graphite, Mahogany, or the light Ivory theme. Theme changes preserve table geometry and card meanings. The cover uses the custom scalable `handfoot-mark.svg` identity.
+Choose Card room, Midnight, Claret, Graphite, Mahogany, or Ivory. Card meanings remain consistent across themes. The illustrated cover is `handfoot-cover.svg`; `handfoot-mark.svg` is the favicon mark.
 
 ## Run locally
 
-Use Node.js 24 for the version tested with this package. `package.json` permits Node 18 or newer.
+Use Node.js 24 to match the reference test runtime. `package.json` permits Node 18 or newer.
 
 ```bash
 npm ci
 npm test
-node server.js
+npm start
 ```
 
-Open [localhost:3000](http://localhost:3000). `npm start` runs the same server command. A private/incognito window uses a separate browser session and can join as a second player.
+Open [localhost:3000](http://localhost:3000). A private/incognito window uses a separate browser session and can join as another player. All application files belong in one directory. This is plain Node HTTP and WebSockets using `ws`; there is no build output or `public/` directory.
 
-All application files belong in one directory. This is plain Node HTTP and WebSockets using `ws`; there is no build output or `public/` folder to create. See [HANDOFF.md](HANDOFF.md) for GitHub and Render integration.
+Opening `index.html` directly cannot run multiplayer; it displays server instructions. Over HTTP, `startup.js` loads the server-adapted engine, client, and menu in sequence. See [HANDOFF.md](HANDOFF.md) for integration and hosting.
 
-## Playing
+## Create or join a table
 
-- Home offers **Play**, **Settings**, and **Rules**.
-- **Play → Vs friends → Start a game** creates a lobby for 2–4 total players, defaulting to 3. Share the table code or invite link, then deal. Unclaimed seats are dropped at the deal.
-- **Play → Vs friends → Join a table** takes a table ID and your name.
-- **Play → Vs computer** is the practice table: choose 1–3 computer opponents, defaulting to 2, and deal immediately. Each bot receives one of four hidden play styles. Styles are stable during a game and rerolled for a rematch.
-- Both creation screens include editable rules before the first deal: decks, required red/black books, and discard pickup total are visible, with the remaining controls under **More rules**. **Settings → Rules** lets the host adjust rules during play for the next round. Personal card style, table color, shared meld presentation, hand arrangement, sorting, and turn reminders remain separate browser preferences.
+Home offers **Play**, **Settings**, and **Rules**. Play leads directly to:
 
-House Rules is selected for every fresh setup. Selecting **Real Rules** replaces all rule values; later edits show **Customized rules**. The expandable **Different from House Rules** list flags changed mechanics and values. Both modes use individual scoring. See [RULESETS.md](RULESETS.md) for the published reference and app conventions.
+- **Create table**: choose 2–4 total players, including yourself. The default is 3. Share the table code or invite link, then deal after at least two players join. Unclaimed seats are removed at the deal.
+- **Join table**: enter the table ID and your name. The host controls the rules.
+- **Practice**: choose 1–3 computer opponents, defaulting to 2. Starting practice begins the deal without waiting for friends. Bots receive one of four hidden play styles, stable for that game and rerolled for a rematch.
 
-Under House Rules, select two different stock piles and press **Draw 2**. Real Rules draws both cards from one stock. Alternatively, open the discard pile and confirm **Take pile**; matching natural cards are chosen from your hand automatically. Opening the window never commits a pickup.
+Create and Practice each keep their own setup draft. House Rules is the default; selecting Real Rules replaces the complete rule configuration. Later edits show Customized rules. The setup summary shows decks, required red and black books, and discard pickup total.
 
-Select cards to play a new meld. For an existing book, one tap chooses the destination for the Add action; a second tap within 400ms adds the same selected cards directly. The turn, selection, target, and legality are rechecked. Finish a normal turn by selecting a card and discarding it. The footer shows actions that apply to the current play.
+**Customize rules** opens one inline editor with five groups: The deal, Melds & books, Draw & discard, Opening points, and Scoring & red threes. Controls use full-width rows, with opening points in a 2 × 2 grid. Changed values are marked and counted. **Done** closes the editor without discarding choices; **Reset to House Rules** explicitly restores the default. Invalid combinations stay in the form with feedback. Joining never changes the table rules.
 
-**Auto** is off initially. It can draw from a chosen pair, the two largest remaining piles, the two smallest, or **Random** (two distinct nonempty piles chosen uniformly). It pauses for a legal discard-pile pickup or an unavailable chosen pile. A single remaining pile supplies both cards. Real Rules shows a simple Auto On/Off option. **Select matching ranks** inside Auto changes card selection only; it does not play cards.
+The waiting lobby shows the invite, reserved seats, and **Table rules**. Leaving the lobby releases the reservation; an ordinary disconnection retains a resumable seat.
 
-Opponents remain compact above the table. Their melds are public; tapping a player opens a larger inspection view. Their unplayed hand and foot remain hidden. Your hand stays below your books. Melded-point totals count face-up cards and exclude book bonuses.
+## Deal and play
 
-Completed natural book cards become fully red or black. Jokers remain gold and deuces blue. **Chat**, immediately left of Sort during play, sends messages to the current table. Chat stays in the header while waiting in a lobby. Scores open automatically once when a round finishes and can also be opened manually.
+Each new round begins with two private face-down packets. In Tap mode, tap the packet to keep as your foot; the other becomes your hand. In Buttons mode, select a packet and confirm **Select foot**. Custom rules with unequal hand and foot sizes retain their assigned packets and use **Continue**. Bots choose randomly. After everyone has chosen, a shared three-second countdown precedes play. Reconnecting retains your choice and the remaining countdown.
 
-Selecting cards or opening more books never shrinks the other card faces. **Settings → Meld display** applies **Cards** or **Tiles** to both your books and opponents. Cards defaults to spread unfinished melds and stacked completed books; **Finished books → Stacked / Spread** changes that default. Tiles compacts unfinished melds; Finished books remains visible and independently controls completed books in both views. Tap any meld to expand or collapse its public cards. When legal hand cards are selected, tapping your destination book still chooses Add; double-tapping still adds directly. Display preferences are personal and never change the game rules.
+Opponents stay compact at the top, with public melds and hand/foot counts. Tap a player for a larger inspection view. Unplayed opponent cards stay hidden. **In foot** uses a contrasting plum pill across all themes. Your hand sits below your books; **Sort, Auto, Scores, Chat, Clear, Undo** share one continuous toolbar below the hand and action buttons. Clear and Undo stay visible but disabled when unavailable. A slim bordered header holds Round, minimum meld and the Settings gear. The changing instruction stays below the play buttons.
 
-Completed books use red/black faces and short rank/count captions. Wild counts appear as gold/blue top/bottom trims on compact stacks and tiles, with split edges when custom rules allow three/four wilds. Hand wilds have cream faces and gold/blue bands; spread meld wilds have full gold/blue faces. All melds one card short of a book show a sideways leading face (or landscape tile), with an ordinary quiet side count. Both shelves identify rank on the card face, without repeating it in a caption. The active opponent uses only a thin gold outline around the whole panel, with no turn pill or name accent; your turn is shown beside Your cards instead of in the top navigation.
+A draw chooser opens once at the start of a manual draw turn. Tap a stock in the center tray to reopen it. House Rules draws one card from each of two different nonempty piles where possible; Real Rules draws two from one stock. When discard pickup is legal, the chooser offers **View pile · N**. The inspection window requires a separate **Take pile** confirmation and automatically chooses the required matching naturals from your hand. Unrelated card selection does not prevent pickup. With preview off, only the public top discard is revealed.
 
-Opponent hand/foot counts sit beside the name. Melded points remain in expanded player details; your own points remain in the shared Your cards toolbar. On crowded screens the book shelf scrolls without reducing card size. Rules and Settings use a bounded scrollable dialog with a sticky Close/header, grouped controls, and expandable rule explanations. Newly drawn cards use a single muted mint outline; selection stays gold.
+**Settings → Interactions → Buttons** is the default for new players. An explicitly saved Tap preference is preserved. Select cards, then tap a highlighted legal book to add them. Both Tap and Buttons modes support that direct add; there is no separate Add-to-existing-book button. A short double-tap recognition window prevents the first tap of an expand/collapse gesture from playing cards. The turn, selection, target, connection, and legality are rechecked before sending.
 
-Accepted draws, melds, discards and pile pickups animate between their source and destination for your own seat. Movement never delays the rules engine or controls. **Settings → Card movement** turns it off; device Reduce Motion is respected. Reconnects, undo, old history and ambiguous automatic replacements do not replay card flights.
+For a new meld, Tap mode provides a **New meld** target in your book area. To discard in Tap mode, select one legal card and tap the discard pile. Buttons mode reserves a static action row below the hand for its explicit actions, including new meld and discard. Discarding a card that could be melded opens **Keep card / Discard anyway** confirmation in both modes.
+
+Selection raises the individual card with a dark border; it does not resize books or shift surrounding rows. Newly received cards appear in a separate unlabelled row, ascending left to right. After landing, drawn cards lift and glow sky blue for four seconds, matching the meld cue duration; reduced motion uses a steady highlight. Sorting preserves the separation from the existing hand. **Sort** contains hand layout and card ordering. Scores open automatically once per completed round and remain available manually after dismissal.
+
+## Auto, book display, and movement
+
+**Auto** starts off. With four stocks, choose a fixed pair, the two largest, the two smallest, or Random. Random chooses distinct nonempty piles where possible. Auto pauses for a legal discard pickup, an unavailable configured pile, or an open dialog. The chooser explains the pause and lets you choose manually. One-stock play offers Auto On/Off. **Select matching ranks** inside Auto changes selection only; it never plays cards.
+
+**Settings → Meld display** applies Cards/Tiles to both book shelves. Cards spreads unfinished melds by default; Tiles uses the compact stack renderer. **Finished books → Stacked / Spread** independently controls completed books. Double-tap a book to expand or collapse it. With a keyboard, Enter adds a legal selection; Shift+Enter changes display. Without a legal selection, Enter changes display. These are personal preferences, not table rules.
+
+Completed natural book cards are fully red or black; melded jokers stay gold and deuces blue. Compact books show gold/blue wild edge trims, split when custom rules permit more wilds. Hand wilds keep cream faces with colored top and bottom bands. A meld one card short of completion has a sideways lead card. Counts sit beside books without repeated rank labels. Opponent melded points are in the expanded inspector and exclude book bonuses.
+
+Card faces keep their dimensions when selecting cards or expanding books. Crowded book shelves can scroll rather than shrinking all cards. The interface accommodates short screens with bounded scrolling where necessary; device testing remains part of release acceptance.
+
+Accepted Auto draws show their actual received cards in a 1.5-second reveal before settling into the hand. Manual draws go directly to the hand. Tap Continue, tap the reveal, or press Escape to dismiss early. **Settings → Card movement** and device Reduce Motion disable flights while retaining the brief readable Auto reveal. Chat and other open dialogs are not interrupted. Reconnects, undo, old history, and ambiguous replacements do not replay flights.
+
+## Chat and personal settings
+
+Chat opens a near-full-screen phone panel with player pills showing whose turn it is. Opening it does not focus the composer or summon a keyboard. Tap the composer for the larger in-app keyboard, use a physical keyboard, or explicitly choose **Device keyboard** for native input and dictation. Closing Chat retains an unsent draft. Incoming table updates do not replace the composer or steal its focus.
+
+The server keeps the latest 100 chat messages in memory, with a 500-character limit and rate limiting. Reconnecting to the same running process restores that history; restarting the server clears it.
+
+The shared dialog separates **Rules**, **Settings**, and **Appearance**. Rules shows the active configuration and host changes. Settings contains personal interaction, book-display, motion, and turn-notice preferences. Appearance contains card styles and table themes. Sort remains the home for hand layout and ordering.
 
 ## Configurable table rules
 
-The original host controls structural and scoring rules. In a waiting lobby, valid changes apply immediately. After the deal, changes are saved for the next round or rematch; everyone sees both the active rules and the pending configuration. Current hands, books, legal moves, and scores keep using the active rules until that round ends. Updating the pending configuration preserves earlier queued choices, and restoring all active values cancels the pending changes.
+The current host controls rules. Valid waiting-lobby changes apply immediately. After dealing, changes are queued for the next round or rematch; everyone can see the active rules and pending configuration. Current hands, legal moves, and scores continue to use the active rules. Restoring all active values cancels pending changes.
 
-The server validates each configuration together, including enough cards for every reserved seat, the deal, a starting discard, and the selected stock arrangement. Invalid fields, unsupported rule names, and insufficient decks are rejected without partially changing the table. Joining a table cannot overwrite the host’s rules. The host editor queues all post-deal changes, including preview. For compatibility with older clients, their existing preview-only request still applies immediately and synchronizes any pending preview value.
+The shared engine validates the whole configuration, including deal capacity and incompatible book settings. Unknown fields, invalid values, and insufficient decks are rejected atomically. The host editor queues all post-deal changes, including preview. The legacy host-only preview endpoint remains immediate for compatibility and also synchronizes any pending preview value.
 
 | Adjustable rule | Accepted values |
 |---|---|
-| Decks | Automatic (players + 2), or 1–12 decks when the deal fits |
+| Decks | Automatic (players + 2), or 1–12 when the deal fits |
 | Hand / foot size | 5–20 cards each |
-| Red / black books required to go out | 0–5 each |
-| Total discard pickup | 1–20 cards including the top card; limited by actual pile size |
+| Stock arrangement | One stock or four piles |
+| Red / black books required | 0–5 each |
+| Total discard pickup | 1–20 including the top card; limited by actual pile size |
 | Book completion size | 3–10 cards |
 | Wilds per book | 0–4 |
-| Minimum natural cards in a meld | 2–3 |
+| Minimum naturals | 2–3 generally; 2–4 when using wilds |
 | Opening minimums | Four whole numbers, 0–500 each |
 | Red-book / black-book / going-out bonuses | 0–2,000 each |
-| Red-three penalty | −2,000 through 0 |
-| Red-three handling | Keep in hand, or lay off automatically with replacements |
-| Discard preview | On / Off |
-| Stock recycle | Once per round / Off |
+| Red-three points | −2,000 through 0 |
+| Other switches | Locked completed books, final discard required, eights/nines worth 10, red-three layoff and bonuses, discard preview, one stock recycle |
 
-Stock arrangement is one stock or four piles. Two-card draws, two matching naturals for discard pickup, and no all-wild books remain fixed. Additional adjustable mechanics include locked completed books, minimum naturals with wilds (2–4), eights/nines worth 10 points, laid red-three bonuses, and a required final discard. Rule controls never change individual scoring into partnerships.
+Two-card draws, two matching naturals for discard pickup, no all-wild books, and individual scoring remain fixed. See [RULESETS.md](RULESETS.md) for both presets and the published baseline used for Real Rules.
 
-## House Rules (default)
-
-| Rule | Setting |
-|---|---|
-| Decks | Number of players + 2 |
-| Deal | 11 cards in hand and 11 in foot |
-| Stock | Four piles; draw two cards from distinct nonempty piles when possible |
-| Last stock pile | Both cards may come from it |
-| Stock recycle | When any stock pile reaches zero after a draw, shuffle the remaining stocks and discard cards except the visible top card; redeal four piles once per round. The next exhaustion ends and scores the round. |
-| Discard pickup | Two matching naturals from your hand; take the top card plus up to six behind it |
-| Opening minimum | 50 / 90 / 120 / 150 across four rounds, accumulated over the turn |
-| Book | Seven cards closes it; additional cards remain allowed |
-| Red book | All naturals; 500-point bonus |
-| Black book | Contains wilds; 300-point bonus |
-| Melds and wilds | At least two naturals; at most two wilds; threes never meld |
-| Additional book of a rank | Allowed after the previous book closes |
-| Completed red books | Cannot accept wilds |
-| Red threes | Stay in hand; discard normally; each remaining red three costs 100 at round end |
-| Frozen discard | Any three or wild on top prevents pickup |
-| Going out | In your foot with at least one red and one black book; meld every remaining card, without a final discard; 500-point bonus |
-
-The original README said the going-out bonus was 100. The actual default is **500**. Apart from the requested stock-recycle rule, the listed defaults retain the supplied game’s rules. A pickup may contribute less than the opening minimum, but you must reach the minimum before ending that turn or undo the pickup. A recycle preserves every hand and meld and keeps the visible discard top in place; it never exposes shuffled card identities. With recycling disabled, play continues while any stock remains. The final successful stock draw gets its normal play/discard turn, then the round ends before another player receives an empty-stock turn.
+House Rules defaults preserve the supplied game’s 11-card hand/foot, seven-card books, one red and one black book to go out, 500/300 book bonuses, 500 going-out bonus, and 50/90/120/150 opening minimums. The added default stock recycle occurs once per round: after a draw empties a stock pile, shuffle the remaining stocks and discard cards except the visible top into new stocks. The next exhaustion ends and scores the round. With recycling off, remaining stocks are used and the final successful draw receives its normal play/discard turn before scoring. Hands and melds are never mixed into recycled stock.
 
 ## Sessions and storage
 
-The server validates moves and sends each player only their own hand, public melds, and opponent card counts. A bot receives the same restricted view as a human. Browser storage remembers your seat token; reconnecting with the same session can resume that seat while the table exists.
+The server owns all cards and legal moves. Human and bot views contain only the acting player's hand, public melds, and other players' card counts. Browser storage remembers the seat token for reconnecting while the table exists.
 
-Game state is saved to `tables.json`, or the path in `SAVE_FILE`. Restarts can restore games only when that file survives. Pending rule choices and the current round’s recycle count are saved with the game. Older saves retain their bot seats and private styles, and existing tables larger than four players are not truncated. Missing new rule fields use their defaults. New-table setup is capped at four. Tables expire after 12 quiet hours.
+Game state is saved to `tables.json`, or the path in `SAVE_FILE`. Restoration requires that file to survive. Pending rules, packet choices, countdown, and the recycle counter are saved with the game. Older saves retain their cards, bot seats, and styles; tables larger than four players are not truncated. Missing new rule fields use defaults. Tables expire after 12 quiet hours.
 
-Saves contain private cards and seat tokens. Keep them out of Git and shared archives. Writes are batched, so an abrupt process failure can lose the latest unsaved moves. The parent directory of a custom save path must already exist and be writable; an unwritable save path leaves games in memory only.
-
-Chat keeps the latest 100 messages in server memory, with a 500-character message limit and rate limiting. Reconnecting to the same running server restores that history. A server restart clears it.
+Saves contain private cards and seat tokens. Exclude them from Git and shared archives. The custom save directory must exist and be writable. Saves are atomically replaced, with a short batched-write window and a shutdown flush; abrupt process loss can still lose the latest unsaved moves. An unwritable save path leaves games in memory only. Chat is not part of the save.
 
 ## Verification
 
-Run all seven suites after integrating changes:
+`npm test` runs nine suites: startup, rules, server/WebSockets, bots, client UI, menu/setup, motion, presets, and chat. Run the full command after integrating or changing files. [VERIFICATION.md](VERIFICATION.md) records test and browser evidence; do not treat historical counts as results for a later edit.
 
-- `rules.test.js`: rule validation, authoritative turns, rollback, stock recycling, and game simulations.
-- `server.test.js`: real WebSocket play, host permissions, atomic rule changes, next-round configuration, privacy, chat, reconnects, and save restoration.
-- `bot.test.js`: legal play for the four hidden styles and complete-game simulations.
-- `ui.test.js`: client legality, original themes, personal opponent presentation, stable book layout during selection, action guards, Auto, confirmed pickups, privacy, and score-sheet behavior.
-- `menu.test.js`: pre-game rule controls, shared validation, create/practice payloads, and independent setup drafts.
-
-`motion.test.js` checks accepted card routes and cancellation safety; `presets.test.js` checks both rulesets and simulates complete matches. `npm test` runs all seven suites. The client suite uses a DOM test double; it does not replace visual or touch testing on real devices. Physical iPhone Safari, a hosted deployment, and the supplied Dockerfile have not been verified by these automated tests.
-
-Final backend results on Node **v24.19.0**:
-
-| Suite | Result |
-|---|---|
-| Rules | 117 checks passed, including 1,200 simulated rounds |
-| Server/WebSocket integration | 172 assertions passed, 0 failed |
-| Bots | 100 checks passed, 0 failed, including 620 complete four-round games |
-| Rule presets | 17 checks passed, including 96 additional complete matches |
-| Card motion | 15 checks passed |
-
-Bot simulations include 300 baseline games, 160 style-specific games, and 160 games with custom rules. Re-run the complete command after any further integration changes.
+The client suites use DOM doubles. They do not certify physical iPhone Safari, touch targets, the native keyboard, or hosted networking. No production deployment or Docker build is claimed by this README.
 
 ## Source map
 
-| File | Purpose |
+| Files | Purpose |
 |---|---|
-| `engine.js` | Card values, meld validation, rule defaults, and configuration validation |
-| `game.js` | Authoritative turns, stock recycling, next-round rules, foot pickup, undo, and scoring |
-| `server.js` | HTTP, WebSockets, table sessions, chat, privacy, and saves |
-| `bot.js` | Four private computer play styles |
-| `index.html`, `app.js` | Game screens and client interactions |
-| `menu.js`, `menu.css` | Setup navigation and supporting dialog presentation |
-| `style.css` | Original game styling |
-| `enhancements.css` | Compatibility styling for the added controls and table features |
-| `*.test.js` | Rules, server, bot, and client regression suites |
-| `package.json`, `package-lock.json` | Version 2.0.0, dependency lock, and commands |
-| `Dockerfile` | Original optional container recipe; not required for native Node hosting |
+| `engine.js`, `game.js` | Rules, configuration, authoritative turns, dealing, undo, recycling, and scoring |
+| `server.js`, `bot.js` | HTTP/WebSockets, sessions, privacy, chat, persistence, and hidden computer styles |
+| `index.html`, `app.js`, `startup.js` | Screen structure, interactions, and ordered browser startup |
+| `menu.js`, `menu.css` | Cover, navigation, setup, and supporting dialog presentation |
+| `style.css`, `enhancements.css` | Updated base styling and table controls |
+| `play-feedback.css`, `interaction-feedback.css`, `interaction-mode.css`, `draw-feedback.css`, `chat-feedback.css` | Play, selection, draw, chat, and interaction presentation |
+| `table-cosmetics.css`, `preferences.css`, `audit-refinements.css`, `deal-choice.css` | Table finish, preference screens, responsive refinements, and packet choice |
+| `handfoot-cover.svg`, `handfoot-mark.svg`, `icons.js`, `manifest.webmanifest` | Cover art, favicon, generated app icons, and install metadata |
+| `*.test.js` | Nine automated regression suites |
+| `package.json`, `package-lock.json`, `Dockerfile` | Commands, locked dependency, and optional container recipe |
+
+
+### Final v2 draw and undo update — October 10
+
+The draw dialog gives one automatic invitation per turn. After closing it, choose stocks directly on the table. Buttons mode enables **Draw piles 1 & 3** (using the actual selections); its right-hand action is **View pile** during drawing, then Discard during play. Tap mode draws when the required valid stock selection is complete. Pile inspection still precedes any pickup.
+
+Undo asks for confirmation when one selected card can legally be discarded, preventing a nearby mis-tap from resetting the turn. The warning explains that only this turn's melds/additions are reset, a normal draw stays, and a discard-pile pickup is reversed when applicable. Keep playing receives initial focus.
+
+Undo also offers **Return [wild] from [rank]** for eligible jokers/twos added during the current turn. Returning one preserves all other plays. The authoritative server rejects earlier-turn cards, completed books, returns after a foot transition, invalid remaining melds (including fewer than three cards), and returns that would invalidate an opening committed by pickup. Full Undo remains available. This does not allow moving wilds out of books from earlier turns.

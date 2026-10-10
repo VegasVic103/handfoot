@@ -16,10 +16,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Hand &amp; Foot">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Archivo:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="enhancements.css">
 <link rel="stylesheet" href="menu.css">
+<link rel="stylesheet" href="play-feedback.css">
+<link rel="stylesheet" href="interaction-feedback.css">
+<link rel="stylesheet" href="interaction-mode.css">
+<link rel="stylesheet" href="draw-feedback.css">
+<link rel="stylesheet" href="chat-feedback.css">
+<link rel="stylesheet" href="table-cosmetics.css">
+<link rel="stylesheet" href="preferences.css">
+<link rel="stylesheet" href="audit-refinements.css">
+<link rel="stylesheet" href="deal-choice.css">
 <!-- Your deck and cloth, set before anything is drawn. app.js runs at the end
      of the body, which is one paint too late: without this the table appears
      in the default green and then changes under you. -->
@@ -45,61 +54,61 @@
 <section class="screen" id="lobby" data-menu-page="home" aria-label="Game menu">
   <main class="menu-shell">
     <div class="menu-brand">
-      <svg class="menu-logo" viewBox="0 0 212 180" aria-hidden="true" focusable="false">
-        <g fill="none" stroke="#ad915e" stroke-width="1.2" opacity=".85"><path d="M26 99C18 84 17 66 22 51M190 51c5 15 4 33-4 48"/><path d="m20 40 3-5 3 5-3 5Z"/><path d="m186 112 3-5 3 5-3 5Z"/></g>
-        <g transform="rotate(-10 78 82)">
-          <rect x="34" y="24" width="82" height="120" rx="8" fill="#721e20" stroke="#b89760" stroke-width="1.5"/>
-          <path d="M41 138h65M41 141h65" stroke="#cdb684" stroke-width="1" opacity=".7"/>
-          <rect x="34" y="19" width="82" height="120" rx="8" fill="#a33332" stroke="#d0b17d" stroke-width="1.5"/>
-          <rect x="40" y="25" width="70" height="108" rx="4" fill="none" stroke="#e9d2a2" stroke-width=".8" opacity=".65"/>
-          <path d="M50 49c-11-8-9-15-4-15 2 0 4 2 4 4 2-4 4-5 7-3 5 4 1 9-7 14Z" fill="#f4ecd7"/>
-          <path d="M49 62h20v3h-5v19h23V65h-5v-3h20v3h-5v45h5v3H82v-3h5V88H64v22h5v3H49v-3h5V65h-5Z" fill="#f5ecd7"/>
-        </g>
-        <g transform="rotate(9 133 85)">
-          <rect x="96" y="33" width="82" height="120" rx="8" fill="#151a19" stroke="#b89760" stroke-width="1.5"/>
-          <path d="M105 147h64M105 150h64" stroke="#cdb684" stroke-width="1" opacity=".7"/>
-          <rect x="96" y="28" width="82" height="120" rx="8" fill="#222b29" stroke="#d0b17d" stroke-width="1.5"/>
-          <rect x="102" y="34" width="70" height="108" rx="4" fill="none" stroke="#e9d2a2" stroke-width=".8" opacity=".65"/>
-          <path d="M153 48c-3 5-7 7-7 11 0 4 5 5 7 1l-2 7h5l-2-7c2 4 7 3 7-1 0-4-5-6-8-11Z" fill="#f5ecd7"/>
-          <path d="M110 70h45l1 15h-3c-2-9-5-12-14-12h-14v21h10c6 0 8-2 9-8h3v20h-3c-1-6-3-8-9-8h-10v23h7v3h-22v-3h5V73h-5Z" fill="#f5ecd7"/>
-        </g>
-        <path d="M83 169h39m7 0h15" stroke="#ad915e" stroke-width="1" stroke-linecap="round"/>
-        <path d="m123 169 2-3 2 3-2 3Z" fill="#c7ad75"/>
-      </svg>
-      <h1>Hand <span class="menu-amp">&amp;</span> Foot</h1>
-      <p class="menu-tagline">A card table for good company.</p>
+      <img class="menu-logo" src="handfoot-cover.svg" width="65" height="46" alt="">
+      <p class="cover-kicker"><span aria-hidden="true">♣</span> THE CARD TABLE <span aria-hidden="true">♦</span></p>
+      <h1><span class="brand-line">Hand</span> <span class="brand-line"><span class="menu-amp">&amp;</span> Foot</span></h1>
+      <div class="cover-deal" aria-hidden="true"><img src="handfoot-cover.svg" width="480" height="330" alt=""></div>
     </div>
 
     <section class="menu-page" id="menu-home" aria-label="Main menu">
+      <p class="cover-welcome">Pull up a chair.</p>
       <nav class="menu-choices" aria-label="Main menu">
-        <button class="menu-choice primary" id="homePlay" type="button" data-menu-to="play"><span>Play</span><span aria-hidden="true">→</span></button>
-        <div class="menu-home-secondary"><button class="menu-choice" id="homeSettings" type="button">Settings</button><button class="menu-choice" id="homeRules" type="button">Rules</button></div>
+        <button class="menu-choice primary" id="homePlay" type="button" data-menu-to="play"><span>Play<small>With friends or the computer</small></span><span class="cover-play-arrow" aria-hidden="true">↗</span></button>
+        <div class="menu-home-secondary">
+          <button class="menu-choice" id="homeSettings" type="button"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 4v16M12 4v16M19 4v16"/><path d="M2 8h6M9 16h6M16 9h6" stroke-width="4"/></svg><span>Settings</span></button>
+          <button class="menu-choice" id="homeRules" type="button"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Zm0 0v14"/></svg><span>Rules</span></button>
+        </div>
       </nav>
+      <p class="cover-footer">A classic game. Your house rules.</p>
     </section>
 
     <section class="menu-page" id="menu-play" hidden aria-labelledby="playTitle">
-      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="home" aria-label="Back to main menu">←</button><h2 id="playTitle" tabindex="-1">Play</h2></div>
-      <div class="menu-choices">
-        <button class="menu-choice" type="button" data-menu-to="friends"><span>Vs friends<small>Start a table or join with a code.</small></span><span aria-hidden="true">→</span></button>
-        <button class="menu-choice" type="button" data-menu-to="computer"><span>Vs computer<small>Your practice table. Play at your pace.</small></span><span aria-hidden="true">→</span></button>
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="home" aria-label="Back to main menu"><span aria-hidden="true">←</span> Back</button><h2 id="playTitle" tabindex="-1">Play</h2></div>
+      <div class="play-options">
+        <button class="menu-choice play-option" type="button" data-menu-to="host" aria-label="Create table — invite friends with a code">
+          <span class="play-option-kicker">WITH FRIENDS</span>
+          <svg class="play-option-art" aria-hidden="true" viewBox="0 0 180 150" fill="none">
+            <ellipse cx="89" cy="118" rx="65" ry="10" fill="#493523" opacity=".1"/>
+            <g transform="translate(19 30) rotate(-13 34 45)"><rect x="-4" y="4" width="60" height="88" rx="6" fill="#baab8f"/><rect width="60" height="88" rx="6" fill="#faf4e7" stroke="#c4b69e"/><rect x="5" y="5" width="50" height="78" rx="3" fill="#9a3230"/><path d="m11 14 37 57m-37-43 30 45M17 12l30 45" stroke="#d9ac80" stroke-opacity=".4"/><rect x="10" y="10" width="40" height="68" rx="2" stroke="#e7c49c" stroke-width=".6"/></g>
+            <g transform="translate(49 15) rotate(-4 33 49)"><rect x="0" y="4" width="65" height="97" rx="6" fill="#c7bca5"/><rect width="65" height="97" rx="6" fill="#fff9ee" stroke="#c4b69e"/><text x="9" y="23" font-family="Georgia,serif" font-size="21" fill="#b03931">7</text><path d="M32 65c-22-16-18-34-7-31 4 1 6 4 7 7 5-11 17-9 18 0 1 9-10 18-18 24Z" fill="#b03931"/></g>
+            <g transform="translate(98 34) rotate(14 31 46)"><rect x="0" y="4" width="61" height="90" rx="6" fill="#c7bca5"/><rect width="61" height="90" rx="6" fill="#f5efdf" stroke="#bdb09a"/><text x="9" y="23" font-family="Georgia,serif" font-size="21" fill="#23352b">7</text><path d="M30 34c-5 8-19 17-19 26 0 12 16 13 19 3l-4 14h8l-4-14c4 10 19 9 19-3 0-9-13-18-19-26Z" fill="#23352b"/></g>
+          </svg>
+          <span class="play-option-title">Create table</span>
+          <small>Invite your friends.<br>Share a table code.</small>
+          <span class="play-option-arrow" aria-hidden="true">→</span>
+        </button>
+        <button class="menu-choice play-option" type="button" data-menu-to="computer" aria-label="Practice — play against computer opponents">
+          <span class="play-option-kicker">WITH THE COMPUTER</span>
+          <svg class="play-option-art" aria-hidden="true" viewBox="0 0 180 150" fill="none">
+            <ellipse cx="92" cy="119" rx="63" ry="9" fill="#493523" opacity=".1"/>
+            <g transform="translate(63 27)"><rect x="0" y="0" width="87" height="63" rx="7" fill="#253c32" stroke="#627264" stroke-width="2"/><rect x="6" y="6" width="75" height="49" rx="3" fill="#3e5948"/><path d="M-11 66h109l-5 7a5 5 0 0 1-4 2H-2a5 5 0 0 1-4-2Z" fill="#7c8878"/><path d="M30 66h27l-3 3H33Z" fill="#4e6254"/><path d="m45 15 4 11 12 1-10 7 3 12-10-7-10 7 3-12-9-7 12-1Z" fill="#d6b572"/></g>
+            <g transform="translate(28 46) rotate(-12 31 45)"><rect x="0" y="4" width="60" height="85" rx="6" fill="#c7bca5"/><rect width="60" height="85" rx="6" fill="#fff9ee" stroke="#c4b69e"/><text x="8" y="23" font-family="Georgia,serif" font-size="21" fill="#b03931">A</text><path d="m29 30 15 21-15 21-15-21Z" fill="#b03931"/></g>
+          </svg>
+          <span class="play-option-title">Practice</span>
+          <small>Play on your own.<br>1–3 computer opponents.</small>
+          <span class="play-option-arrow" aria-hidden="true">→</span>
+        </button>
       </div>
-    </section>
-
-    <section class="menu-page" id="menu-friends" hidden aria-labelledby="friendsTitle">
-      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="play" aria-label="Back to play options">←</button><h2 id="friendsTitle" tabindex="-1">Vs friends</h2></div>
-      <div class="menu-choices">
-        <button class="menu-choice" type="button" data-menu-to="host"><span>Start a game<small>Create a table and share its code.</small></span><span aria-hidden="true">→</span></button>
-        <button class="menu-choice" type="button" data-menu-to="join"><span>Join a table<small>Pull up a chair with a table code.</small></span><span aria-hidden="true">→</span></button>
-      </div>
+      <button class="menu-choice play-join" type="button" data-menu-to="join"><span>Join table<small>Have a code? Take a seat at a friend’s table.</small></span><span aria-hidden="true">→</span></button>
     </section>
 
     <section class="menu-page" id="menu-host" hidden aria-labelledby="hostTitle">
-      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="friends" aria-label="Back to friends options">←</button><h2 id="hostTitle" tabindex="-1">Start a game</h2></div>
-      <p class="menu-intro">Choose your table rules, then invite your friends.</p>
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="play" aria-label="Back to play options"><span aria-hidden="true">←</span> Back</button><h2 id="hostTitle" tabindex="-1">Create table</h2></div>
+      <p class="menu-intro">Get a code to share with friends. You’ll deal when everyone is ready.</p>
       <form class="menu-form" id="hostForm">
         <div class="setup-players">
-        <label class="field" for="hostName">Your name<input type="text" id="hostName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name"></label>
-        <label class="field" for="seatCount">Total players<select id="seatCount" name="players" required><option value="2">2 players</option><option value="3" selected>3 players</option><option value="4">4 players</option></select></label>
+        <label class="field" for="hostName">Player name<input type="text" id="hostName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name" aria-describedby="hostNameHint"><small id="hostNameHint">Shown to your friends.</small></label>
+        <label class="field" for="seatCount">Table size<select id="seatCount" name="players" required aria-describedby="hostSeatsHint"><option value="2">2 players</option><option value="3" selected>3 players</option><option value="4">4 players</option></select><small id="hostSeatsHint">You + 2 friends</small></label>
         </div>
         <div class="setup-rules" id="hostSetupRules"></div>
         <label class="menu-toggle" for="hostReveal"><span>Preview discard pickup<small>Everyone can see the cards they would pick up.</small></span><input type="checkbox" id="hostReveal" name="revealDiscard" checked></label>
@@ -109,28 +118,28 @@
     </section>
 
     <section class="menu-page" id="menu-join" hidden aria-labelledby="joinTitle">
-      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="friends" aria-label="Back to friends options">←</button><h2 id="joinTitle" tabindex="-1">Join a table</h2></div>
-      <p class="menu-intro">Enter your host’s code and take a seat.</p>
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="play" aria-label="Back to play options"><span aria-hidden="true">←</span> Back</button><h2 id="joinTitle" tabindex="-1">Join table</h2></div>
+      <p class="menu-intro">Use the code your friend shared. Their table rules are already set.</p>
       <form class="menu-form" id="joinForm">
         <label class="field" for="joinCode">Table code<input type="text" id="joinCode" name="code" maxlength="4" minlength="4" pattern="[A-Za-z]{4}" required placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="joinCodeHint"></label>
         <p class="menu-field-note" id="joinCodeHint">Four letters from your host.</p>
-        <label class="field" for="joinName">Your name<input type="text" id="joinName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name"></label>
+        <label class="field" for="joinName">Player name<input type="text" id="joinName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name"></label>
         <button class="btn menu-submit" id="joinBtn" type="submit">Join table</button>
       </form>
     </section>
 
     <section class="menu-page" id="menu-computer" hidden aria-labelledby="computerTitle">
-      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="play" aria-label="Back to play options">←</button><h2 id="computerTitle" tabindex="-1">Vs computer</h2></div>
-      <p class="menu-intro">Practice with 1–3 opponents. The same game, your rules.</p>
+      <div class="menu-heading"><button type="button" class="menu-back" data-menu-to="play" aria-label="Back to play options"><span aria-hidden="true">←</span> Back</button><h2 id="computerTitle" tabindex="-1">Practice</h2></div>
+      <p class="menu-intro">Play against the computer. Start whenever you’re ready.</p>
       <form class="menu-form" id="computerForm">
         <div class="setup-players">
-        <label class="field" for="botName">Your name<input type="text" id="botName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name"></label>
-        <label class="field" for="botCount">Computer players<select id="botCount" name="bots" required><option value="1">1 opponent</option><option value="2" selected>2 opponents</option><option value="3">3 opponents</option></select></label>
+        <label class="field" for="botName">Player name<input type="text" id="botName" name="name" maxlength="14" required autocomplete="nickname" placeholder="Your name"><small>Your name at the table.</small></label>
+        <label class="field" for="botCount">Opponents<select id="botCount" name="bots" required aria-describedby="botSeatsHint"><option value="1">1 computer</option><option value="2" selected>2 computers</option><option value="3">3 computers</option></select><small id="botSeatsHint">3 players, including you</small></label>
         </div>
         <div class="setup-rules" id="botSetupRules"></div>
         <label class="menu-toggle" for="botReveal"><span>Preview discard pickup<small>Everyone can see the cards they would pick up.</small></span><input type="checkbox" id="botReveal" name="revealDiscard" checked></label>
         <p class="err setup-rule-error" id="botRulesError" role="alert" tabindex="-1" hidden></p>
-        <button class="btn menu-submit" id="vsBotBtn" type="submit">Start practice game</button>
+        <button class="btn menu-submit" id="vsBotBtn" type="submit">Start practice</button>
       </form>
     </section>
     <p class="err menu-error" id="lobbyErr" role="alert" hidden></p>
@@ -143,20 +152,16 @@
 <section class="screen" id="table" hidden>
   <div class="bar">
     <div class="wrap bar-in">
+      <button class="btn ghost sm" id="waitingBackBtn" type="button" hidden>Leave table</button>
       <div class="bar-cell bar-table">
         <div class="tag">Table</div>
         <div class="code" id="tableCode">&mdash;</div>
       </div>
-      <div class="bar-cell round-cell">
-        <div class="tag">Round</div>
-        <div class="bar-val" id="roundLabel">1 of 4</div>
+      <div class="round-summary">
+        <span class="round-cell">Round <span id="roundLabel">1 of 4</span></span>
+        <span id="meldCell" title="Opening meld minimum for this round">Meld: <span id="minLabel">50</span> min.</span>
       </div>
-      <div class="bar-cell" id="meldCell" title="Opening meld minimum for this round">
-        <span class="tag">Meld:</span><span class="bar-val" id="minLabel">50</span><span class="tag">min.</span>
-      </div>
-      <div class="spacer"></div>
-      <button class="btn ghost sm" id="scoresBtn">Scores</button>
-      <button class="btn ghost sm" id="rulesBtn" type="button" title="Table settings and rules" aria-label="Table settings" aria-haspopup="dialog"><span aria-hidden="true">&#9881;</span></button>
+      <button class="btn ghost sm" id="rulesBtn" type="button" title="Table settings and rules" aria-label="Table settings" aria-haspopup="dialog"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.2 3-.6 2.1-1.5.9-2.1-.5-2.8 4.8 1.5 1.6v1.8l-1.5 1.6 2.8 4.8 2.1-.5 1.5.9.6 2.1h5.6l.6-2.1 1.5-.9 2.1.5 2.8-4.8-1.5-1.6v-1.8l1.5-1.6L19 5.5l-2.1.5-1.5-.9L14.8 3Z"/><circle cx="12" cy="12.8" r="3"/></svg></button>
     </div>
   </div>
 
@@ -164,6 +169,7 @@
     <div class="share" id="shareBox" hidden>
       <div class="share-heading"><span class="share-kicker">Hand &amp; Foot</span><h2>Your table is ready</h2><p>Share the invite or send your friends this code.</p></div>
       <p class="note" id="lobbyRuleSummary"></p>
+      <button class="btn ghost sm" id="lobbyRulesBtn" type="button">Table rules</button>
       <span class="sr-only">Table code:</span>
       <code id="shareCode">&mdash;</code>
       <button class="btn ghost sm" id="copyLink">Copy invite</button>
@@ -175,18 +181,25 @@
 
     <div class="mine">
       <div class="sect-head books-head">
-        <div class="books-identity"><h3>Your cards</h3><span class="pill" id="turnPill" role="status">&mdash;</span></div>
+        <div class="books-identity"><h3>Your cards</h3><span class="book-counts" id="myBookCounts">0 hand · 0 foot</span></div>
         <div class="chips" id="myChips"></div>
         <span class="sr-only" id="meldHint" aria-live="polite"></span>
       </div>
-      <div class="sect-head hand-head">
-        <div class="book-stats" id="myBookStats"><span class="book-counts" id="myBookCounts">0 hand · 0 foot</span><span class="melded-points" id="myMeldedPoints">0 melded</span></div>
-        <span class="sr-only" id="handPill">Your hand</span>
+      <span class="sr-only" id="handPill">Your hand</span>
+      <span id="myMeldedPoints" hidden></span>
+      <div class="melds" id="myMelds" aria-label="Your melds"></div>
+      <div class="hand" id="myHand" aria-labelledby="handPill"></div>
+      <div class="log" id="logBox"></div>
+    </div>
+    <div id="playButtons" class="play-buttons" hidden role="group" aria-label="Play selected cards"></div>
+    <div class="actions">
         <div class="hand-tools" role="group" aria-label="Card controls">
-        <button class="btn ghost sm" id="clearSel" hidden>Clear</button>
-        <button class="btn ghost sm" id="chatBtn" type="button" aria-label="Table chat" aria-haspopup="dialog">Chat<span id="chatUnread" class="chat-unread" hidden>0</span></button>
         <button class="btn ghost sm" id="sortBtn" type="button" aria-expanded="false" aria-controls="sortPopover" aria-haspopup="dialog">Sort</button>
         <button class="btn ghost sm" id="autoDrawBtn" type="button" aria-label="Auto draw" title="Auto draw is off" aria-expanded="false" aria-controls="autoDrawPopover" aria-haspopup="dialog">Auto</button>
+        <button class="btn ghost sm" id="scoresBtn">Scores</button>
+        <button class="btn ghost sm" id="chatBtn" type="button" aria-label="Table chat" aria-haspopup="dialog">Chat<span id="chatUnread" class="chat-unread" hidden>0</span></button>
+        <button class="btn ghost sm" id="clearSel" hidden>Clear</button>
+        <button class="btn ghost sm" id="tableUndo" type="button" hidden>Undo</button>
         <button class="btn ghost sm" id="layoutBtn" hidden>Side by side</button>
         </div>
         <div class="sort-popover" id="sortPopover" role="dialog" aria-modal="false" aria-labelledby="sortPopoverTitle" hidden>
@@ -209,15 +222,12 @@
             <p class="auto-draw-help" id="matchingRanksHelp">Tap one 4 to select all your 4s. Tap again to clear that rank. Works with Automatic draw off and never plays cards. Naturals do not select wilds; jokers and deuces each group separately.</p>
           </div>
         </div>
-      </div>
-      <div class="melds" id="myMelds" aria-label="Your melds"></div>
-      <div class="hand" id="myHand" aria-labelledby="handPill"></div>
-      <div class="log" id="logBox"></div>
     </div>
-  </div>
+    <div class="table-footer" id="tableFooter">
+      <span class="pill" id="turnPill" role="status">&mdash;</span>
+      <div class="actions-in" id="actionBar"></div>
+    </div>
 
-  <div class="actions">
-    <div class="wrap actions-in" id="actionBar"></div>
   </div>
 </section>
 
@@ -229,6 +239,7 @@
       <button class="btn ghost sm" id="closeRules">Close</button>
     </div>
     <div id="rulesBody"></div>
+    <div id="rulesSaveBar" hidden></div>
     <div class="settings-footer"><button class="btn ghost sm" id="leaveBtn" type="button" hidden>Leave table</button></div>
   </div>
 </div>
@@ -236,9 +247,34 @@
 <div class="sheet" id="chatSheet" role="dialog" aria-modal="true" aria-labelledby="chatTitle" hidden>
   <div class="sheet-in chat-panel">
     <div class="sect-head chat-heading"><h2 id="chatTitle">Table chat</h2><button class="btn ghost sm" id="closeChat" type="button" aria-label="Close chat">Close</button></div>
-    <p class="chat-status" id="chatStatus" role="status">Messages stay at this table.</p>
-    <div id="chatMessages" class="chat-messages" role="log" aria-label="Table messages" aria-live="polite" aria-relevant="additions text"></div>
-    <form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">Message the table</label><input type="text" id="chatInput" maxlength="500" autocomplete="off" placeholder="Message the table…"><button class="btn" id="chatSend" type="submit">Send</button></form>
+    <ul id="chatPlayers" class="chat-players" aria-label="Players at this table"></ul>
+    <div class="chat-conversation">
+      <p class="chat-status" id="chatStatus" role="status">Messages stay at this table.</p>
+      <div id="chatMessages" class="chat-messages" role="log" aria-label="Table messages" aria-live="polite" aria-relevant="additions text"></div>
+    </div>
+    <div class="chat-composer">
+      <form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">Message the table</label><input type="text" id="chatInput" maxlength="500" autocomplete="off" inputmode="none" readonly aria-controls="chatKeyboard" aria-expanded="false" aria-describedby="chatInputHint" placeholder="Tap to write a message…"><button class="btn" id="chatSend" type="submit">Send</button></form>
+      <span class="sr-only" id="chatInputHint">Tap to show the table keyboard. A physical keyboard also works. Device keyboard and dictation are available inside the table keyboard.</span>
+      <div id="chatKeyboard" class="chat-keyboard" role="group" aria-label="Table keyboard" hidden>
+        <div class="chat-keyboard-tools"><button id="chatDeviceKeyboard" class="chat-keyboard-option" type="button">Device keyboard</button><button id="hideChatKeyboard" class="chat-keyboard-option" type="button">Hide keyboard</button></div>
+        <div id="chatKeys"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="drawPickerSheet" role="dialog" aria-modal="true" aria-labelledby="drawPickerTitle" aria-describedby="drawPickerHint" hidden>
+  <div class="sheet-in draw-picker-panel" id="drawPickerPanel">
+    <div class="draw-picker-head">
+      <div><p class="draw-picker-eyebrow" id="drawPickerEyebrow">Your turn</p><h2 id="drawPickerTitle">Your draw</h2></div>
+      <button class="btn ghost sm" id="closeDrawPicker" type="button" aria-label="Close draw picker">Close</button>
+    </div>
+    <p class="draw-picker-hint" id="drawPickerHint" aria-live="polite">Choose two different stocks.</p>
+    <div class="center pickup-zone" id="drawPickerPiles" role="group" aria-label="Choose draw stocks"></div>
+    <div class="draw-picker-actions" id="drawPickerActions">
+      <button class="btn" id="drawPickerDraw" type="button" disabled>Draw 2</button>
+      <button class="btn ghost" id="drawPickerTake" type="button" hidden>Take pile</button>
+    </div>
   </div>
 </div>
 
@@ -250,6 +286,30 @@
       <button class="btn ghost sm" id="closePeek">Close</button>
     </div>
     <div id="peekBody"></div>
+  </div>
+</div>
+
+<div class="sheet" id="undoSheet" role="dialog" aria-modal="true" aria-labelledby="undoTitle" aria-describedby="undoDescription" hidden>
+  <div class="sheet-in undo-panel">
+    <h2 id="undoTitle">Reset melds?</h2>
+    <p id="undoDescription"></p>
+    <div id="undoWildOptions"></div>
+    <div class="undo-actions">
+      <button class="btn" id="cancelUndo" type="button">Keep playing</button>
+      <button class="btn ghost" id="confirmUndo" type="button">Reset melds</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="discardConfirmSheet" role="dialog" aria-modal="true" aria-labelledby="discardConfirmTitle" aria-describedby="discardConfirmDescription" hidden>
+  <div class="sheet-in discard-confirm-panel">
+    <h2 id="discardConfirmTitle">Discard this card?</h2>
+    <div id="discardConfirmCard" aria-hidden="true"></div>
+    <p id="discardConfirmDescription">You can meld it.</p>
+    <div class="discard-confirm-actions">
+      <button class="btn" id="keepDiscardCard" type="button">Keep card</button>
+      <button class="btn ghost" id="confirmDiscard" type="button">Discard anyway</button>
+    </div>
   </div>
 </div>
 
@@ -266,8 +326,6 @@
 
 </div>
 
-<script src="engine.js"></script>
-<script src="app.js"></script>
-<script src="menu.js"></script>
+<script src="startup.js"></script>
 </body>
 </html>

@@ -1,0 +1,446 @@
+/* Card-room finish. Paint and typography only: the existing layout, card
+   dimensions, touch targets, gestures and semantic card colors stay intact.
+   The gate excludes the cover, setup screens and waiting lobby. */
+/* Dedicated material tokens avoid recoloring card faces, controls or menus.
+   Grain is static paint: no overlays, blur, animation or extra layout layers. */
+body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) {
+  --table-grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.74' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Cpath opacity='.045' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E");
+  --table-cloth-lit:color-mix(in srgb,var(--felt) 82%,#81827a);
+  --table-cloth:color-mix(in srgb,var(--felt) 82%,#111a17);
+  --table-cloth-deep:color-mix(in srgb,var(--felt) 40%,#050c0b);
+  --table-panel-hi:color-mix(in srgb,var(--felt) 18%,#2c2e2c);
+  --table-panel-lo:color-mix(in srgb,var(--felt) 12%,#121715);
+  --table-rail-hi:color-mix(in srgb,var(--felt) 16%,#242825);
+  --table-rail-lo:color-mix(in srgb,var(--felt) 10%,#101411);
+  --table-edge:rgba(213,200,165,.22);
+  --table-highlight:rgba(245,234,207,.12);
+  --table-shadow:rgba(0,0,0,.32);
+  --table-recess:rgba(0,0,0,.28);
+  --table-vignette:rgba(0,0,0,.28);
+  --table-muted:#c3cdd1;
+  --table-tray-edge:rgba(220,233,235,.22);
+  --table-tray-text:#e0e9e9;
+  --table-select:#f3dfb0;
+  --table-select-ink:#302515;
+  --table-pickup:#a8d3ed;
+  --table-foot-bg:#e8d9e9;
+  --table-foot-text:#442d46;
+  --table-foot-rim:#fcf3fd;
+}
+:root[data-theme="room"] body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) {
+  --table-cloth-lit:#1c493a;
+  --table-cloth:#12362b;
+  --table-cloth-deep:#0a211a;
+  --table-panel-hi:#28584d;
+  --table-panel-lo:#204a40;
+  --table-tray-hi:#506571;
+  --table-tray-lo:#3d535f;
+  --table-edge:rgba(203,227,218,.18);
+  --table-highlight:rgba(228,241,235,.07);
+  --table-muted:#c0cdbb;
+}
+:root[data-theme="midnight"] body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) {
+  --table-cloth-lit:#273d59;--table-cloth:#1c2d43;--table-cloth-deep:#101d2e;
+  --table-panel-hi:#314e6a;--table-panel-lo:#263e56;
+  --table-tray-hi:#525366;--table-tray-lo:#414454;
+  --table-rail-hi:#24364a;--table-rail-lo:#182536;
+  --table-edge:rgba(207,221,238,.2);--table-highlight:rgba(223,236,249,.08);
+}
+:root[data-theme="claret"] body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) {
+  --table-cloth-lit:#4a2d3b;--table-cloth:#34212c;--table-cloth-deep:#24171f;
+  --table-panel-hi:#65424f;--table-panel-lo:#52333f;
+  --table-tray-hi:#505666;--table-tray-lo:#3c4251;
+  --table-rail-hi:#38252e;--table-rail-lo:#281b23;
+  --table-edge:rgba(235,214,219,.2);--table-highlight:rgba(250,229,233,.08);
+}
+:root[data-theme="graphite"] body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) {
+  --table-cloth-lit:#353f46;--table-cloth:#252e35;--table-cloth-deep:#182129;
+  --table-panel-hi:#46545c;--table-panel-lo:#35434a;
+  --table-tray-hi:#55534e;--table-tray-lo:#42433f;
+  --table-rail-hi:#2c363d;--table-rail-lo:#20282e;
+  --table-edge:rgba(220,226,229,.2);--table-highlight:rgba(238,244,246,.08);
+}
+:root[data-theme="mahogany"] body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) {
+  --table-cloth-lit:#4b3428;--table-cloth:#33261f;--table-cloth-deep:#211a16;
+  --table-panel-hi:#654b3b;--table-panel-lo:#4d392e;
+  --table-tray-hi:#47574f;--table-tray-lo:#33473d;
+  --table-rail-hi:#382a22;--table-rail-lo:#271e18;
+  --table-edge:rgba(234,218,199,.2);--table-highlight:rgba(250,233,214,.08);
+}
+:root[data-theme="ivory"] body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) {
+  --table-cloth-lit:#fcf8ee;
+  --table-cloth:#eee8da;
+  --table-cloth-deep:#d8d1bf;
+  --table-panel-hi:#fcfbf5;
+  --table-panel-lo:#efeee5;
+  --table-tray-hi:#cedbd6;
+  --table-tray-lo:#b6c9c0;
+  --table-rail-hi:#eee8dc;
+  --table-rail-lo:#dcd5c5;
+  --table-edge:rgba(108,92,60,.27);
+  --table-highlight:rgba(255,255,255,.75);
+  --table-shadow:rgba(66,51,28,.14);
+  --table-recess:rgba(91,74,41,.16);
+  --table-vignette:rgba(109,85,43,.08);
+  --table-muted:#586452;
+  --table-tray-edge:rgba(52,82,64,.3);
+  --table-tray-text:#344c3e;
+  --table-select:#405338;
+  --table-select-ink:#fffdf4;
+  --table-pickup:#2d6488;
+  --table-foot-bg:#68436a;
+  --table-foot-text:#fff8ff;
+  --table-foot-rim:#4c2e4e;
+}
+#table:has(> .board[data-phase]:not([data-phase="lobby"])) {
+  background-color:var(--table-cloth-deep);
+  background-image:
+    var(--table-grain),
+    radial-gradient(ellipse at 48% 32%,var(--table-cloth-lit),var(--table-cloth) 48%,var(--table-cloth-deep) 100%);
+  box-shadow:inset 0 0 80px var(--table-vignette);
+}
+#table:has(> .board[data-phase]:not([data-phase="lobby"])) > .bar {
+  background:linear-gradient(175deg,var(--table-rail-hi),var(--table-rail-lo));
+  border-bottom-color:var(--table-edge);
+  box-shadow:inset 0 1px 0 var(--table-highlight),0 3px 10px var(--table-shadow);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .seat:not(.me) {
+  background:var(--table-grain),linear-gradient(165deg,var(--table-panel-hi),var(--table-panel-lo));
+  box-shadow:inset 0 0 0 1px var(--table-edge),inset 0 2px 0 var(--table-highlight),0 3px 7px var(--table-shadow);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .seat.active:not(.me) {
+  box-shadow:inset 0 0 0 1px var(--turn-line),inset 0 2px 0 var(--table-highlight),0 3px 7px var(--table-shadow);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) :is(.seat:not(.me),#opponentDetail) {
+  --txt-3:var(--table-muted);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #centerRow,
+body:has(#table:not([hidden]) > .board[data-phase="playing"]) #drawPickerPiles {
+  background:var(--table-grain),linear-gradient(175deg,var(--table-tray-hi,var(--table-panel-hi)),var(--table-tray-lo,var(--table-panel-lo)));
+  border-color:var(--table-edge);
+  box-shadow:inset 0 2px 5px var(--table-recess),inset 0 -1px 0 var(--table-highlight),0 1px 0 var(--table-highlight);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #myHand {
+  border-top-color:var(--table-edge);
+}
+/* Every finish distinguishes the shared tray from its opponent panels.
+   State cues adapt to the tray, without recoloring the cards themselves. */
+body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) :is(#centerRow,#drawPickerPiles) {
+  --hair-2:var(--table-tray-edge);
+  --txt-3:var(--table-tray-text);
+  border-color:var(--table-tray-edge);
+}
+body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) :is(#centerRow,#drawPickerPiles) .stock-choice.selected {
+  border-color:var(--table-select);
+  background:color-mix(in srgb,var(--table-select) 12%,transparent);
+}
+body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) #drawPickerPiles .stock-choice.selected::after {
+  background:var(--table-select);
+  color:var(--table-select-ink);
+}
+body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) :is(#centerRow,#drawPickerPiles) :is(.stock-choice,.discard-choice):focus-visible {
+  outline-color:var(--table-select);
+}
+body:has(#table:not([hidden]) > .board[data-phase]:not([data-phase="lobby"])) :is(#centerRow,#drawPickerPiles) .discard-choice.takeable {
+  --pickup-cue:var(--table-pickup);
+}
+body:has(#table:not([hidden])) #drawPickerPanel #drawPickerTake:not([hidden]){background:var(--table-pickup,#a8d3ed);color:#173345;border-color:transparent;box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
+html[data-theme="ivory"] body:has(#table:not([hidden])) #drawPickerPanel #drawPickerTake:not([hidden]){color:#fff}
+
+/* Printed backs with a fine diamond weave, retaining the cream card edge. */
+#table > .board[data-phase]:not([data-phase="lobby"]) .card.back:not(.empty),
+body:has(#table:not([hidden]) > .board[data-phase="playing"]) #drawPickerPiles .card.back:not(.empty) {
+  background:
+    repeating-linear-gradient(45deg,transparent 0 5px,rgba(242,218,181,.12) 5px 5.7px,transparent 5.7px 11px),
+    repeating-linear-gradient(-45deg,transparent 0 5px,rgba(45,5,11,.24) 5px 5.7px,transparent 5.7px 11px),
+    linear-gradient(145deg,#96352f,#702925);
+  border-color:#672722;
+  box-shadow:inset 0 0 0 2.28px var(--bone-2),inset 0 0 0 3.04px #af8b57,0 1px 2px rgba(0,0,0,.3);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .card.back:not(.empty) .stock-total,
+body:has(#table:not([hidden]) > .board[data-phase="playing"]) #drawPickerPiles .card.back:not(.empty) .stock-total {
+  background:radial-gradient(ellipse,rgba(73,18,20,.68),transparent 75%);
+  text-shadow:0 1px 1px #421515;
+}
+
+/* The cards carry red/black meaning; idle outer book frames need not repeat it.
+   Transparent borders retain the exact space occupied by the previous edge. */
+#table > .board[data-phase]:not([data-phase="lobby"]) #myMelds .meld:not(.threes):not([data-presentation="tile"]):not(.target):not(.chosen-target) {
+  border-color:transparent;
+  background:transparent;
+  box-shadow:none;
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) :is(.seat,#myMelds) .meld:not([data-presentation="tile"]) .meld-count {
+  color:var(--txt);
+  font-size:10px;
+  font-weight:600;
+  background:none;
+  box-shadow:none;
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) :is(.seat,#myMelds) .meld[data-presentation="tile"] .meld-count {font-weight:600}
+#table > .board[data-phase]:not([data-phase="lobby"]) .seat-identity .seat-meta,
+#table > .board[data-phase]:not([data-phase="lobby"]) #myBookCounts {color:var(--txt-2)}
+#table > .board[data-phase]:not([data-phase="lobby"]) :is(.seat-top,.books-head) .chip {
+  font-weight:500;
+  font-size:9px;
+  box-shadow:inset 0 0 0 1px var(--hair);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) :is(.seat-top,.books-head) .chip.red {color:color-mix(in srgb,var(--rouge-lt) 64%,var(--txt));background:color-mix(in srgb,var(--rouge) 13%,var(--app-1))}
+#table > .board[data-phase]:not([data-phase="lobby"]) :is(.seat-top,.books-head) .chip.black {color:var(--txt-2);background:var(--app-1)}
+/* A solid plum marker separates foot status from turn gold and blue jokers.
+   Only paint changes; all badges keep their existing size and spacing. */
+#table > .board[data-phase]:not([data-phase="lobby"]) :is(.seat-top,.books-head) .chip.foot {
+  color:var(--table-foot-text);
+  background:var(--table-foot-bg);
+  box-shadow:inset 0 0 0 1px var(--table-foot-rim),0 1px 2px rgba(0,0,0,.18);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) :is(#myHand,.seat,#myMelds) .card .s {opacity:1}
+
+/* One crisp destination ring; selected cards and keyboard focus remain clear. */
+#table > .board[data-phase]:not([data-phase="lobby"]) #myMelds .meld.target {
+  outline:2px solid var(--turn-line);
+  outline-offset:0;
+  box-shadow:none;
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #myMelds .meld.target:not([data-presentation="tile"]) {
+  border-color:transparent;
+  background:var(--accent-soft);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #myMelds .meld.chosen-target {
+  outline:2px solid var(--turn-line);
+  outline-offset:0;
+  box-shadow:inset 0 0 0 1px var(--turn-line);
+}
+
+/* Common finish on the existing controls, without changing their footprints. */
+#table:has(> .board[data-phase]:not([data-phase="lobby"])) > .bar .btn,
+#table > .board[data-phase]:not([data-phase="lobby"]) .actions .hand-tools .btn:not(#clearSel):not(#tableUndo) {
+  border-radius:9px;
+  border-color:var(--hair-2);
+  background:linear-gradient(170deg,var(--app-2),var(--app-1));
+  box-shadow:inset 0 1px 0 var(--hair),0 1px 2px rgba(0,0,0,.12);
+  color:var(--txt);
+  font-weight:500;
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .actions .hand-tools #autoDrawBtn[data-mode]:not([data-mode="off"]) {
+  color:var(--turn-text);
+  border-color:color-mix(in srgb,var(--turn-line) 45%,var(--app-1));
+  background:var(--app-1);
+  box-shadow:inset 0 -2px 0 var(--turn-line);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .table-status #turnPill {font-weight:700;color:var(--turn-text)}
+#table > .board[data-phase]:not([data-phase="lobby"]) .actions .hint:not(.warn) {color:var(--txt-2)}
+html:not([data-theme="ivory"]) #table .actions .hint.warn {color:#ee9990}
+
+/* A selected card lifts out of its row. The dark trim is separate from the
+   blue and gold wild-card markings; transforms leave the row itself fixed. */
+#table #myHand .card.sel,
+#table #myHand .card.sel:hover {
+  transform:translateY(-7px);
+  outline:2px solid #303637;
+  outline-offset:-2px;
+  box-shadow:inset 0 0 0 3px #fffdf5,0 0 0 1px #fffdf5,0 2px 4px rgba(0,0,0,.3);
+}
+#table #myHand .card.sel::after {
+  content:none;
+}
+/* Button mode: champagne for play, wine for discard. These inks stay distinct
+   from the felt across themes. Inset edges preserve the existing button size. */
+#table > .board[data-phase]:not([data-phase="lobby"]) #playButtons .btn:not(.ghost) {
+  color:#302515;
+  background:linear-gradient(170deg,#f4dfad,#dbc48e);
+  box-shadow:inset 0 0 0 1px rgba(101,72,28,.22),inset 0 1px 0 rgba(255,255,255,.48),0 1px 2px rgba(0,0,0,.18);
+  text-shadow:0 1px 0 rgba(255,255,255,.18);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #playButtons #playDiscard.ghost {
+  color:#fff3de;
+  background:linear-gradient(170deg,#793e41,#613034);
+  border-color:#96585a;
+  box-shadow:inset 0 1px 0 rgba(255,230,217,.15),0 1px 2px rgba(0,0,0,.18);
+  text-shadow:0 1px 0 rgba(0,0,0,.18);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #playButtons .btn:not(.ghost):is(.chosen-target,:focus-visible) {
+  outline-color:#594324;
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #playButtons #playDiscard:focus-visible {
+  outline-color:#fff3de;
+}
+@media (hover:hover) {
+  #table > .board[data-phase]:not([data-phase="lobby"]) #playButtons .btn:not(.ghost):hover:not(:disabled) {
+    background:linear-gradient(170deg,#fae8bf,#e7d09a);
+  }
+  #table > .board[data-phase]:not([data-phase="lobby"]) #playButtons #playDiscard.ghost:hover:not(:disabled) {
+    background:linear-gradient(170deg,#86474a,#6e363b);
+  }
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #playButtons .btn:not(.ghost):active:not(:disabled) {
+  background:#dbc48e;
+  box-shadow:inset 0 1px 3px rgba(75,50,16,.22);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) #playButtons #playDiscard.ghost:active:not(:disabled) {
+  background:#613034;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.25);
+}
+
+/* In-game dialogs use table materials and readable interface type. The
+   decorative cover lettering stays on the cover. */
+body:has(#table:not([hidden]) > .board[data-phase="playing"]) :is(#sortPopover,#autoDrawPopover,#drawPickerPanel,#peekSheet>.sheet-in,#discardConfirmSheet>.sheet-in,#scoreSheet>.sheet-in,#chatSheet>.sheet-in,.draw-reveal:not(.is-settling) .draw-reveal-panel) {
+  background:linear-gradient(155deg,color-mix(in srgb,var(--app-1) 93%,var(--txt)),var(--app-1));
+  border-color:color-mix(in srgb,var(--accent) 25%,var(--app-1));
+  box-shadow:inset 0 1px 0 var(--hair),var(--sh-3);
+}
+:is(#sortPopoverTitle,#autoDrawTitle,#drawPickerTitle,#peekTitle,#discardConfirmTitle,#scoreTitle,#chatTitle,.draw-reveal h2) {
+  font-family:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-weight:600;
+  letter-spacing:-.015em;
+}
+#scoreTitle,#peekTitle,#discardConfirmTitle {font-size:20px;line-height:1.3}
+#drawPickerPanel .draw-picker-head {
+  padding:0 2px 10px;
+  border-bottom:1px solid var(--hair-2);
+}
+#drawPickerTitle {font-size:20px;line-height:26px}
+#drawPickerPanel .draw-picker-eyebrow {font-size:11px;line-height:16px;margin-bottom:2px}
+#drawPickerPanel .draw-picker-hint {min-height:0;margin:12px 2px;line-height:18px}
+#drawPickerPanel #drawPickerPiles {border-radius:10px}
+#drawPickerPanel .draw-picker-actions .btn {font-weight:600}
+#scoreSheet > .sheet-in > .sect-head {
+  padding-bottom:10px;
+  border-bottom:1px solid var(--hair-2);
+}
+#scoreSheet #closeScores {min-width:54px;min-height:44px;font-size:12px}
+body:has(#table:not([hidden]) > .board[data-phase="playing"]) :is(#sortPopover,#autoDrawPopover,#drawPickerPanel,#peekSheet,#discardConfirmSheet,#scoreSheet,#chatSheet) .btn.ghost {
+  border-color:var(--hair-2);
+  border-radius:9px;
+  background:linear-gradient(170deg,var(--app-2),var(--app-1));
+  box-shadow:inset 0 1px 0 var(--hair);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .sort-option {
+  background:var(--app-1);
+  border-color:var(--hair-2);
+}
+#table > .board[data-phase]:not([data-phase="lobby"]) .sort-option[aria-pressed="true"] {
+  color:var(--txt);
+  background:var(--accent-soft);
+  border-color:var(--accent-line);
+  box-shadow:inset 0 -2px 0 var(--accent);
+}
+
+/* The disclosure belongs to its opponent panel. These rules affect only the
+   overlay and its invisible name trigger, never the approved table geometry. */
+#table .seat-top {position:relative}
+#table .seat-top > .seat-expand {
+  inset:-6px 0;
+  height:auto;
+  border-radius:5px;
+}
+#table #opponentDetail {
+  padding:0;
+  background:var(--table-grain),linear-gradient(165deg,var(--table-panel-hi),var(--table-panel-lo));
+  border-color:var(--table-edge);
+  border-radius:12px;
+  box-shadow:inset 0 1px 0 var(--table-highlight),0 8px 24px var(--table-shadow);
+  color:var(--txt);
+  scroll-padding-top:60px;
+}
+#opponentDetail .opponent-detail-head {
+  top:0;
+  padding:6px 12px;
+  gap:8px;
+  border-bottom:1px solid var(--table-edge);
+  background:var(--table-panel-hi);
+  box-shadow:0 1px 0 var(--table-highlight);
+}
+#opponentDetail .opponent-detail-head h3 {
+  margin:0;
+  font-family:inherit;
+  font-size:15px;
+  line-height:1.3;
+  font-weight:600;
+  letter-spacing:0;
+  overflow-wrap:anywhere;
+}
+#opponentDetail #closeOpponentDetail {
+  flex:none;
+  min-width:52px;
+  min-height:44px;
+  padding:8px 10px;
+  font-size:12px;
+  color:var(--txt);
+  border:1px solid var(--table-edge);
+  border-radius:8px;
+  background:linear-gradient(170deg,var(--table-panel-hi),var(--table-panel-lo));
+  box-shadow:inset 0 1px 0 var(--table-highlight);
+}
+#opponentDetail #opponentCounts {
+  margin:0;
+  padding:10px 12px 6px;
+  color:var(--txt-2);
+  font-size:12px;
+  line-height:1.5;
+}
+#opponentDetail .opponent-melds {gap:12px 16px;padding:6px 12px 14px}
+#opponentDetail .meld {
+  padding:0;
+  gap:6px;
+  border:0;
+  border-radius:0;
+  background:none;
+  box-shadow:none;
+}
+#opponentDetail .meld-top {
+  padding:2px 5px;
+  font-size:11px;
+  line-height:16px;
+  font-weight:600;
+  border-radius:4px;
+}
+#opponentDetail .meld-cards {gap:4px}
+#opponentDetail .card .s {opacity:1}
+
+/* Short landscape screens keep a usable row in both local card regions.
+   When the table's minimums cannot fit, the board itself scrolls below the
+   header. It must not hide overflow or crush the meld shelf to a few pixels.
+   These selectors also override crowded-board rules; portrait is untouched. */
+@media (max-height:520px) and (orientation:landscape) {
+  #table > .board{
+    min-height:0;gap:4px;padding-block:2px calc(4px + env(safe-area-inset-bottom,0px));
+    overflow-x:hidden;overflow-y:auto;overscroll-behavior-y:contain;
+  }
+  #table > .board .mine{
+    --landscape-meld-min:50px;
+    flex:1 0 calc(159px + var(--landscape-meld-min));
+    min-height:calc(159px + var(--landscape-meld-min));max-height:none;gap:3px;
+  }
+  #table > .board .mine:has(> #myMelds[data-layout="tiles"]){--landscape-meld-min:62px}
+  #table > .board #myMelds{
+    flex:1 1 0;min-height:var(--landscape-meld-min);overflow-y:auto;
+  }
+  #table > .board #myHand{
+    flex:0 1 auto;min-height:72px;max-height:none;overflow-y:auto;
+  }
+  /* Existing 46 px tray cards stay at their current size inside 50 px targets. */
+  #table > .board #centerRow.compact-piles,
+  #table > .board:has(#myMelds.empty) #centerRow.compact-piles{
+    height:50px;min-height:50px;padding-block:0;flex:none;
+  }
+}
+
+/* Use the same wine red for a confirmed discard as the table's Discard action.
+   Keep card retains its existing gold treatment. */
+body:has(#table:not([hidden])) #discardConfirmSheet #confirmDiscard {
+  color:#fff3de;
+  background:linear-gradient(170deg,#793e41,#613034);
+  border-color:#96585a;
+  box-shadow:inset 0 1px 0 rgba(255,230,217,.15),0 1px 2px rgba(0,0,0,.18);
+  text-shadow:0 1px 0 rgba(0,0,0,.18);
+}
+body:has(#table:not([hidden])) #discardConfirmSheet #confirmDiscard:focus-visible{outline-color:#fff3de}
+@media (hover:hover){
+  body:has(#table:not([hidden])) #discardConfirmSheet #confirmDiscard:hover:not(:disabled){
+    background:linear-gradient(170deg,#86474a,#6e363b);
+  }
+}
+body:has(#table:not([hidden])) #discardConfirmSheet #confirmDiscard:active:not(:disabled){
+  background:#613034;box-shadow:inset 0 1px 3px rgba(0,0,0,.25);
+}

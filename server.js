@@ -21,8 +21,13 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC = __dirname;
 // Only these are served to browsers; everything else stays server-side.
 const SERVABLE = {
-  '/index.html': 1, '/app.js': 1, '/style.css': 1, '/manifest.webmanifest': 1,
+  '/index.html': 1, '/startup.js': 1, '/app.js': 1, '/style.css': 1, '/manifest.webmanifest': 1,
   '/menu.js': 1, '/menu.css': 1, '/enhancements.css': 1, '/handfoot-mark.svg': 1,
+  '/handfoot-cover.svg': 1,
+  '/play-feedback.css': 1, '/interaction-feedback.css': 1, '/draw-feedback.css': 1,
+  '/chat-feedback.css': 1, '/interaction-mode.css': 1, '/table-cosmetics.css': 1,
+  '/preferences.css': 1, '/audit-refinements.css': 1,
+  '/deal-choice.css': 1,
 };
 const SAVE_FILE = process.env.SAVE_FILE || path.join(__dirname, 'tables.json');
 const ROOM_TTL_MS = 12 * 60 * 60 * 1000;   // a table is forgotten after 12 quiet hours
@@ -32,6 +37,10 @@ const CHAT_LIMIT = 100;
 const CHAT_TEXT_LIMIT = 500;
 const CHAT_BURST_LIMIT = 5;
 const CHAT_WINDOW_MS = 10000;
+// Test fixtures may accept the completed countdown immediately. Production
+// always uses three seconds; neither room settings nor a socket can alter it.
+const ROUND_COUNTDOWN_MS = process.env.NODE_ENV === 'test' &&
+  process.env.HANDFOOT_TEST_COUNTDOWN_MS === '0' ? 0 : 3000;
 
 /* ---------------- rooms ---------------- */
 
@@ -145,6 +154,8 @@ function viewFor(room, seat) {
   const g = room.game;
   const S = g.settings;
   const conn = connectedSeats(room);
+  const choosing = g.phase === 'choosing';
+  const ownChoicePending = choosing && seat >= 0 && g.players[seat].handChoice === null;
 
   const seats = g.seats.map(function (s, i) {
     const p = g.players[i];
@@ -163,6 +174,7 @@ function viewFor(room, seat) {
       footCount: p.foot.length,
       inFoot: p.inFoot,
       hasInitialMeld: p.hasInitialMeld,
+      handChosen: !choosing || p.handChoice !== null,
       /* Your own red threes only. At a real table they sit face up, but this
        * table would rather not announce a 100-point penalty to everybody, so
        * each seat is told only about its own. They surface for everyone at
@@ -179,15 +191,16 @@ function viewFor(room, seat) {
 
   const you = seat >= 0 ? {
     seat: seat,
-    hand: g.players[seat].hand.slice(),
+    hand: ownChoicePending ? [] : g.players[seat].hand.slice(),
     inFoot: g.players[seat].inFoot,
     footCount: g.players[seat].foot.length,
     hasInitialMeld: g.players[seat].hasInitialMeld,
+    returnableWilds: G.returnableWilds(g, seat),
     /* The actual cards, so you can see what the penalty is for. A red three
      * never sits in your hand — it lays itself off the moment it is dealt or
      * drawn and a replacement comes in — which is why it needs showing
      * somewhere at all. */
-    redThrees: g.players[seat].redThrees.slice(),
+    redThrees: ownChoicePending ? [] : g.players[seat].redThrees.slice(),
     canGoOut: g.phase === 'playing' ? G.canGoOut(g, seat) : { ok: false, reason: '' },
     // Which cards arrived this turn. It rides inside `you`, never in the
     // shared turnState, so it reaches only the seat holding those cards.
@@ -204,6 +217,15 @@ function viewFor(room, seat) {
     roundsTotal: S.minMelds.length,
     turn: g.turn,
     turnId: room.turnId,
+    serverNow: Date.now(),
+    roundBeginsAt: Number(g.roundBeginsAt) || 0,
+    handChoice: choosing && seat >= 0 ? {
+      pending: ownChoicePending,
+      canSwap: S.handSize === S.footSize,
+      pileSizes: [S.handSize, S.footSize],
+      chosenPile: g.players[seat].handChoice,
+      remaining: g.players.filter(p => p.handChoice === null).length,
+    } : null,
     turnPhase: g.turnPhase,
     turnState: g.turnState
       ? { melded: g.turnState.melded, tookPile: g.turnState.tookPile, drew: g.turnState.drew }
@@ -232,9 +254,29 @@ function viewFor(room, seat) {
   };
 }
 
+function roundCountdownPending(room) {
+  return room.game.phase === 'playing' && Number(room.game.roundBeginsAt) > Date.now();
+}
+
+function scheduleRoundStart(room) {
+  if (room.roundStartTimer || !roundCountdownPending(room)) return;
+  const deadline = room.game.roundBeginsAt;
+  room.roundStartTimer = setTimeout(function () {
+    room.roundStartTimer = null;
+    if (rooms.get(room.code) !== room || room.game.phase !== 'playing' ||
+        room.game.roundBeginsAt !== deadline) return;
+    // Timers can wake just before the millisecond boundary on some hosts.
+    if (roundCountdownPending(room)) return scheduleRoundStart(room);
+    broadcast(room);
+    runBots(room);
+  }, Math.max(1, deadline - Date.now()));
+  room.roundStartTimer.unref();
+}
+
 function broadcast(room) {
+  scheduleRoundStart(room);
   room.live.forEach(function (sockets, token) {
-    const seat = room.solo ? room.game.turn : seatOf(room, token);
+    const seat = actingSeat(room, token);
     const payload = JSON.stringify({ t: 'state', view: viewFor(room, seat) });
     sockets.forEach(function (ws) {
       if (ws.readyState === 1) ws.send(payload);
@@ -253,13 +295,14 @@ function runBots(room) {
   if (!room || room.botTimer) return;
   const g = room.game;
   if (!g || g.phase !== 'playing') return;
+  if (roundCountdownPending(room)) { scheduleRoundStart(room); return; }
   if (!isBotSeat(room, g.turn)) return;
   if (!anyoneWatching(room)) return;   // nobody is looking; don't burn the free tier
 
   room.botTimer = setTimeout(function () {
     room.botTimer = null;
     const seat = room.game.turn;
-    if (room.game.phase !== 'playing' || !isBotSeat(room, seat) ||
+    if (room.game.phase !== 'playing' || roundCountdownPending(room) || !isBotSeat(room, seat) ||
         !anyoneWatching(room) || rooms.get(room.code) !== room) return;
 
     /* A turn is a draw, a handful of melds and a discard. If a bot ever takes
@@ -365,14 +408,37 @@ function joined(ws, room, seat) {
 
 function actingSeat(room, token) {
   // A practice table is one person playing every seat.
-  return room.solo ? room.game.turn : seatOf(room, token);
+  if (!room.solo) return seatOf(room, token);
+  if (room.game.phase === 'choosing') {
+    const pending = room.game.players.findIndex(p => p.handChoice === null);
+    if (pending >= 0) return pending;
+  }
+  return room.game.turn;
 }
 
-/* The existing shared preview toggle stays live for every seated player.
- * Structural/scoring rules use the separate host-only validated action. */
+function chooseBotHands(room) {
+  if (room.game.phase !== 'choosing') return;
+  room.game.players.forEach((p, seat) => {
+    if (isBotSeat(room, seat) && p.handChoice === null) {
+      // A coin flip over pile positions; never inspect either packet's cards.
+      G.chooseHand(room.game, seat,
+        room.game.settings.handSize === room.game.settings.footSize ? randomInt(2) : 0);
+    }
+  });
+}
+
+function startRoomRound(room) {
+  const result = G.startRound(room.game, undefined, true);
+  if (result.ok) chooseBotHands(room);
+  return result;
+}
+
+/* The preview toggle may change immediately; structural/scoring rules wait
+ * for the next deal. Both routes belong exclusively to the table host. */
 const SETTABLE_RULES = ['revealPileTake'];
-const TURN_ACTIONS = new Set(['start', 'draw', 'pile', 'meldNew', 'meldAdd',
-  'discard', 'undo', 'nextRound', 'rematch']);
+const TURN_ACTIONS = new Set(['start', 'chooseHand', 'draw', 'pile', 'meldNew', 'meldAdd',
+  'discard', 'returnWild', 'undo', 'nextRound', 'rematch']);
+const PLAY_ACTIONS = new Set(['draw', 'pile', 'meldNew', 'meldAdd', 'discard', 'returnWild', 'undo']);
 
 function turnContext(room) {
   const g = room.game;
@@ -385,8 +451,16 @@ function advanceTurnId(room, before) {
 
 function applyAction(room, token, msg, forcedSeat) {
   const before = turnContext(room);
+  const wasChoosing = room.game.phase === 'choosing';
   const result = dispatchAction(room, token, msg, forcedSeat);
-  if (result && result.ok) advanceTurnId(room, before);
+  if (result && result.ok) {
+    chooseBotHands(room);
+    if (wasChoosing && room.game.phase === 'playing') {
+      room.game.roundBeginsAt = Date.now() + ROUND_COUNTDOWN_MS;
+      scheduleRoundStart(room);
+    }
+    advanceTurnId(room, before);
+  }
   return result;
 }
 
@@ -396,6 +470,13 @@ function dispatchAction(room, token, msg, forcedSeat) {
   if (seat < 0) return { ok: false, reason: 'You are not seated at this table.' };
   if (typeof forcedSeat !== 'number' && seatOf(room, token) < 0) {
     return { ok: false, reason: 'You are not seated at this table.' };
+  }
+  if (PLAY_ACTIONS.has(msg.action) && roundCountdownPending(room)) {
+    return { ok: false, reason: 'The round starts in a moment. Wait for the countdown.', code: 'round_countdown' };
+  }
+  if ((msg.action === 'configureRules' || msg.action === 'setRule') &&
+      (typeof forcedSeat === 'number' || token !== room.tokens[room.hostSeat])) {
+    return { ok: false, reason: 'Only the host can change the table rules.' };
   }
 
   switch (msg.action) {
@@ -419,26 +500,46 @@ function dispatchAction(room, token, msg, forcedSeat) {
         room.bots = bots;
         room.botStyles = botStyles;
         room.hostSeat = keep.indexOf(room.hostSeat);
-        return G.startRound(room.game);
+        return startRoomRound(room);
       }
-      return G.startRound(g);
+      return startRoomRound(room);
     }
-    case 'draw':
-      return G.drawStock(g, seat, Array.isArray(msg.piles) ? msg.piles.map(Number) : []);
+    case 'chooseHand':
+      if (typeof forcedSeat === 'number' || !Number.isInteger(msg.seat) || msg.seat !== seat) {
+        return { ok: false, reason: 'Choose only your own piles for this deal.' };
+      }
+      return G.chooseHand(g, seat, msg.pile);
+    case 'draw': {
+      const piles = Array.isArray(msg.piles) ? msg.piles : [];
+      // JSON objects and arrays can throw during Number coercion. Validate the
+      // primitive type and index before the engine can change any game state.
+      const picks = [];
+      for (const pile of piles) {
+        if ((typeof pile !== 'number' && typeof pile !== 'string') ||
+            (typeof pile === 'string' && !pile.trim())) {
+          return { ok: false, reason: 'Choose valid draw piles.' };
+        }
+        const index = Number(pile);
+        if (!Number.isSafeInteger(index) || index < 0 || index >= g.stocks.length) {
+          return { ok: false, reason: 'Choose valid draw piles.' };
+        }
+        picks.push(index);
+      }
+      return G.drawStock(g, seat, picks);
+    }
     case 'pile':
       return G.takePile(g, seat, sanitizeCards(msg.cards));
     case 'meldNew':
-      return G.meldNew(g, seat, String(msg.rank || ''), sanitizeCards(msg.cards));
+      return G.meldNew(g, seat, str(msg.rank), sanitizeCards(msg.cards));
     case 'meldAdd':
-      return G.meldAdd(g, seat, String(msg.meldId || ''), sanitizeCards(msg.cards));
+      return G.meldAdd(g, seat, str(msg.meldId), sanitizeCards(msg.cards));
     case 'discard':
-      return G.discard(g, seat, String(msg.card || ''));
+      return G.discard(g, seat, str(msg.card));
+    case 'returnWild':
+      return G.returnWild(g, seat, str(msg.meldId), str(msg.card));
     case 'undo':
       return G.undoTurnMelds(g, seat);
     case 'configureRules': {
-      if (typeof forcedSeat === 'number' || token !== room.tokens[room.hostSeat]) {
-        return { ok: false, reason: 'Only the host can change the table rules.' };
-      }
       const checked = E.validateSettings(msg.rules, g.seats.length, g.pendingSettings || g.settings);
       if (!checked.ok) return checked;
       if (g.phase === 'lobby') {
@@ -453,7 +554,7 @@ function dispatchAction(room, token, msg, forcedSeat) {
       return { ok: true };
     }
     case 'setRule': {
-      const key = String(msg.key || '');
+      const key = str(msg.key);
       if (SETTABLE_RULES.indexOf(key) === -1) return { ok: false, reason: 'That rule is not adjustable.' };
       const value = !!msg.value;
       if (g.pendingSettings) g.pendingSettings[key] = value;
@@ -464,12 +565,12 @@ function dispatchAction(room, token, msg, forcedSeat) {
     }
     case 'nextRound':
       if (g.phase !== 'roundEnd') return { ok: false, reason: 'The round is still in play.' };
-      return G.nextRound(g);
+      return G.nextRound(g, true);
     case 'rematch':
       if (g.phase !== 'gameEnd') return { ok: false, reason: 'Finish this game first.' };
       assignBotStyles(room, true);
       g.round = 0; g.scores = []; g.roundDetail = null; g.outSeat = null;
-      return G.startRound(g);
+      return startRoomRound(room);
     default:
       return { ok: false, reason: 'Unknown action.' };
   }
@@ -480,8 +581,14 @@ function sanitizeCards(v) {
   return v.filter(function (c) { return typeof c === 'string' && c.length <= 5; }).slice(0, 40);
 }
 
+// Never invoke conversion hooks from a client-supplied JSON object or array.
+function str(v, max) {
+  return typeof v === 'string' || typeof v === 'number'
+    ? String(v).slice(0, max || 64) : '';
+}
+
 function cleanName(v) {
-  return String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 14);
+  return str(v, 64).replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 14);
 }
 
 function initialRules(msg, seatCount) {
@@ -505,6 +612,7 @@ wss.on('connection', function (ws) {
   ws.on('pong', function () { ws.isAlive = true; });
 
   ws.on('message', function (raw) {
+   try {
     let msg;
     try { msg = JSON.parse(String(raw)); } catch (e) { return fail(ws, 'Bad message.'); }
     if (!msg || typeof msg !== 'object') return fail(ws, 'Bad message.');
@@ -535,7 +643,7 @@ wss.on('connection', function (ws) {
         room.game.seats[i].name = BOT_NAMES[i - 1] + ' (bot)';
       }
       assignBotStyles(room, false);
-      G.startRound(room.game);
+      startRoomRound(room);
       room.turnId++;
       attach(ws, room, token);
       joined(ws, room, 0);
@@ -559,7 +667,7 @@ wss.on('connection', function (ws) {
       const room = newRoom(seats, solo, checked.settings);
       room.tokens[0] = token;
       if (!solo) room.game.seats[0].name = cleanName(msg.name) || 'Host';
-      if (solo) { G.startRound(room.game); room.turnId++; }
+      if (solo) { startRoomRound(room); room.turnId++; }
       attach(ws, room, token);
       joined(ws, room, 0);
       broadcast(room);
@@ -568,7 +676,7 @@ wss.on('connection', function (ws) {
     }
 
     if (msg.t === 'join') {
-      const code = String(msg.code || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+      const code = str(msg.code).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
       const room = rooms.get(code);
       if (!room) return fail(ws, 'No table with the code ' + (code || '????') + '.');
       if (room.solo) return fail(ws, 'That is a practice table — it takes only one player.');
@@ -592,13 +700,13 @@ wss.on('connection', function (ws) {
     }
 
     if (msg.t === 'resume') {
-      const code = String(msg.code || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+      const code = str(msg.code).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
       const room = rooms.get(code);
       if (!room) return fail(ws, 'That table is no longer open.');
       const seat = seatOf(room, token);
       if (seat === -1) return fail(ws, 'You do not have a seat at that table.');
       attach(ws, room, token);
-      joined(ws, room, room.solo ? room.game.turn : seat);
+      joined(ws, room, actingSeat(room, token));
       broadcast(room);
       runBots(room);
       return;
@@ -657,6 +765,12 @@ wss.on('connection', function (ws) {
 
     if (msg.t === 'ping') return sendTo(ws, { t: 'pong' });
     fail(ws, 'Unknown message.');
+   } catch (e) {
+    // Contain a failed socket message. Input validation above must handle
+    // known malformed values normally; this is not a validation substitute.
+    console.error('message handler:', e && e.stack || e);
+    try { fail(ws, 'Something went wrong with that action.'); } catch (ignored) {}
+   }
   });
 
   ws.on('close', function () {

@@ -1,0 +1,18 @@
+/* A permanent row in Buttons mode keeps hand positions stable. Unavailable
+   actions disable in place. Tap mode removes the entire reservation. */
+#table .board > #playButtons{
+  display:flex;flex:none;align-items:center;gap:8px;height:44px;min-height:0;
+  max-width:100%;margin:0;padding:0 2px;overflow-x:auto;overflow-y:hidden;
+  opacity:1;visibility:visible;scrollbar-width:thin;overscroll-behavior-x:contain;
+  transition:none;
+}
+#table .board > #playButtons[hidden]{
+  display:flex!important;height:0;margin-top:calc(-1 * var(--play-buttons-gap,8px));
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:none;
+}
+#playButtons .btn{flex:1 0 auto;min-height:40px;padding:8px 12px;font-size:12px;line-height:18px;white-space:nowrap}
+#playButtons .btn:focus-visible{outline:2px solid var(--txt);outline-offset:-3px}
+.rules-tabs{display:flex;gap:6px}
+.rules-tabs .btn{flex:1;min-width:0;padding-inline:10px}
+@media(prefers-reduced-motion:reduce){#table .board > #playButtons{transition:none}}

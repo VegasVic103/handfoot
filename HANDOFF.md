@@ -1,65 +1,81 @@
-# Original-design integration handoff
+# Hand & Foot 2.0 — integration handoff
 
-Updated October 9, 2026. This is the complete Hand & Foot 2.0 application source, prepared for integration into Vic’s existing game. It has not been pushed to GitHub or deployed to Render.
+Prepared October 9, 2026 for Vic’s existing game. This is the current application source, building on Vic’s original table design and the subsequent owner-directed playability and visual changes. Both base and enhancement styles are intentionally updated. Earlier redesign packages and iteration notes are not implementation instructions for this version.
 
-## Baseline and scope
+This handoff does not claim a GitHub push, Render deployment, Docker build, or physical-iPhone acceptance. Final test and browser evidence belongs in [VERIFICATION.md](VERIFICATION.md).
 
-This package contains the latest accepted version of the separate optimization copy. Use Vic’s current repository as the integration baseline, preserving any newer unrelated work. Keep the established table structure and meld presentation. The five dark themes have refreshed colors, and Ivory provides a light option. `style.css` remains byte-identical to the archive; `enhancements.css` adds support for the new controls and table features. The separate Emerald/casino redesign and its earlier handoff are not the design instructions for this package.
+## Current product behavior
 
-The engine includes validated rule configuration and two complete presets: House Rules (default) and Real Rules (Bicycle-based, adapted to individual scoring). See RULESETS.md for exact behavior, differences and app conventions. The original scoring and deal defaults are retained, with one explicit new default: when a stock pile first empties after a draw, recycle the remaining stocks and discard cards except the visible top card into four piles. This can happen once per round; the next exhaustion ends and scores the round. Never replace the new engine with the earlier archive’s engine while keeping these server/client changes.
+The approved illustrated cover leads through **Play** directly to **Create table**, **Join table**, and **Practice**. New tables have 2–4 total players; Practice uses 1–3 bots. Each bot receives a hidden randomized style, stable through the game and rerolled for a rematch. No difficulty/personality/speed setting is exposed.
 
-This integration keeps the new Play/Friends/Computer setup, four-player cap, hidden randomized bot styles, live chat, reconnect and undo fixes, public opponent inspection, book colors, card-count and point summaries, selection controls, Auto, confirmed discard pickup, guarded double-tap adds, and once-per-round score presentation. The server still owns the cards and legal moves.
+Create and Practice retain independent drafts. Each shows a preset and summary of decks, required red/black books, and total discard pickup. **Customize rules** expands a single surface containing The deal, Melds & books, Draw & discard, Opening points, and Scoring & red threes. Controls use full-width rows; the four opening minimums form a 2 × 2 grid. Changed values are marked and counted. **Done** closes customization while keeping the draft. Reset to House Rules is explicit. Preserve the shared validation and payload behavior when integrating this presentation.
 
-Latest interaction details: **Settings → Meld display** applies Cards/Tiles to both shelves (`hf_meld_style`, with legacy fallback). **Finished books → Stacked/Spread** stays available in both views and independently controls completed books. Individual book taps override their default, while legal selected-card targets retain Add/double-tap behavior. Both shelves use quiet side counts and a sideways lead card when one short. Completed naturals are red/black; public wilds gold/blue; collapsed books show wild edge trims. Your cards use stable dimensions and natural-width wrapping. The piles sit between opponents and one shared Your cards header with points/counts and Sort/Auto. The opening minimum stays beside Round; the lower activity line is hidden. See VERIFICATION.md for the current checks.
+House Rules is the fresh-setup default. Real Rules is a complete alternative preset, adapted to individual scoring; later edits become Customized rules. See [RULESETS.md](RULESETS.md). The current host alone can configure rules. Changes before the deal apply immediately; changes after the deal remain pending for the next round or rematch.
 
-## Latest additions
+Start, next round, and rematch deal two private face-down packets. Tap mode chooses the foot directly; Buttons selects a packet then confirms **Select foot**. The other packet becomes the hand. Unequal custom hand/foot sizes retain their assigned packets and use Continue. Bots choose randomly. After all choices, a server-controlled three-second countdown precedes play. Reduced motion skips decorative dealing, not the choice or countdown.
 
-- New scalable H/F red/black book logo on the cover; Play, Settings and Rules remain the home actions.
-- Six themes, including Ivory; semantic card colors and table geometry remain consistent.
-- Accepted own-card draw, meld, discard and pickup animations. Device Reduce Motion is respected; Settings has an Off option.
-- Random Auto draws from two distinct nonempty piles and pauses for legal pickup. One-stock Real Rules uses Auto On/Off.
-- Chat is immediately left of Sort during play and remains reachable in the waiting-room header.
-- Named presets replace all values before a deal; later edits appear as Customized rules. Differences from House Rules are expandable, and supported gameplay capabilities are adjustable.
+Opponents stay compact at the top with public melds and counts; tapping a player opens inspection. Unplayed opponent hands and feet remain private. In-foot state uses contrasting plum pills across all themes. Sort/Auto/Scores/Chat/Clear/Undo share one continuous toolbar below your hand and action buttons; unavailable Clear/Undo remain visible and disabled. Round and minimum meld occupy a slim bordered header with Settings on the right. Changing instructions remain below the play buttons; no Your turn bar is shown. Selection raises an individual card with a dark border without resizing surrounding cards or books. Newly received cards are sorted ascending within a separate unlabelled row and receive a four-second sky-blue landing cue; reduced motion uses a steady highlight.
 
-## Host rule configuration
+Buttons is the default on a fresh device; explicitly saved Tap preferences remain unchanged. Both Tap and Buttons modes add selected cards by single-tapping a legal highlighted book. No Add-to-existing-book button remains. The double-tap recognition delay lets double-tap expand/collapse without playing the first tap. Tap mode uses an inline New meld target and the discard pile itself; Buttons keeps a static action row below the hand. Both retain the warning before discarding a card with a legal meld opportunity.
 
-Both **Start a game** and **Vs computer** show editable rules before creating the table or dealing: decks, required red/black books, and total discard pickup appear first, with **More rules** expanding the remaining controls inline. **Settings → Rules** provides the host’s later changes and exposes deck count, hand/foot sizes, red/black books required, total discard pickup, book size, natural/wild limits, opening minimums, scoring bonuses, red-three handling, preview, and stock recycling. See README for allowed ranges.
+The manual draw chooser opens once per draw turn and can be reopened from a stock. A legal discard pickup is offered as **View pile · N**; inspection then requires **Take pile** confirmation. Matching naturals are selected automatically, independent of unrelated hand selection. Preview-off tables reveal only the public top discard. Auto draws pause for legal pickup, unavailable configured stocks, or open dialogs. Routine Auto skips the chooser and shows accepted cards briefly; manual draws go directly to the hand.
 
-- Only the original host token can use the grouped `configureRules` action. Lobby changes apply immediately; post-deal structural/scoring changes remain in `game.pendingSettings` until a successful next-round deal or rematch.
-- Each player receives current public `settings`, `pendingSettings` or null, `canConfigureRules`, `reshufflesUsed`, and `reshufflesRemaining`. Private cards and tokens are not added to those fields.
-- The server uses the shared `engine.validateSettings` whitelist and validates capacity before accepting any patch. New `create`/`vsbot` messages can include a validated `rules` object. Arbitrary `settings` objects are still ignored.
-- The new host editor queues all post-deal edits, including preview. The legacy seated-player `setRule` preview-only message remains immediate for compatibility and synchronizes its value into pending settings. A joining client cannot replace the table’s rules.
-- Deploy client, server, engine, and turn logic together. Pending settings and recycle counters are part of the saved game and survive a restart when its save survives.
+Cards/Tiles applies to both shelves. Tiles uses the compact stack renderer; expanded cards retain fans. Completed-book Stacked/Spread is independently configurable. Double-tap overrides an individual book. Completed naturals remain red/black, jokers gold, and deuces blue. Hand wilds have cream faces with colored edge bands. Near-complete melds use a sideways lead card, and compact books retain wild edge trims. Expanded opponent details show melded points separately from book bonuses.
 
-The existing live URL supplied for the project is [handfoot.onrender.com](https://handfoot.onrender.com/). Confirm the actual repository, branch, and Render service before applying the source. Remote contents and deployment access were not verified during this packaging task.
+Chat uses a near-full-screen phone panel, larger in-app keys, and player pills showing the current turn. Opening Chat does not focus the composer or open a keyboard. Tapping the composer opens the in-app keyboard; physical typing and an explicit Device keyboard option remain available. Updates preserve input focus and drafts. Chat has a 500-character limit, rate limiting, and the latest 100 messages in process memory only.
 
-## Integrate with GitHub
+Personal Settings, Appearance, Sort, book presentation, and motion preferences do not change table rules. All six themes retain semantic card colors. Keep the current style order from `index.html`; multiple stylesheet layers intentionally work together.
 
-1. Start from the owner’s current repository and compare this package with any newer work. Preserve production configuration and unrelated changes.
-2. Copy the application files into the repository’s application root, alongside `package.json` and `server.js`. If that is the repository root, there is no nested root directory to configure.
-3. Include the JavaScript, HTML, CSS, manifest, icons source, tests, lockfile, and documentation. Keep `.gitignore`.
-4. Exclude `node_modules`, `.env` files, private saves, test-state files, logs, and prior archives. Do not overwrite or commit a production `tables.json` or custom `SAVE_FILE`.
-5. Run `npm ci` and `npm test`, then review the diff before pushing the intended branch. Updating a branch already linked to Render may trigger an automatic deployment.
+## Backend and compatibility contracts
 
-There is no `public/` directory in this application. The server serves an explicit allowlist from the same folder. The earlier Blackjack deployment guide is useful for general dashboard navigation only: its file layout, framework, and log messages do not describe this game.
+Deploy the client, server, engine, game logic, and styles together. This is not a client-only skin that can safely run against the old server.
 
-## Render configuration
+- The server validates every move and redacts each player's view. Bots plan from restricted views rather than private opponent hands. Do not move authoritative rule enforcement into the client.
+- Views carry a persisted `turnId`; gameplay actions must carry the matching context. Stale, duplicate, unseated, and other-seat requests are rejected. Reconnect does not replay uncertain actions.
+- `create` and `vsbot` accept a `rules` object validated with `E.validateSettings`. Arbitrary `settings` objects are ignored. Validation covers field types/ranges, capacity for all reserved seats, and incompatible book requirements. Rejections do not partially mutate the table.
+- Host `configureRules` validates against pending/current settings. Lobby updates are immediate; later updates store a complete validated `game.pendingSettings` snapshot. `startRound` applies it only after a successful new deal. Returning all values to active settings clears the pending change.
+- Public rule fields include `settings`, `pendingSettings`, `canConfigureRules`, `reshufflesUsed`, and `reshufflesRemaining`. Current host ownership is stored separately and transfers when the host explicitly leaves the lobby.
+- The legacy `setRule` endpoint permits only the current host's preview toggle. It remains immediate for older clients and synchronizes the value into pending settings. Guests cannot change or cancel rules through either endpoint.
+- `handChoice` is exposed only in the choosing phase. `chooseHand` carries the complementary hand packet, the acting player's own seat, and current turn ID. Unchosen packet contents remain hidden. Choices persist through reconnect/restart. Existing saves already playing do not acquire a new packet-choice phase.
+- `roundBeginsAt` and `serverNow` synchronize the countdown; the server blocks gameplay and bots until it ends. The countdown bypass is test-only and requires both the test environment and its explicit override.
+- The House Rules one-time recycle shuffles remaining stocks and discard cards except the visible top after a draw empties a stock pile. It never mixes hands or melds into stock. A later exhaustion ends the round; each new round resets the counter. With recycling off, the final successful stock draw receives its normal play/discard turn before scoring.
+- Explicit lobby leave releases a reservation; ordinary disconnect preserves a resumable seat. Heartbeats expire dead sockets. Saved older bot tables and tables with more than four seats remain supported; only new-table setup is capped at four.
+- Saves are atomically replaced and flushed on orderly shutdown. A short debounced write window remains vulnerable to abrupt process/host loss. Chat is deliberately not persisted.
 
-Use the existing **Node Web Service** where possible. This is a running HTTP/WebSocket app, so a Static Site cannot host it. Render supports WebSockets and takes its build/start settings from the selected service and deployment branch. [Render Web Services](https://render.com/docs/web-services)
+The engine also retains fixes for hostile JSON coercion, rejected-action rollback, red-three replacement/undo/exhaustion, impossible rule combinations, legal winning pickup planning, and bounded bot candidates. Client guards cover legal targets, duplicate submissions, stale modal actions, focus/drafts, score-sheet reopening, and movement replay. Preserve the regression tests with their corresponding fixes.
 
-| Field | Value for this source |
+## Files to integrate
+
+Start from Vic’s current repository and compare this source with any newer owner work. Preserve unrelated changes and deployment configuration. Copy application files into the same directory as `package.json` and `server.js`; there is no `public/` or generated build directory.
+
+Include:
+
+- All application JavaScript: `server.js`, `engine.js`, `game.js`, `bot.js`, `icons.js`, `app.js`, `menu.js`, and `startup.js`.
+- `index.html`, `manifest.webmanifest`, `handfoot-cover.svg`, and `handfoot-mark.svg`.
+- Every stylesheet referenced by `index.html`: `style.css`, `enhancements.css`, `menu.css`, `play-feedback.css`, `interaction-feedback.css`, `interaction-mode.css`, `draw-feedback.css`, `chat-feedback.css`, `table-cosmetics.css`, `preferences.css`, `audit-refinements.css`, and `deal-choice.css`.
+- All nine `*.test.js` files, `package.json`, `package-lock.json`, `.gitignore`, the optional `Dockerfile`, and the documentation.
+
+App PNG icons are generated by `icons.js`; separate PNG files are not missing assets. The server serves an explicit public allowlist and adapts `engine.js` for the browser. `startup.js` loads engine → app → menu in order. If adding a browser asset later, update both the markup and server allowlist.
+
+Exclude dependencies, `.env` files, private saves, test-state files, logs, local preview wrappers, screenshots, old archives, and operating-system metadata. Never overwrite or commit a production `tables.json` or custom `SAVE_FILE`. Local fixtures and the earlier approval checkpoint are not application assets.
+
+Run `npm ci` and `npm test`, review the complete integrated diff, and then push the intended branch when authorized. A branch already linked to Render may deploy automatically. The existing supplied live URL is [handfoot.onrender.com](https://handfoot.onrender.com/); confirm the actual repository, branch, and service rather than inferring them from the URL.
+
+## Runtime and Render settings
+
+This is an HTTP/WebSocket **Node Web Service**, not a static site. Prefer the existing native Node service configuration. See [Render Web Services](https://render.com/docs/web-services).
+
+| Setting | Value for this application |
 |---|---|
 | Runtime | Node |
-| Root Directory | Empty when the application files are at repository root |
+| Root Directory | Empty when application files are at repository root; otherwise that application directory |
 | Build Command | `npm ci` |
-| Start Command | `node server.js` |
+| Start Command | `node server.js` or `npm start` |
 | Health Check Path | `/health` |
 | Environment | `NODE_ENV=production` |
-| Port | Use Render’s supplied `PORT`; this server already reads it |
-| Instance count | One; table state belongs to one server process |
-| Node version | 24 was tested; verify any different runtime with the same test suite |
-
-The included original Dockerfile is optional and was not built here. Select the native Node runtime for the commands above. If retaining an existing Docker-based service, review its Docker configuration separately instead of assuming the native settings apply. Its default `/app/tables.json` is ephemeral; a volume mounted at `/data` also requires `SAVE_FILE=/data/tables.json`, regardless of the older Dockerfile comment.
+| Port | Use the supplied `PORT`; fallback is 3000 |
+| Process/instance count | One; room state belongs to one in-memory server process |
+| Node version | 24 is the reference test runtime; verify any other supported version with the same suite |
 
 Expected startup log:
 
@@ -67,68 +83,37 @@ Expected startup log:
 Hand and Foot server listening on <port>
 ```
 
-`/health` returns JSON containing `"ok": true` and the number of loaded tables. The local fallback port is 3000; no hardcoded production port is required.
+`/health` returns JSON containing `"ok": true` and the number of loaded tables. The server listens without a loopback-only host binding, and browser WebSockets use the current origin with `wss` under HTTPS.
+
+The included Dockerfile is optional and has not been built as part of this handoff. Native Node settings above do not configure a Docker service. Review an existing Docker deployment separately. Build only from clean application source; there is no `.dockerignore` to exclude accidental local dependencies or private files. Its default `/app/tables.json` is ephemeral unless backed by durable storage. A volume at `/data` requires `SAVE_FILE=/data/tables.json`.
 
 ## Save-file continuity
 
-The default save path is `tables.json` beside `server.js`. A save can restore a table only if its file remains available. The app does not use a database or shared room store.
-
-Render’s ordinary filesystem is ephemeral: redeploys, restarts, and Free-service spin-downs can remove locally written saves. Free services cannot attach persistent disks. Do not promise game continuity merely because the server writes JSON. [Render Free limitations](https://render.com/docs/free)
-
-Preserve an existing durable mount and its `SAVE_FILE` setting. If the owner chooses a paid persistent disk mounted at `/var/data`, set:
+The default save path is `tables.json` beside `server.js`. The app has no database or shared room store. Preserve an existing durable mount and its `SAVE_FILE` setting. For a durable directory mounted at `/var/data`, use:
 
 ```text
 SAVE_FILE=/var/data/tables.json
 ```
 
-Only files beneath the disk mount persist; the directory must exist and be writable. Attaching a disk is a separate hosting change, not something this package performs. [Render persistent disks](https://render.com/docs/disks)
+The parent directory must already exist and be writable. Only the durable path protects saves across replacement instances; writing JSON to an ordinary ephemeral filesystem does not. See [Render persistent disks](https://render.com/docs/disks) and [Free-service limitations](https://render.com/docs/free) when checking the owner's service configuration. This package does not change the hosting plan or attach storage.
 
-Back up the current save privately before a deployment if active games matter. Keep its original contents, tokens, and cards intact. Older bot saves and tables with more than four seats are compatible; only new setup is capped. Missing new settings use the defaults, and an absent recycle counter starts at zero. Queued rule changes remain queued when an active round reloads. The save writer batches changes, so an abrupt termination can lose recently unsaved moves. Chat is deliberately memory-only and clears on restart even when game saves persist.
+Back up the current save privately before deployment if active games matter. Keep tokens and cards intact. Missing new settings receive defaults; absent recycle counters begin at zero. Pending rules, packet choices, and countdown remain part of the saved game. Tables expire after 12 quiet hours. Restarting the server clears chat even when game saves survive.
 
-## Verification and remaining release checks
+## Validation and release limits
 
-Run `npm test` on the final integrated source. The reference runtime is Node **v24.19.0**. The seven suites cover rules and game simulations, real WebSocket/server behavior, computer styles, client assertions, pre-game setup controls/payloads, card motion, and rule presets. New coverage includes rule validation, host authorization, atomic rejection, pending-rule persistence and next-round application, first/second stock exhaustion, and stable book layout while selecting cards. Existing privacy, chat, reconnect, original-theme, and saved-table cases remain. The client suite uses a DOM test double; final browser validation belongs with the final integrated files.
+Run all nine suites from the final integrated application directory: startup, rules, server, bots, UI, menu, motion, presets, and chat. The reference runtime is Node v24.19.0. Use the exact lockfile dependency via `npm ci`. [VERIFICATION.md](VERIFICATION.md) is the evidence record; final release checks must reflect the files actually packaged.
 
-Final backend verification:
+Review the final browser build after the last layout edit. Check normal and crowded portrait hands, the 30-card/13-meld case, short landscape, both interaction modes, rule customization, packet choice/countdown, and the enlarged chat with its keyboard. Every hand card must remain reachable and controls must not cover it. Current portrait overflow work must be verified rather than assumed complete from an earlier screenshot.
 
-| Suite | Result |
-|---|---|
-| Rules | 117 checks passed, 0 failed; 1,200 simulated rounds |
-| Server/WebSocket integration | 172 assertions passed, 0 failed |
-| Bots | 100 checks passed, 0 failed; 620 complete four-round games |
-| Rule presets | 17 checks passed; 96 additional complete matches |
-| Card motion | 15 checks passed |
+Also check confirmed discard pickup and preview-off privacy; score-sheet dismissal across repeated snapshots; host/guest rule permissions and next-round application; first and later stock exhaustion; reconnect and saved-game recovery. After an authorized deployment, check `/health` and play from two independent sessions or devices.
 
-The bot total comprises 300 baseline games, 160 style-specific games, and 160 custom-rule games. These results do not replace running the complete suite after any further integration changes.
-
-Before calling the hosted integration ready:
-
-- Run all seven suites from the final application root.
-- Check a normal four-player game on desktop and mobile, then a separate 30-card/13-meld stress case. Confirm every card remains accessible and no controls obscure the hand.
-- On physical iPhone Safari, verify single/double taps, selection, Auto, modal dismissal, the software keyboard with Chat, and reconnect behavior. Desktop viewport checks do not certify physical iOS behavior.
-- Confirm that taking a pile requires modal confirmation, uses only the required naturals, and never reveals hidden discard cards when the preview rule is off.
-- Confirm that a dismissed score sheet stays closed for the same completed round, while the next round can open it once.
-- Change rules as host in the lobby and during play. Confirm non-host rejection, shared pending-state visibility, current-round stability, saved pending choices, and application on the next deal.
-- Empty a stock pile twice in one round: the first recycle keeps the top discard and all private hands/melds intact; the second ends and scores the round. A new round restores its one available recycle.
-- After an authorized deployment, check `/health` and play from two independent browser sessions or devices; verify joining, chat, drawing, melding, scoring, and resuming.
-
-No production deployment, physical-device acceptance, or Docker validation is claimed by this handoff. Keep newer owner feedback and the original-design baseline as the source of truth for further visual changes.
+DOM tests and desktop mobile viewports do not certify physical iPhone Safari, its native keyboard, touch accuracy, or production networking. Small card targets remain a known design tradeoff. No clean-install, Docker, device, or hosted-deployment result should be inferred unless the final evidence explicitly records it.
 
 
-## Isolated optimization preview
+### Final v2 draw and undo update — October 10
 
-This source was developed separately from `outputs/handfoot-vic`; that main copy was not modified. Local review servers and disposable fixtures are excluded from this release. Use `npm start` from this package’s application folder for a normal local launch on port 3000. Do not copy local test saves into a deployment.
+The draw dialog gives one automatic invitation per turn. After closing it, choose stocks directly on the table. Buttons mode enables **Draw piles 1 & 3** (using the actual selections); its right-hand action is **View pile** during drawing, then Discard during play. Tap mode draws when the required valid stock selection is complete. Pile inspection still precedes any pickup.
 
-Deploy this client and server together: views now carry a persisted `turnId`, and gameplay actions require that ID. Explicit lobby `leave` releases a reservation and transfers host ownership; ordinary disconnection retains a resumable seat. Saves are atomically replaced and flushed on orderly shutdown, but abrupt process/host loss can still lose the short debounced write window. Heartbeats expire missing peers and the client reconnects without replaying uncertain actions.
+Undo asks for confirmation when one selected card can legally be discarded, preventing a nearby mis-tap from resetting the turn. The warning explains that only this turn's melds/additions are reset, a normal draw stays, and a discard-pile pickup is reversed when applicable. Keep playing receives initial focus.
 
-Audit corrections cover final no-recycle turns, red-three replacement/undo/exhaustion, impossible book settings, legal winning pickup planning, bounded bot candidates, stable hand/book nodes, fresh-highlight expiry, focus, raw rules drafts, native join-code case handling, and pointer-specific popup dismissal. Short screens that would clip the hand use a scroll fallback in the existing board.
-
-Latest visual decisions: cream hand wilds have strong gold/blue bands on both edges; meld wilds are fully colored. Own completed books use one colored stack and short rank/count captions, retaining wild edge counts and existing Add/double-tap behavior. Unfinished melds keep their fan.
-
-
-## October 9 display refinement (supersedes earlier visual descriptions)
-
-Meld display is shared across both shelves. Cards/Tiles is personal, with independent Stacked/Spread completed-book defaults in both views; per-book taps expand/collapse, except a legal selected-card destination retains Add/double-tap precedence. Own card size no longer adapts to shelf height or how many books are expanded. The shelf scrolls when needed. Compact opponent rows show counts beside names, and melded points only in the expanded player inspector. One-away opponent melds use a sideways lead card, not a colored count circle. Rules and Settings have a reorganized scrollable dialog. See VERIFICATION.md for detailed checks and remaining limitations.
-
-
-Latest cover/menu pass: inline SVG H/F card mark (portable source in `handfoot-mark.svg`), a primary Play button, quiet Settings/Rules links, compact secondary-page branding, visible setup rules and grouped advanced rules. Friends hosting/joining and practice keep the existing payloads. Waiting rooms show an invite and numbered seats without empty game panels. Local-only review wrappers and saves remain under `work/` and are not distributable assets.
+Undo also offers **Return [wild] from [rank]** for eligible jokers/twos added during the current turn. Returning one preserves all other plays. The authoritative server rejects earlier-turn cards, completed books, returns after a foot transition, invalid remaining melds (including fewer than three cards), and returns that would invalidate an opening committed by pickup. Full Undo remains available. This does not allow moving wilds out of books from earlier turns.
